@@ -1816,7 +1816,7 @@ function pinDrugTab(key) {
     const drug = DRUG_DB[key];
     openDrugTabs.push({ key, name: drug.name });
   }
-  renderDrugTabs();
+  // Don't call renderDrugTabs here — callers handle rendering
 }
 
 function closeDrugTab(key, evt) {
@@ -1847,8 +1847,10 @@ function renderDrugTabs() {
   const container = document.getElementById('cmd-drug-tabs-container');
   if (!container) return;
 
-  // Always ensure active drug is pinned
-  pinDrugTab(activeDrugKey);
+  // Ensure active drug is pinned (inline, no recursive call)
+  if (!openDrugTabs.find(t => t.key === activeDrugKey)) {
+    openDrugTabs.push({ key: activeDrugKey, name: DRUG_DB[activeDrugKey].name });
+  }
 
   const tabs = openDrugTabs.map(t => {
     const drug = DRUG_DB[t.key];
