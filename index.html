@@ -252,19 +252,29 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-seri
 /* Pill visual */
 .pill-visual{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#faf8f5,#efe9e2);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text);font-weight:700;border:2px solid var(--border-strong);text-align:center;line-height:1.2;flex-shrink:0}
 
-/* Compare tray (Command Center only) */
-.compare-tray{position:sticky;bottom:0;background:var(--surface);border-top:2px solid var(--accent);padding:12px 20px;z-index:5}
-.compare-tray-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.compare-tray-header h4{font-size:13px;font-weight:600;color:var(--accent2)}
-.compare-tray-items{display:flex;gap:8px;align-items:center;overflow-x:auto;margin-bottom:10px}
-.compare-chip{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;background:var(--accent-bg);border:1px solid var(--accent);font-size:12px;font-weight:600;cursor:default}
-.compare-chip .remove{cursor:pointer;color:var(--text3);font-size:14px;line-height:1}
-.compare-chip .remove:hover{color:var(--red)}
-.compare-table-wrap{max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+/* Command Center bottom drug tabs + compare */
+.cmd-drug-tabs{border-top:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;flex-shrink:0}
+.cmd-drug-tabs-bar{display:flex;align-items:center;overflow-x:auto}
+.cmd-drug-tab{display:flex;align-items:center;gap:8px;padding:8px 16px;font-size:12px;color:var(--text2);border-right:1px solid var(--border);cursor:pointer;white-space:nowrap;transition:background .1s;position:relative}
+.cmd-drug-tab:hover{background:var(--surface2)}
+.cmd-drug-tab.active{color:var(--text);background:var(--bg);font-weight:600}
+.cmd-drug-tab.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--accent)}
+.cmd-drug-tab .tab-icon{width:20px;height:20px;border-radius:4px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;flex-shrink:0}
+.cmd-drug-tab .tab-ndc{font-size:10px;color:var(--text3);font-family:monospace}
+.cmd-drug-tab .tab-badges{display:flex;gap:4px}
+.cmd-drug-tab .tab-close{font-size:11px;color:var(--text3);cursor:pointer;margin-left:4px;padding:2px}
+.cmd-drug-tab .tab-close:hover{color:var(--red)}
+.cmd-drug-tabs-actions{margin-left:auto;display:flex;align-items:center;gap:8px;padding:8px 16px;flex-shrink:0}
+.cmd-compare-toggle{padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text2);transition:all .15s}
+.cmd-compare-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.cmd-compare-toggle.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.cmd-compare-panel{display:none;border-top:1px solid var(--border);max-height:280px;overflow-y:auto;background:var(--surface)}
+.cmd-compare-panel.show{display:block}
 .compare-table{width:100%;border-collapse:collapse;font-size:12px}
 .compare-table th{padding:8px 12px;background:var(--surface2);color:var(--text2);font-weight:600;text-align:left;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;z-index:1}
 .compare-table td{padding:6px 12px;border-bottom:1px solid var(--border)}
 .compare-table td:first-child{font-weight:600;color:var(--text2);width:160px;white-space:nowrap}
+.compare-table tr:hover td{background:var(--surface2)}
 .compare-btn{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent2);transition:all .15s}
 .compare-btn:hover{background:var(--accent);color:#fff}
 .compare-btn.active{background:var(--accent);color:#fff}
@@ -1634,7 +1644,7 @@ function renderCommandCenter() {
         </div>
       </div>
       <div class="cmd-right">
-        <div id="cmd-right-title" class="cmd-right-header"><h3>&#128230; Inventory — ${D.name}</h3><div style="display:flex;gap:8px"><button class="compare-btn" onclick="addToCompare('${activeDrugKey}')">+ Compare</button><button style="padding:6px 12px;border-radius:6px;background:var(--surface3);border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer">Export</button><button style="padding:6px 12px;border-radius:6px;background:var(--accent);border:none;color:#fff;font-size:12px;cursor:pointer">Action</button></div></div>
+        <div id="cmd-right-title" class="cmd-right-header"><h3>&#128230; Inventory — ${D.name}</h3><div style="display:flex;gap:8px"><button style="padding:6px 12px;border-radius:6px;background:var(--surface3);border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer">Export</button><button style="padding:6px 12px;border-radius:6px;background:var(--accent);border:none;color:#fff;font-size:12px;cursor:pointer">Action</button></div></div>
         <div class="cmd-right-body">
           ${secs.map((s,i)=>`<div id="${s.id}" class="cmd-detail-view${i===1?' active':''}">${s.content}</div>`).join('')}
         </div>
@@ -1644,7 +1654,7 @@ function renderCommandCenter() {
         </div>
       </div>
     </div>
-    <div id="compare-tray-container"></div>
+    <div id="cmd-drug-tabs-container"></div>
   </div>`;
 }
 
@@ -1757,10 +1767,14 @@ function enterCommandCenter() {
   document.getElementById('cmd-intro').style.display = 'none';
   document.getElementById('cmd-drug-view').style.display = 'block';
   window.scrollTo(0, document.getElementById('view-command').offsetTop);
+  pinDrugTab(activeDrugKey);
+  renderDrugTabs();
 }
 function exitCommandCenter() {
   document.getElementById('cmd-drug-view').style.display = 'none';
   document.getElementById('cmd-intro').style.display = 'block';
+  openDrugTabs = [];
+  showComparePanel = false;
 }
 
 function switchSubtab(sectionId, crumbText, tabEl) {
@@ -1789,67 +1803,107 @@ function toggleDrawer() {
 }
 
 // ═══════════════════════════════════════
-// COMPARISON TRAY (Command Center only)
+// COMMAND CENTER — BOTTOM DRUG TABS
 // ═══════════════════════════════════════
-let compareList = [];
+let openDrugTabs = []; // [{key, name}]
+let showComparePanel = false;
 
-function addToCompare(drugKey) {
-  if (!compareList.includes(drugKey) && compareList.length < 4) {
-    compareList.push(drugKey);
-    renderCompareTray();
-  }
-}
-
-function removeFromCompare(drugKey) {
-  compareList = compareList.filter(k => k !== drugKey);
-  renderCompareTray();
-}
-
-function renderCompareTray() {
-  const container = document.getElementById('compare-tray-container');
-  if (!container) return;
-  if (compareList.length === 0) {
-    container.innerHTML = '';
-    return;
-  }
-
-  const chips = compareList.map(key => {
+function pinDrugTab(key) {
+  if (!openDrugTabs.find(t => t.key === key)) {
     const drug = DRUG_DB[key];
-    return `<div class="compare-chip"><span>${drug.name.split(' ').slice(0,2).join(' ')}</span><span class="remove" onclick="removeFromCompare('${key}')">&times;</span></div>`;
+    openDrugTabs.push({ key, name: drug.name });
+  }
+  renderDrugTabs();
+}
+
+function closeDrugTab(key, evt) {
+  if (evt) evt.stopPropagation();
+  openDrugTabs = openDrugTabs.filter(t => t.key !== key);
+  if (openDrugTabs.length < 2) showComparePanel = false;
+  renderDrugTabs();
+}
+
+function switchDrugTab(key) {
+  setActiveDrug(key);
+  // Re-render the command center content only
+  const cmdView = document.getElementById('cmd-drug-view');
+  if (cmdView) {
+    document.getElementById('view-command').innerHTML = renderCommandCenter();
+    document.getElementById('cmd-intro').style.display = 'none';
+    document.getElementById('cmd-drug-view').style.display = 'block';
+    renderDrugTabs();
+  }
+}
+
+function toggleComparePanel() {
+  showComparePanel = !showComparePanel;
+  renderDrugTabs();
+}
+
+function renderDrugTabs() {
+  const container = document.getElementById('cmd-drug-tabs-container');
+  if (!container) return;
+
+  // Always ensure active drug is pinned
+  pinDrugTab(activeDrugKey);
+
+  const tabs = openDrugTabs.map(t => {
+    const drug = DRUG_DB[t.key];
+    const isActive = t.key === activeDrugKey;
+    const stockCls = drug.inventory.onHand <= drug.inventory.reorderPoint ? 'low' : 'in-stock';
+    const shortName = drug.name.split(' ').slice(0,2).join(' ');
+    return `<div class="cmd-drug-tab ${isActive?'active':''}" onclick="switchDrugTab('${t.key}')">
+      <div class="tab-icon">${drug.name[0]}</div>
+      <div>
+        <div>${shortName}</div>
+        <div class="tab-ndc">${drug.ndc}</div>
+      </div>
+      <div class="tab-badges">
+        <span class="status ${stockCls}" style="font-size:10px;padding:1px 6px">${drug.inventory.onHand}</span>
+        ${drug.safety.warnings.length>0?'<span class="status out" style="font-size:10px;padding:1px 6px">'+drug.safety.warnings.length+'W</span>':''}
+      </div>
+      ${openDrugTabs.length > 1 ? '<span class="tab-close" onclick="closeDrugTab(\''+t.key+'\',event)">&times;</span>' : ''}
+    </div>`;
   }).join('');
 
-  let tableHtml = '';
-  if (compareList.length >= 2) {
-    const drugs = compareList.map(k => DRUG_DB[k]);
+  let compareHtml = '';
+  if (showComparePanel && openDrugTabs.length >= 2) {
+    const drugs = openDrugTabs.map(t => DRUG_DB[t.key]);
     const rows = [
-      { label:'Drug Name',     fn: d => d.name },
-      { label:'NDC',           fn: d => d.ndc },
-      { label:'Class',         fn: d => d.drugClass },
-      { label:'Manufacturer',  fn: d => d.manufacturer },
-      { label:'Stock On Hand', fn: d => d.inventory.onHand + ' units' },
-      { label:'Reorder Point', fn: d => d.inventory.reorderPoint + ' units' },
-      { label:'Storage',       fn: d => d.inventory.refrigeration ? 'Refrigerated' : 'Room Temp' },
-      { label:'Controlled',    fn: d => d.inventory.controlled ? d.inventory.schedule : 'No' },
-      { label:'340B Accumulated', fn: d => d.program340b.totalAccumulated > 0 ? d.program340b.totalAccumulated + ' units' : 'N/A' },
-      { label:'340B Threshold',   fn: d => d.program340b.threshold > 0 ? d.program340b.threshold + ' units' : 'N/A' },
-      { label:'340B Ceiling',     fn: d => d.program340b.ceilingPrice > 0 ? '$' + d.program340b.ceilingPrice.toFixed(2) : 'N/A' },
-      { label:'Warnings',      fn: d => d.safety.warnings.length + ' (' + d.safety.warnings.filter(w=>w.level==='critical').length + ' BBW)' },
-      { label:'DDIs',          fn: d => d.safety.interactions.length },
-      { label:'WAC',           fn: d => '$' + d.pricing.wac.toFixed(2) },
-      { label:'Acquisition',   fn: d => '$' + d.pricing.acquisition.toFixed(2) },
-      { label:'AWP',           fn: d => '$' + d.pricing.awp.toFixed(2) },
-      { label:'Active Rx',     fn: d => d.clinical.totalRx },
-      { label:'Patients',      fn: d => d.clinical.totalPatients },
+      { label:'Class',           fn: d => d.drugClass },
+      { label:'Stock On Hand',   fn: d => `<span style="font-weight:700;color:${d.inventory.onHand<=d.inventory.reorderPoint?'var(--yellow)':'var(--green)'}">${d.inventory.onHand}</span>` },
+      { label:'Reorder Point',   fn: d => d.inventory.reorderPoint },
+      { label:'Storage',         fn: d => d.inventory.refrigeration ? '<span style="color:var(--blue)">Refrigerated</span>' : 'Room Temp' },
+      { label:'Controlled',      fn: d => d.inventory.controlled ? '<span style="color:var(--red)">'+d.inventory.schedule+'</span>' : 'No' },
+      { label:'340B Status',     fn: d => d.program340b.threshold > 0 ? '<span style="color:var(--green)">Active</span>' : '<span style="color:var(--text3)">Inactive</span>' },
+      { label:'340B Accum / Thr',fn: d => d.program340b.threshold > 0 ? `${d.program340b.totalAccumulated} / ${d.program340b.threshold}${d.program340b.totalAccumulated>=d.program340b.threshold?' <span style="color:var(--yellow)">⚠ OVER</span>':''}` : 'N/A' },
+      { label:'Ceiling Price',   fn: d => d.program340b.ceilingPrice > 0 ? '$' + d.program340b.ceilingPrice.toFixed(2) : 'N/A' },
+      { label:'Warnings',        fn: d => `${d.safety.warnings.length} (${d.safety.warnings.filter(w=>w.level==='critical').length} BBW)` },
+      { label:'DDIs',            fn: d => d.safety.interactions.length },
+      { label:'WAC',             fn: d => '$' + d.pricing.wac.toFixed(2) },
+      { label:'340B Price',      fn: d => d.pricing.ceiling340b != null ? '$' + d.pricing.ceiling340b.toFixed(2) : 'N/A' },
+      { label:'Acquisition',     fn: d => '$' + d.pricing.acquisition.toFixed(2) },
+      { label:'Active Rx',       fn: d => d.clinical.totalRx },
+      { label:'Patients',        fn: d => d.clinical.totalPatients },
     ];
-    const headerCells = drugs.map(d => `<th>${d.name.split(' ').slice(0,2).join(' ')}</th>`).join('');
+    const headerCells = drugs.map(d => {
+      const short = d.name.split(' ').slice(0,2).join(' ');
+      const isActive = d.ndc === DRUG_DB[activeDrugKey].ndc;
+      return `<th${isActive?' style="color:var(--accent)"':''}>${short}</th>`;
+    }).join('');
     const bodyRows = rows.map(r => `<tr><td>${r.label}</td>${drugs.map(d => `<td>${r.fn(d)}</td>`).join('')}</tr>`).join('');
-    tableHtml = `<div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Metric</th>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+    compareHtml = `<div class="cmd-compare-panel show"><table class="compare-table"><thead><tr><th>Metric</th>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
   }
 
-  container.innerHTML = `<div class="compare-tray">
-    <div class="compare-tray-header"><h4>&#128203; Compare Tray (${compareList.length}/4)</h4><button class="compare-btn" onclick="compareList=[];renderCompareTray();" style="font-size:11px">Clear All</button></div>
-    <div class="compare-tray-items">${chips}</div>
-    ${tableHtml}
+  container.innerHTML = `<div class="cmd-drug-tabs">
+    <div class="cmd-drug-tabs-bar">
+      ${tabs}
+      <div class="cmd-drug-tabs-actions">
+        ${openDrugTabs.length >= 2 ? `<button class="cmd-compare-toggle ${showComparePanel?'active':''}" onclick="toggleComparePanel()">${showComparePanel?'▼ Hide':'▲ Compare'} (${openDrugTabs.length})</button>` : ''}
+        <span style="font-size:11px;color:var(--text3)">${openDrugTabs.length} drug${openDrugTabs.length>1?'s':''} open</span>
+      </div>
+    </div>
+    ${compareHtml}
   </div>`;
 }
 </script>
