@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1400">
+<title>CareLink — Drug-Centric UI Architecture Mockups</title>
+<style>
+:root{
+  /* CareLink palette — warm light theme */
+  --bg:#F5F0EB;--surface:#FDFBF8;--surface2:#f7f3ef;--surface3:#efe9e2;
+  --border:rgba(120,100,80,.12);--border-strong:rgba(120,100,80,.25);
+  --text:#3B3530;--text2:#7A7168;--text3:#9e958c;
+  /* Primary */
+  --accent:#5B7FA4;--accent2:#3E5F7E;--accent-light:#7D9DBF;--accent-bg:rgba(91,127,164,.08);
+  /* Semantic */
+  --green:#2e7d32;--green-bg:#f1f8f4;--green-border:#c8e6c9;
+  --red:#d32f2f;--red-bg:#ffebee;--red-border:#ef9a9a;
+  --yellow:#ed6c02;--yellow-bg:#fff3e0;--yellow-border:#ffe0b2;
+  --blue:#1976d2;--blue-bg:#e3f2fd;--blue-border:#90caf9;
+  --orange:#f57c00;--purple:#7b1fa2;--cyan:#0097a7;--pink:#c2185b;
+  --radius:8px;--radius-lg:12px;
+  /* Tooltip */
+  --tooltip-bg:#3B3530;--tooltip-text:#F5F0EB
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.5;font-size:13px}
+
+/* Top bar */
+.top-bar{display:flex;align-items:center;gap:12px;padding:16px 32px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.top-bar h1{font-size:18px;font-weight:700;color:var(--accent2);white-space:nowrap}
+.top-bar .sep{width:1px;height:24px;background:var(--border)}
+.view-tabs{display:flex;gap:4px;flex:1}
+.view-tab{padding:8px 18px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;background:transparent;border:1px solid transparent;color:var(--text2);transition:all .15s;white-space:nowrap}
+.view-tab:hover{background:var(--surface2);color:var(--text)}
+.view-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tag{font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px;font-weight:700;vertical-align:middle}
+.tag-yellow{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}.tag-blue{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)}.tag-green{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}.tag-purple{background:rgba(123,31,162,.08);color:var(--purple);border:1px solid rgba(123,31,162,.2)}
+
+/* Views */
+.view{display:none;padding:24px 32px;min-height:calc(100vh - 64px)}
+.view.active{display:block}
+.view-title{font-size:24px;font-weight:700;margin-bottom:4px}
+.view-desc{color:var(--text2);font-size:14px;margin-bottom:24px;max-width:900px}
+
+/* Annotations */
+.annotation{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;margin:4px}
+.annotation.pro{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.annotation.con{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.annotation.info{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)}
+.pros-cons{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 24px}
+
+/* Sticky */
+.sticky{background:var(--yellow-bg);border:1px solid var(--yellow-border);border-radius:var(--radius);padding:14px 18px;margin:12px 0;font-size:13px;color:var(--yellow)}
+.sticky.blue{background:var(--blue-bg);border-color:var(--blue-border);color:var(--blue)}
+.sticky.green{background:var(--green-bg);border-color:var(--green-border);color:var(--green)}
+.sticky b{font-weight:700}
+
+.agent-note{background:rgba(123,31,162,.06);border:1px solid rgba(123,31,162,.2);border-radius:var(--radius);padding:14px 18px;font-size:13px;color:var(--purple);margin:12px 0;display:flex;align-items:flex-start;gap:10px}
+
+/* Drug search / list */
+.drug-search-bar{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.drug-search-bar input{flex:1;max-width:500px;padding:10px 16px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;outline:none}
+.drug-search-bar input:focus{border-color:var(--accent)}
+.drug-search-bar .shortcut{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px}
+.kbd{display:inline-flex;align-items:center;justify-content:center;background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;color:var(--text2);min-width:22px;font-family:monospace}
+
+.drug-list{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:24px}
+.drug-list-header{display:flex;padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.drug-list-header span{flex:1}
+.drug-list-header span:first-child{flex:2}
+.drug-list-row{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
+.drug-list-row:hover{background:var(--surface2)}
+.drug-list-row:last-child{border-bottom:none}
+.drug-list-row span{flex:1;font-size:13px}
+.drug-list-row span:first-child{flex:2;font-weight:600}
+.drug-list-row.populated{border-left:3px solid var(--accent)}
+.drug-list-row.populated:hover{background:var(--accent-bg)}
+.drug-list-row.dim span{color:var(--text3)}
+.drug-list-row .status{flex:0 0 auto}
+
+/* Status pills */
+.status{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.status.eligible{background:var(--green-bg);color:var(--green)}
+.status.pending{background:var(--yellow-bg);color:var(--yellow)}
+.status.ineligible{background:var(--red-bg);color:var(--red)}
+.status.in-stock{background:var(--green-bg);color:var(--green)}
+.status.low{background:var(--yellow-bg);color:var(--yellow)}
+.status.out{background:var(--red-bg);color:var(--red)}
+.status.info{background:var(--blue-bg);color:var(--blue)}
+.status.severe{background:var(--yellow-bg);color:var(--orange);border:1px solid var(--yellow-border)}
+.status.neutral{background:var(--surface3);color:var(--text2)}
+
+/* Drug header (shared) */
+.drug-header-card{display:flex;gap:20px;align-items:center;padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;flex-wrap:wrap}
+.drug-icon-lg{width:56px;height:56px;border-radius:var(--radius);background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:#fff;flex-shrink:0}
+.drug-meta{flex:1;min-width:300px}
+.drug-meta h2{font-size:18px;font-weight:700}
+.drug-meta .sub{font-size:13px;color:var(--text2);display:flex;gap:16px;margin-top:2px;flex-wrap:wrap}
+.drug-badges{display:flex;gap:6px;flex-wrap:wrap}
+.drug-badge{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600}
+.drug-badge.active-340b{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.drug-badge.controlled{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+
+/* Tables */
+.mock-table{width:100%;border-collapse:collapse;font-size:12px}
+.mock-table th{text-align:left;padding:8px 12px;background:var(--surface2);color:var(--text2);font-weight:600;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.mock-table td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+.mock-table tr:hover td{background:var(--surface)}
+
+/* Cards */
+.overview-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.overview-card h5{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.overview-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.stat-row{display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px}
+.stat-row .label{color:var(--text2)}.stat-row .value{font-weight:600}
+.stat-row .value.good{color:var(--green)}.stat-row .value.warn{color:var(--yellow)}.stat-row .value.alert{color:var(--red)}
+
+/* Warning card */
+.warning-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px}
+.warning-card.critical{border-left:3px solid var(--red)}
+.warning-card.moderate{border-left:3px solid var(--orange)}
+.warning-card h5{font-size:13px;font-weight:600;margin-bottom:4px}
+.warning-card p{font-size:12px;color:var(--text2);line-height:1.5}
+
+/* Monograph */
+.monograph-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px}
+.monograph-section h5{font-size:13px;font-weight:600;color:var(--accent2);margin-bottom:6px}
+.monograph-section p{font-size:12px;color:var(--text2);line-height:1.6}
+
+/* Domain card grid (modal) */
+.domain-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.domain-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;cursor:pointer;transition:all .15s;position:relative}
+.domain-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 12px rgba(91,127,164,.15)}
+.domain-card h4{font-size:14px;font-weight:600;margin-bottom:4px}
+.domain-card p{font-size:12px;color:var(--text2);line-height:1.4}
+.domain-card .card-stats{display:flex;gap:12px;margin-top:10px;flex-wrap:wrap}
+.domain-card .stat{font-size:11px}
+.domain-card .stat .val{font-size:18px;font-weight:700;display:block}
+.domain-card .stat .val.warn{color:var(--yellow)}.domain-card .stat .val.good{color:var(--green)}.domain-card .stat .val.alert{color:var(--red)}
+.domain-card .click-hint{position:absolute;bottom:8px;right:12px;font-size:10px;color:var(--text3);opacity:0;transition:opacity .15s}
+.domain-card:hover .click-hint{opacity:1}
+/* legacy detail-panel kept for compat */
+.detail-panel{display:none}.detail-panel.show{display:block}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border)}
+.modal-header h3{font-size:18px;font-weight:700}
+.modal-close{width:32px;height:32px;border-radius:6px;background:var(--surface3);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--red-bg);color:var(--red)}
+.modal-body{padding:24px}
+/* True modal overlay — fixed to viewport */
+.modal-backdrop-fixed{display:none;position:fixed;inset:0;z-index:200;background:rgba(59,53,48,.45);backdrop-filter:blur(4px);overflow-y:auto;padding:40px 20px}
+.modal-backdrop-fixed.show{display:flex;justify-content:center;align-items:flex-start}
+.modal-overlay{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);width:100%;max-width:1200px;box-shadow:0 20px 40px rgba(60,50,40,.18);margin:auto}
+/* Nested detail panel inside modal */
+.detail-panel-nested{display:none;position:fixed;inset:0;z-index:210;background:rgba(59,53,48,.35);backdrop-filter:blur(2px);overflow-y:auto;padding:60px 20px}
+.detail-panel-nested.show{display:flex;justify-content:center;align-items:flex-start}
+.detail-panel-nested .nested-inner{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);width:100%;max-width:1000px;box-shadow:0 20px 40px rgba(60,50,40,.18);margin:auto}
+
+/* Current state */
+.current-layout{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;height:580px;margin-bottom:24px}
+.current-sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0}
+.current-sidebar .nav-group{padding:8px 0}
+.current-sidebar .nav-group-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);padding:6px 16px}
+.current-sidebar .nav-item{display:flex;align-items:center;gap:10px;padding:7px 16px;font-size:13px;color:var(--text2);cursor:pointer;position:relative}
+.current-sidebar .nav-item:hover{background:var(--surface2);color:var(--text)}
+.current-sidebar .nav-item.active{background:var(--accent-bg);color:var(--accent2)}
+.current-sidebar .nav-item .highlight-dot{position:absolute;right:12px;width:8px;height:8px;border-radius:50%;background:var(--yellow)}
+.current-workspace{flex:1;display:flex;flex-direction:column;background:var(--bg)}
+.current-tab-bar{display:flex;gap:0;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto}
+.current-tab{padding:10px 20px;font-size:12px;color:var(--text2);border-right:1px solid var(--border);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.current-tab.active{background:var(--bg);color:var(--text);border-bottom:2px solid var(--accent)}
+.current-tab .hl{background:var(--yellow);color:#000;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700}
+.current-content{flex:1;display:flex;align-items:center;justify-content:center;padding:32px}
+.hop-diagram{display:flex;flex-wrap:wrap;gap:16px;margin:24px 0}
+.hop-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;flex:1;min-width:260px}
+.hop-card h4{font-size:13px;font-weight:600;margin-bottom:8px}
+.hop-steps{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.hop-step{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600}
+.hop-step.yellow{background:var(--yellow-bg);border:1px solid var(--yellow-border);color:var(--yellow)}
+.hop-arrow{color:var(--text3);font-size:14px}
+
+/* Tab flow */
+.tabflow-layout{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--surface)}
+.tabflow-breadcrumb{display:flex;align-items:center;gap:6px;padding:10px 20px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:13px}
+.tabflow-breadcrumb .crumb{color:var(--accent2);cursor:pointer}.tabflow-breadcrumb .crumb:hover{text-decoration:underline}
+.tabflow-breadcrumb .crumb.current{color:var(--text);cursor:default}.tabflow-breadcrumb .crumb.current:hover{text-decoration:none}
+.tabflow-breadcrumb .sep{color:var(--text3)}
+.tabflow-drug-bar{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex-wrap:wrap}
+.tabflow-drug-bar .drug-pill{display:flex;align-items:center;gap:8px}
+.tabflow-drug-bar .drug-pill .icon{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff}
+.tabflow-drug-bar .drug-pill .name{font-weight:600;font-size:14px}
+.tabflow-drug-bar .drug-pill .ndc{font-size:12px;color:var(--text2)}
+.tabflow-subtabs{display:flex;gap:2px;padding:0 20px;background:var(--surface2);border-bottom:1px solid var(--border);overflow-x:auto}
+.subtab{padding:10px 16px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;position:relative;display:flex;align-items:center;gap:4px}
+.subtab:hover{color:var(--text);background:rgba(120,100,80,.04)}
+.subtab.active{color:var(--accent2);border-bottom-color:var(--accent)}
+.subtab .dropdown{display:none;position:absolute;top:100%;left:0;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:4px 0;min-width:220px;box-shadow:0 8px 24px rgba(60,50,40,.12);z-index:10}
+.subtab:hover .dropdown{display:block}
+.subtab .dropdown-item{padding:8px 16px;font-size:12px;color:var(--text2);cursor:pointer}
+.subtab .dropdown-item:hover{background:var(--surface3);color:var(--text)}
+.tabflow-content{padding:24px;min-height:400px;background:var(--bg)}
+.tabflow-content-section{display:none}.tabflow-content-section.active{display:block}
+.tabflow-open-tabs{display:flex;align-items:center;gap:0;padding:0 20px;background:var(--surface);border-top:1px solid var(--border);overflow-x:auto}
+.open-tab{padding:8px 16px;font-size:12px;color:var(--text2);border-right:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.open-tab.active{color:var(--text);background:var(--bg)}
+
+/* Command center */
+.cmd-layout{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;height:780px}
+.cmd-left{width:320px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+.cmd-drug-card{padding:20px;border-bottom:1px solid var(--border)}
+.cmd-drug-card h3{font-size:16px;font-weight:700;margin-bottom:4px}
+.cmd-drug-card .meta{font-size:12px;color:var(--text2)}
+.cmd-drug-card .tags{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.cmd-sections{flex:1;overflow-y:auto}
+.cmd-section{border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
+.cmd-section:hover{background:var(--surface2)}
+.cmd-section.active{background:var(--accent-bg);border-left:3px solid var(--accent)}
+.cmd-section-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px}
+.cmd-section-header .left{display:flex;align-items:center;gap:10px}
+.cmd-section-header .icon{font-size:16px;width:20px;text-align:center}
+.cmd-section-header .label{font-size:13px;font-weight:600}
+.cmd-section-header .badge{font-size:11px;color:var(--text2);background:var(--surface3);padding:2px 8px;border-radius:10px}
+.cmd-section-header .badge.alert{background:var(--red-bg);color:var(--red)}
+.cmd-section-header .badge.good{background:var(--green-bg);color:var(--green)}
+.cmd-section-header .badge.warn{background:var(--yellow-bg);color:var(--yellow)}
+.cmd-section-preview{padding:0 16px 12px 46px;font-size:12px;color:var(--text3)}
+.cmd-right{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow:hidden}
+.cmd-right-header{padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.cmd-right-header h3{font-size:16px;font-weight:600}
+.cmd-right-body{flex:1;padding:20px;overflow-y:auto}
+.cmd-detail-view{display:none}.cmd-detail-view.active{display:block}
+.cmd-bottom-drawer{border-top:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.cmd-drawer-toggle{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2)}
+.cmd-drawer-toggle:hover{background:var(--surface2)}
+.cmd-drawer-content{padding:0 20px 16px;display:none}.cmd-drawer-content.show{display:block}
+
+/* Comparison */
+.comparison-table{width:100%;border-collapse:collapse;font-size:13px}
+.comparison-table th{padding:12px 16px;background:var(--surface2);color:var(--text2);font-weight:600;text-align:left;border-bottom:2px solid var(--border)}
+.comparison-table td{padding:10px 16px;border-bottom:1px solid var(--border);vertical-align:top}
+.comparison-table tr:hover td{background:var(--surface)}
+.comparison-table .dim{color:var(--text2);font-weight:600;width:180px}
+.check{color:var(--green)}.cross{color:var(--red)}.partial{color:var(--yellow)}
+
+/* Data map */
+.data-map{display:flex;flex-direction:column;align-items:center;gap:0;margin:24px 0}
+.data-map-center{width:180px;padding:16px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:var(--radius-lg);text-align:center;color:#fff;font-weight:700;font-size:14px;position:relative;z-index:2}
+.data-map-ring{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:-8px;padding-top:20px}
+.data-map-node{width:150px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-align:center;font-size:12px;font-weight:600;position:relative}
+.data-map-node::before{content:'';position:absolute;top:-12px;left:50%;width:1px;height:12px;background:var(--border)}
+.data-map-node .count{font-size:10px;color:var(--text3);font-weight:400;margin-top:2px}
+
+/* Pill visual */
+.pill-visual{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#faf8f5,#efe9e2);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text);font-weight:700;border:2px solid var(--border-strong);text-align:center;line-height:1.2;flex-shrink:0}
+
+@media(max-width:1200px){.domain-grid{grid-template-columns:repeat(2,1fr)}.overview-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>CareLink UI Architecture</h1>
+  <div class="sep"></div>
+  <div class="view-tabs">
+    <div class="view-tab active" onclick="switchView('current',this)">Current State <span class="tag tag-yellow">TODAY</span></div>
+    <div class="view-tab" onclick="switchView('modal',this)">Modal Stack <span class="tag tag-blue">A</span></div>
+    <div class="view-tab" onclick="switchView('tabflow',this)">Tab Flow <span class="tag tag-green">B</span></div>
+    <div class="view-tab" onclick="switchView('command',this)">Command Center <span class="tag tag-purple">C</span></div>
+    <div class="view-tab" onclick="switchView('compare',this)">Compare</div>
+  </div>
+</div>
+
+<!-- All views rendered by JS into these containers -->
+<div id="view-current" class="view active"></div>
+<div id="view-modal" class="view"></div>
+<div id="view-tabflow" class="view"></div>
+<div id="view-command" class="view"></div>
+<div id="view-compare" class="view"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CENTRALIZED DATA STORE — single source of truth for all views
+// ═══════════════════════════════════════════════════════════════
+const DRUG_DB = {
+  // ─── Drug list (search results) ───
+  searchResults: [
+    { ndc:'00093-7212-01', name:'Metformin HCl 500mg Tablet',      generic:'Metformin Hydrochloride', manufacturer:'Teva Pharmaceuticals',  gcn:'25962', rxnorm:'861004',  drugClass:'Biguanides',     form:'Tablet', route:'Oral', dea:null,   inStock:247, status340b:'active',  warnings:2, populated:true },
+    { ndc:'00071-0155-23', name:'Lipitor (Atorvastatin) 20mg Tab',  generic:'Atorvastatin Calcium',    manufacturer:'Pfizer Inc.',            gcn:'42732', rxnorm:'259255',  drugClass:'HMG-CoA Reductase Inhibitors', form:'Tablet', route:'Oral', dea:null, inStock:183, status340b:'active', warnings:1, populated:false },
+    { ndc:'00378-1805-01', name:'Lisinopril 10mg Tablet',           generic:'Lisinopril',              manufacturer:'Mylan Pharmaceuticals',  gcn:'19098', rxnorm:'314076',  drugClass:'ACE Inhibitors', form:'Tablet', route:'Oral', dea:null,   inStock:312, status340b:'active',  warnings:1, populated:false },
+    { ndc:'00002-4462-30', name:'Humalog KwikPen 100u/mL',         generic:'Insulin Lispro',          manufacturer:'Eli Lilly',              gcn:'44821', rxnorm:'1652240', drugClass:'Insulins',        form:'Pen',    route:'SubQ', dea:null,   inStock:24,  status340b:'active',  warnings:3, populated:false },
+    { ndc:'59762-0480-01', name:'Adderall XR 20mg Capsule',         generic:'Mixed Amphetamine Salts', manufacturer:'Teva (Barr)',            gcn:'33902', rxnorm:'884520',  drugClass:'CNS Stimulants', form:'Capsule',route:'Oral', dea:'CII',  inStock:56,  status340b:'inactive',warnings:4, populated:false },
+    { ndc:'63304-0683-01', name:'Omeprazole 20mg DR Capsule',       generic:'Omeprazole',              manufacturer:'Ranbaxy Pharmaceuticals',gcn:'17788', rxnorm:'198053',  drugClass:'PPIs',           form:'Capsule',route:'Oral', dea:null,   inStock:410, status340b:'active',  warnings:1, populated:false },
+  ],
+
+  // ─── The fully-populated drug: Metformin HCl 500mg ───
+  metformin: {
+    // Identity
+    ndc: '00093-7212-01',
+    name: 'Metformin HCl 500mg Tablet',
+    generic: 'Metformin Hydrochloride',
+    manufacturer: 'Teva Pharmaceuticals',
+    gcn: '25962',
+    rxnorm: '861004',
+    drugClass: 'Biguanides',
+    form: 'Tablet',
+    route: 'Oral',
+    dea: null,
+    conceptType: 'PackagedDrug',
+    ingredient: { name:'Metformin Hydrochloride', strength:'500', unit:'mg' },
+    imprint: { side1:'93', side2:'72', shape:'Round', color:'White', scoring:'Bisected', coating:'Film-coated', flavor:'None' },
+    interop: [
+      { vocab:'RxNorm',    code:'861004',    desc:'metformin hydrochloride 500 MG Oral Tablet' },
+      { vocab:'SNOMED CT', code:'109081006', desc:'Metformin' },
+      { vocab:'NDF-RT',    code:'N0000175605', desc:'Metformin [Chemical/Ingredient]' },
+      { vocab:'ATC',       code:'A10BA02',   desc:'Metformin' },
+    ],
+
+    // Inventory
+    inventory: {
+      onHand: 247, reserved: 18, available: 229,
+      reorderPoint: 100, reorderQty: 500,
+      storage: 'Room Temperature (68-77°F)', refrigeration: false, controlled: false, schedule: null,
+      supplier: { name:'McKesson Corporation', account:'MCK-44891', dea:'RM0323456', terms:'Net 30' },
+      lots: [
+        { number:'LOT-2026-0412', received:'2026-04-01', expires:'2027-03-31', qty:120, available:112, source:'Standard', location:'Shelf A-3', serial:'SN-TEV-44891-A', status:'Active' },
+        { number:'LOT-2026-0388', received:'2026-03-15', expires:'2026-04-26', qty:77,  available:71,  source:'340B',     location:'Shelf A-3', serial:'SN-TEV-44891-B', status:'Expiring 12d' },
+        { number:'LOT-2026-0301', received:'2026-02-20', expires:'2027-01-15', qty:50,  available:46,  source:'Standard', location:'Shelf A-3', serial:'SN-TEV-44891-C', status:'Active' },
+      ],
+      transactions: [
+        { date:'04-13 14:22', type:'Dispense',   qty:-30,  bal:247, ref:'RX-88421 (John Doe)',          lot:'LOT-0412', user:'J. Smith, RPh' },
+        { date:'04-12 09:15', type:'Receipt',    qty:120,  bal:277, ref:'PO-2026-0044 (McKesson)',      lot:'LOT-0412', user:'System' },
+        { date:'04-11 16:45', type:'Dispense',   qty:-60,  bal:157, ref:'RX-88390 (Sarah Martinez)',    lot:'LOT-0388', user:'J. Smith, RPh' },
+        { date:'04-10 11:30', type:'Dispense',   qty:-90,  bal:217, ref:'RX-88355 (Robert Kim)',        lot:'LOT-0301', user:'M. Johnson, CPhT' },
+        { date:'04-10 08:00', type:'Adjustment', qty:-5,   bal:307, ref:'Cycle Count #CC-0410',         lot:'LOT-0301', user:'M. Johnson, CPhT' },
+        { date:'04-08 10:20', type:'Dispense',   qty:-30,  bal:312, ref:'RX-88312 (Maria Garcia)',      lot:'LOT-0388', user:'J. Smith, RPh' },
+        { date:'04-07 15:10', type:'Dispense',   qty:-45,  bal:342, ref:'RX-88280 (Linda Chen)',        lot:'LOT-0388', user:'J. Smith, RPh' },
+        { date:'04-05 11:00', type:'Dispense',   qty:-30,  bal:387, ref:'RX-88245 (James Wilson)',      lot:'LOT-0301', user:'M. Johnson, CPhT' },
+      ],
+    },
+
+    // 340B
+    program340b: {
+      totalAccumulated: 450, threshold: 500, pending: 30,
+      ceilingPrice: 0.14, ceilingEffective: '2026-01-01', ceilingSource: 'HRSA/Apexus',
+      quarterlySavings: 2479, savingsPerOrder: 2755,
+      entities: [
+        { name:'Community Health Center of Springfield', opaId:'DSH-340B-0044', balance:310, pct:'68.9%', lifetimeCredits:1240, lifetimeDebits:930, pending:30, status:'Active' },
+        { name:'Riverside Family Clinic',               opaId:'FQ-340B-0112',  balance:140, pct:'31.1%', lifetimeCredits:520,  lifetimeDebits:380, pending:0,  status:'Active' },
+      ],
+      entries: [
+        { date:'04-13', entity:'CHC Springfield', type:'Credit',   qty:'+30',  after:310, det:'DET-8842', patient:'John Doe',       rx:'RX-88421' },
+        { date:'04-12', entity:'CHC Springfield', type:'Credit',   qty:'+60',  after:280, det:'DET-8831', patient:'Sarah Martinez', rx:'RX-88390' },
+        { date:'04-11', entity:'Riverside',       type:'Reversal', qty:'-15',  after:140, det:'DET-8820', patient:'Robert Kim',     rx:'RX-88355' },
+        { date:'04-10', entity:'CHC Springfield', type:'Credit',   qty:'+45',  after:220, det:'DET-8815', patient:'Maria Garcia',   rx:'RX-88312' },
+        { date:'04-09', entity:'Riverside',       type:'Credit',   qty:'+90',  after:155, det:'DET-8801', patient:'Robert Kim',     rx:'RX-88290' },
+        { date:'04-08', entity:'CHC Springfield', type:'Credit',   qty:'+30',  after:175, det:'DET-8795', patient:'Linda Chen',     rx:'RX-88280' },
+      ],
+      determinations: [
+        { id:'DET-8842', date:'04-13', patient:'John Doe',       rx:'RX-88421', status:'Eligible',               payer:'BIN 610014', carve:'Carve-out', qty:30 },
+        { id:'DET-8831', date:'04-12', patient:'Sarah Martinez', rx:'RX-88390', status:'Eligible',               payer:'BIN 610014', carve:'Carve-out', qty:60 },
+        { id:'DET-8820', date:'04-11', patient:'Robert Kim',     rx:'RX-88355', status:'Override → Inelig.',     payer:'BIN 003585', carve:'Carve-in',  qty:90 },
+        { id:'DET-8815', date:'04-10', patient:'Maria Garcia',   rx:'RX-88312', status:'Eligible',               payer:'BIN 610014', carve:'Carve-out', qty:45 },
+        { id:'DET-8801', date:'04-09', patient:'Robert Kim',     rx:'RX-88290', status:'Eligible',               payer:'BIN 610014', carve:'Carve-out', qty:90 },
+      ],
+    },
+
+    // Safety
+    safety: {
+      warnings: [
+        { code:'BBW-0044', priority:1, title:'Black Box Warning: Lactic Acidosis', text:'Metformin is contraindicated in patients with renal impairment (eGFR below 30 mL/min/1.73m²). Lactic acidosis is a rare but serious complication. Risk increases with sepsis, dehydration, excess alcohol, hepatic impairment, and acute heart failure. Discontinue at time of or prior to iodinated contrast procedures.', level:'critical' },
+        { code:'LBL-0192', priority:2, title:'Vitamin B12 Deficiency', text:'Long-term metformin use may reduce serum vitamin B12 levels. Periodic monitoring of hematologic parameters (CBC annually) and B12 levels at 2-3 year intervals is recommended, especially in patients with peripheral neuropathy or megaloblastic anemia.', level:'moderate' },
+      ],
+      interactions: [
+        { drug:'Iodinated Contrast Media (Omnipaque, Visipaque)', severity:'Contraindicated', effect:'Increased risk of lactic acidosis; acute renal failure may impair metformin excretion', action:'Discontinue 48h before & after contrast', sevClass:'ineligible' },
+        { drug:'Cimetidine 300mg',   severity:'Severe',   effect:'Cimetidine inhibits renal tubular secretion; metformin AUC increases 50%',         action:'Use alternative H2 blocker (famotidine)', sevClass:'severe' },
+        { drug:'Dolutegravir 50mg',  severity:'Moderate', effect:'Dolutegravir inhibits OCT2/MATE1 transport; metformin exposure increases 79%',      action:'Consider dose adjustment; monitor glucose', sevClass:'pending' },
+        { drug:'Ethanol (Alcohol)',   severity:'Moderate', effect:'Potentiates metformin effect on lactate metabolism; increases lactic acidosis risk', action:'Limit alcohol; avoid binge drinking', sevClass:'pending' },
+        { drug:'Topiramate 100mg',   severity:'Moderate', effect:'Topiramate may cause metabolic acidosis, additive with metformin lactic acid risk',  action:'Monitor bicarbonate levels', sevClass:'pending' },
+      ],
+      precautions: [
+        { type:'Geriatric', desc:'Risk of lactic acidosis higher in elderly (age ≥ 80) due to decreased renal function. Assess eGFR before initiating; do not start if eGFR < 30.', severity:'Moderate', criteria:'Beers List' },
+        { type:'Renal',     desc:'Contraindicated if eGFR < 30. Reduce dose to 1000mg/day if eGFR 30-45. Reassess at eGFR 45.',                                                     severity:'Severe',   criteria:null },
+        { type:'Hepatic',   desc:'Avoid use in patients with clinical or laboratory evidence of hepatic disease; impaired lactate clearance.',                                          severity:'Moderate', criteria:null },
+      ],
+      sideEffects: [
+        { name:'Diarrhea',             freq:'30-50%',  severity:'Mild-Moderate', monitor:'Usually resolves in 2-3 weeks; take with food' },
+        { name:'Nausea/Vomiting',      freq:'20-25%',  severity:'Mild',          monitor:'Dose titration over 2 weeks reduces incidence' },
+        { name:'Flatulence',           freq:'10-15%',  severity:'Mild',          monitor:'No intervention typically needed' },
+        { name:'Abdominal Discomfort', freq:'5-10%',   severity:'Mild',          monitor:'Take with meals; consider extended-release formulation' },
+        { name:'Metallic Taste',       freq:'3-5%',    severity:'Mild',          monitor:'Usually transient; resolves within weeks' },
+        { name:'Lactic Acidosis',      freq:'<0.01%',  severity:'Life-threatening', monitor:'Monitor lactate if symptoms; discontinue immediately' },
+      ],
+    },
+
+    // Education
+    education: {
+      monographs: [
+        { title:'What is Metformin?', text:'Metformin is an oral diabetes medicine that helps control blood sugar levels. It is used together with diet and exercise to improve blood sugar control in adults with type 2 diabetes mellitus. Metformin works by decreasing the amount of glucose your liver produces and improving how your body responds to insulin.' },
+        { title:'How to Take This Medication', text:'Take metformin exactly as prescribed. The usual starting dose is 500mg once or twice daily with meals. Your doctor may gradually increase your dose every 1-2 weeks. Maximum recommended dose is 2,550mg per day (divided doses). Always take with food to reduce stomach upset. Swallow tablets whole; do not crush or chew.' },
+        { title:'Important Safety Information', text:'Seek emergency medical help if you have symptoms of lactic acidosis: unusual muscle pain, trouble breathing, unusual sleepiness, stomach pain with nausea/vomiting, feeling cold (especially in arms and legs), dizziness, or fast/irregular heartbeat. Tell your doctor if you are having surgery or any x-ray/CT scan procedure with dye injection.' },
+      ],
+      medGuide: { id:'MG-2024-0044', format:'PDF', title:'Metformin Hydrochloride Tablets USP', note:'Required at dispensing per FDA mandate' },
+      counseling: [
+        { num:1, msg:'Take with food to reduce GI side effects. Start low and increase gradually.', type:'Administration' },
+        { num:2, msg:'Avoid excessive alcohol consumption — increases risk of lactic acidosis.', type:'Lifestyle' },
+        { num:3, msg:'Report any symptoms of lactic acidosis immediately: unusual fatigue, muscle pain, breathing difficulty.', type:'Safety Alert' },
+        { num:4, msg:'Inform all healthcare providers that you take metformin before any procedure involving contrast dye or surgery.', type:'Procedure Prep' },
+      ],
+    },
+
+    // Documents
+    documents: [
+      { name:'Prior Auth Approval - Metformin 500mg', type:'Prior Auth',    patient:'Robert Kim',     rx:'RX-88355', by:'J. Smith, RPh',     date:'04-11', size:'124 KB', status:'Active' },
+      { name:'Lab Result - HbA1c 7.2%',               type:'Lab Result',   patient:'John Doe',       rx:'RX-88421', by:'Dr. A. Patel',      date:'04-10', size:'89 KB',  status:'Active' },
+      { name:'eRx - Metformin 500mg #30 (Dr. Patel)',  type:'eRx Image',   patient:'John Doe',       rx:'RX-88421', by:'System (RxLinc)',    date:'04-09', size:'156 KB', status:'Active' },
+      { name:'Insurance EOB - Claim #CLM-44219',       type:'EOB',         patient:'Sarah Martinez', rx:'RX-88390', by:'System (RxLinc)',    date:'04-08', size:'201 KB', status:'Active' },
+      { name:'Patient Consent - 340B Program',         type:'Consent',     patient:'Maria Garcia',   rx:'RX-88312', by:'M. Johnson, CPhT',  date:'04-05', size:'67 KB',  status:'Active' },
+      { name:'Fax - Dose Adjustment Request',          type:'Fax',         patient:'Linda Chen',     rx:'RX-88280', by:'System (Telnyx)',    date:'04-03', size:'312 KB', status:'Pending Review' },
+      { name:'Refill Auth - Verbal Order',             type:'Clinical Note',patient:'James Wilson',   rx:'RX-88245', by:'J. Smith, RPh',     date:'03-28', size:'45 KB',  status:'Pending Review' },
+    ],
+
+    // Pricing
+    pricing: {
+      wac: 5.65, ceiling340b: 0.14, acquisition: 3.20, awp: 8.92, ful: 0.04, mac: 0.06,
+      history: [
+        { type:'WAC',          unit:'$5.65', pkg:'$565.00', size:'100 tabs', effective:'2026-01-01', source:'FDB',      current:true },
+        { type:'AWP',          unit:'$8.92', pkg:'$892.00', size:'100 tabs', effective:'2026-01-01', source:'FDB',      current:true },
+        { type:'FUL',          unit:'$0.04', pkg:'$4.00',   size:'100 tabs', effective:'2026-01-01', source:'CMS',      current:true },
+        { type:'340B Ceiling', unit:'$0.14', pkg:'$14.00',  size:'100 tabs', effective:'2026-01-01', source:'HRSA',     current:true },
+        { type:'MAC',          unit:'$0.06', pkg:'$6.00',   size:'100 tabs', effective:'2025-10-01', source:'Medicaid', current:true },
+        { type:'WAC (prior)',  unit:'$5.42', pkg:'$542.00', size:'100 tabs', effective:'2025-07-01', source:'FDB',      current:false },
+      ],
+    },
+
+    // Clinical
+    clinical: {
+      dosing: [
+        { pop:'Adults (T2DM)',    start:'500mg once daily', max:'2,550mg/day', freq:'BID-TID with meals', renal:'eGFR 30-45: max 1,000mg/day. <30: contraindicated' },
+        { pop:'Pediatric (≥10y)', start:'500mg once daily', max:'2,000mg/day', freq:'BID with meals',     renal:'Same as adult' },
+        { pop:'Geriatric (≥80y)', start:'500mg once daily', max:'Per renal fn', freq:'Start low, titrate', renal:'Must confirm eGFR ≥30 before initiating' },
+      ],
+      prescriptions: [
+        { rx:'RX-88421', patient:'John Doe',       prescriber:'Dr. A. Patel (NPI 1234567890)', sig:'500mg PO BID',  qty:60,  days:30, refills:'5/11',  written:'04-09' },
+        { rx:'RX-88390', patient:'Sarah Martinez', prescriber:'Dr. A. Patel',                  sig:'1000mg PO BID', qty:60,  days:30, refills:'3/11',  written:'03-15' },
+        { rx:'RX-88355', patient:'Robert Kim',     prescriber:'Dr. L. Tran (NPI 9876543210)',  sig:'500mg PO BID',  qty:180, days:90, refills:'2/3',   written:'01-20' },
+        { rx:'RX-88312', patient:'Maria Garcia',   prescriber:'Dr. A. Patel',                  sig:'500mg PO daily',qty:30,  days:30, refills:'8/11',  written:'2025-08-10' },
+        { rx:'RX-88280', patient:'Linda Chen',     prescriber:'Dr. S. Kumar (NPI 5551234567)', sig:'500mg PO TID',  qty:90,  days:30, refills:'1/5',   written:'03-01' },
+        { rx:'RX-88245', patient:'James Wilson',   prescriber:'Dr. A. Patel',                  sig:'850mg PO BID',  qty:60,  days:30, refills:'0/11',  written:'2025-11-15' },
+      ],
+      indications: [
+        { name:'Type 2 Diabetes Mellitus',             type:'Treatment',  labeled:'FDA-approved' },
+        { name:'Polycystic Ovary Syndrome (PCOS)',     type:'Treatment',  labeled:'Off-label' },
+        { name:'Prediabetes / Diabetes Prevention',    type:'Prevention', labeled:'Off-label' },
+      ],
+      velocity: '~180 units/week',
+      totalRx: 12, totalPatients: 8,
+    },
+
+    // Work items (cross-cutting)
+    workItems: [
+      { status:'Pending', desc:'Unmatched NDC reference', detail:'TPA file 04-12' },
+      { status:'Review',  desc:'Override audit',          detail:'DET-8820 (Robert Kim)' },
+    ],
+    // Patient context
+    patients: [
+      { name:'John Doe',       sig:'500mg BID',  since:'2025-08' },
+      { name:'Sarah Martinez', sig:'1000mg BID', since:'2025-11' },
+      { name:'Robert Kim',     sig:'500mg BID',  since:'2026-01' },
+      { name:'Maria Garcia',   sig:'500mg daily', since:'2025-08' },
+      { name:'Linda Chen',     sig:'500mg TID',  since:'2026-03' },
+      { name:'James Wilson',   sig:'850mg BID',  since:'2025-11' },
+      { name:'Thomas Park',    sig:'500mg BID',  since:'2026-02' },
+      { name:'Helen Rodriguez',sig:'1000mg daily',since:'2025-09' },
+    ],
+  },
+};
+
+const D = DRUG_DB.metformin;
+const S = D.safety, I = D.inventory, P = D.program340b, PR = D.pricing, C = D.clinical, E = D.education, DOC = D.documents;
+
+// ─── Helpers ───
+const h = s => s; // passthrough (no html escaping needed for static data)
+const statusPill = (label, cls) => `<span class="status ${cls}">${label}</span>`;
+const statRow = (label, val, cls='') => `<div class="stat-row"><span class="label">${label}</span><span class="value ${cls}">${val}</span></div>`;
+
+function drugHeader() {
+  return `<div class="drug-header-card">
+    <div class="drug-icon-lg">${D.name[0]}</div>
+    <div class="drug-meta"><h2>${D.name}</h2><div class="sub"><span>NDC: ${D.ndc}</span><span>GCN: ${D.gcn}</span><span>${D.manufacturer}</span><span>RxNorm: ${D.rxnorm}</span><span>Class: ${D.drugClass}</span></div></div>
+    <div class="drug-badges"><span class="drug-badge active-340b">340B Active</span>${statusPill(I.onHand+' In Stock','in-stock')}</div>
+  </div>`;
+}
+
+function drugSearchList(onClickFn) {
+  let rows = DRUG_DB.searchResults.map(d => {
+    const pop = d.populated;
+    const cls = pop ? 'populated' : 'dim';
+    const click = pop ? `onclick="${onClickFn}"` : `onclick="alert('Data not populated for this drug — only Metformin has full data in this mockup.')"`;
+    return `<div class="drug-list-row ${cls}" ${click}>
+      <span>${d.name}${pop?' &#9733;':''}</span>
+      <span>${d.ndc}</span>
+      <span>${d.manufacturer}</span>
+      <span>${d.generic}</span>
+      <span>${d.drugClass}</span>
+      <span style="text-align:right">${d.inStock}</span>
+      <span>${d.status340b==='active'?statusPill('340B','eligible'):d.dea?statusPill(d.dea,'severe'):statusPill('N/A','neutral')}</span>
+    </div>`;
+  }).join('');
+  return `<div class="drug-search-bar">
+    <input type="text" placeholder="Search drugs by name, NDC, GCN, or RxNorm..." value="met" />
+    <span class="shortcut"><span class="kbd">&#8984;K</span> from anywhere</span>
+  </div>
+  <div class="drug-list">
+    <div class="drug-list-header"><span>Drug Name</span><span>NDC</span><span>Manufacturer</span><span>Generic</span><span>Class</span><span style="text-align:right">Stock</span><span>Status</span></div>
+    ${rows}
+  </div>`;
+}
+
+// ─── Shared section renderers (used by all views) ───
+function renderInventorySummary() {
+  return `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;">
+    <div class="overview-card"><h5>On Hand</h5><div style="font-size:22px;font-weight:700;color:var(--green);">${I.onHand}</div></div>
+    <div class="overview-card"><h5>Reserved</h5><div style="font-size:22px;font-weight:700;">${I.reserved}</div></div>
+    <div class="overview-card"><h5>Available</h5><div style="font-size:22px;font-weight:700;color:var(--green);">${I.available}</div></div>
+    <div class="overview-card"><h5>Reorder Point</h5><div style="font-size:22px;font-weight:700;">${I.reorderPoint}</div></div>
+    <div class="overview-card"><h5>Reorder Qty</h5><div style="font-size:22px;font-weight:700;">${I.reorderQty}</div></div>
+  </div>`;
+}
+function renderLots() {
+  return `<h4 style="font-size:14px;font-weight:600;margin-bottom:10px;">Active Lots</h4>
+  <table class="mock-table"><thead><tr><th>Lot #</th><th>Received</th><th>Expires</th><th>Qty</th><th>Avail</th><th>Source</th><th>Location</th><th>Serial (DSCSA)</th><th>Status</th></tr></thead><tbody>
+  ${I.lots.map(l=>`<tr><td>${l.number}</td><td>${l.received}</td><td>${l.expires}</td><td>${l.qty}</td><td>${l.available}</td><td>${statusPill(l.source, l.source==='340B'?'info':'eligible')}</td><td>${l.location}</td><td style="font-size:11px;color:var(--text3)">${l.serial}</td><td>${statusPill(l.status, l.status==='Active'?'in-stock':'low')}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+function renderTransactions() {
+  return `<h4 style="font-size:14px;font-weight:600;margin:20px 0 10px;">Recent Transactions</h4>
+  <table class="mock-table"><thead><tr><th>Date</th><th>Type</th><th>Qty</th><th>Balance</th><th>Reference</th><th>Lot</th><th>User</th></tr></thead><tbody>
+  ${I.transactions.map(t=>`<tr><td>${t.date}</td><td>${t.type}</td><td>${t.qty>0?'+':''}${t.qty}</td><td>${t.bal}</td><td>${t.ref}</td><td>${t.lot}</td><td>${t.user}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+function renderInventoryFull() { return renderInventorySummary() + renderLots() + renderTransactions() + `
+  <div style="display:flex;gap:16px;margin-top:16px;">
+    <div class="overview-card" style="flex:1"><h5>Supplier</h5><div style="font-size:13px;font-weight:600">${I.supplier.name}</div><div style="font-size:11px;color:var(--text2)">Acct #${I.supplier.account} · DEA #${I.supplier.dea} · ${I.supplier.terms}</div></div>
+    <div class="overview-card" style="flex:1"><h5>Storage</h5><div style="font-size:13px;font-weight:600">${I.storage}</div><div style="font-size:11px;color:var(--text2)">Refrigeration: ${I.refrigeration?'Yes':'No'} · Controlled: ${I.controlled?'Yes':'No'} · Schedule: ${I.schedule||'N/A'}</div></div>
+  </div>`; }
+
+function render340bSummary() {
+  return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+    <div class="overview-card"><h5>Accumulated</h5><div style="font-size:22px;font-weight:700;color:var(--green);">${P.totalAccumulated}</div><div style="font-size:11px;color:var(--text2)">across ${P.entities.length} entities</div></div>
+    <div class="overview-card"><h5>Threshold</h5><div style="font-size:22px;font-weight:700;">${P.threshold}</div><div style="font-size:11px;color:var(--text2)">${Math.round(P.totalAccumulated/P.threshold*100)}% reached</div></div>
+    <div class="overview-card"><h5>Ceiling Price</h5><div style="font-size:22px;font-weight:700;color:var(--green);">$${P.ceilingPrice.toFixed(2)}</div><div style="font-size:11px;color:var(--text2)">per unit · ${P.ceilingSource}</div></div>
+    <div class="overview-card"><h5>Savings/Order</h5><div style="font-size:22px;font-weight:700;color:var(--accent2);">$${P.savingsPerOrder.toLocaleString()}</div><div style="font-size:11px;color:var(--text2)">${I.reorderQty} × ($${PR.wac} - $${P.ceilingPrice.toFixed(2)})</div></div>
+  </div>`;
+}
+function render340bEntities() {
+  return `<h4 style="font-size:14px;font-weight:600;margin-bottom:8px;">Entity Breakdown</h4>
+  <table class="mock-table"><thead><tr><th>Covered Entity</th><th>OPA ID</th><th>Balance</th><th>%</th><th>Credits</th><th>Debits</th><th>Pending</th><th>Status</th></tr></thead><tbody>
+  ${P.entities.map(e=>`<tr><td>${e.name}</td><td>${e.opaId}</td><td style="font-weight:700;color:var(--green)">${e.balance}</td><td>${e.pct}</td><td>${e.lifetimeCredits.toLocaleString()}</td><td>${e.lifetimeDebits.toLocaleString()}</td><td>${e.pending}</td><td>${statusPill(e.status,'eligible')}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+function render340bEntries() {
+  return `<h4 style="font-size:14px;font-weight:600;margin:20px 0 8px;">Recent Accumulator Entries</h4>
+  <table class="mock-table"><thead><tr><th>Date</th><th>Entity</th><th>Type</th><th>Qty</th><th>After</th><th>Det.</th><th>Patient</th><th>Rx</th></tr></thead><tbody>
+  ${P.entries.map(e=>`<tr><td>${e.date}</td><td>${e.entity}</td><td>${statusPill(e.type, e.type==='Credit'?'eligible':'ineligible')}</td><td>${e.qty}</td><td>${e.after}</td><td>${e.det}</td><td>${e.patient}</td><td>${e.rx}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+function render340bDeterminations() {
+  return `<h4 style="font-size:14px;font-weight:600;margin:20px 0 8px;">Recent Determinations</h4>
+  <table class="mock-table"><thead><tr><th>ID</th><th>Date</th><th>Patient</th><th>Rx</th><th>Status</th><th>Payer</th><th>Carve</th><th>Qty</th></tr></thead><tbody>
+  ${P.determinations.map(d=>`<tr><td>${d.id}</td><td>${d.date}</td><td>${d.patient}</td><td>${d.rx}</td><td>${statusPill(d.status, d.status.includes('Eligible')?'eligible':'ineligible')}</td><td>${d.payer}</td><td>${d.carve}</td><td>${d.qty}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+function render340bFull() { return render340bSummary() + render340bEntities() + render340bEntries() + render340bDeterminations(); }
+
+function renderWarnings() {
+  return S.warnings.map(w=>`<div class="warning-card ${w.level}"><h5>&#9888; ${w.title}</h5><p>${w.text}</p><div style="margin-top:8px;font-size:11px;color:var(--text3)">Code: ${w.code} · Priority: ${w.priority}</div></div>`).join('');
+}
+function renderInteractions() {
+  return `<h4 style="font-size:14px;font-weight:600;margin:16px 0 10px;">Drug-Drug Interactions (${S.interactions.length})</h4>
+  <table class="mock-table"><thead><tr><th>Interacting Drug</th><th>Severity</th><th>Clinical Effect</th><th>Action</th></tr></thead><tbody>
+  ${S.interactions.map(i=>`<tr><td>${i.drug}</td><td>${statusPill(i.severity,i.sevClass)}</td><td>${i.effect}</td><td>${i.action}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+function renderPrecautions() {
+  return `<h4 style="font-size:14px;font-weight:600;margin:20px 0 10px;">Precautions</h4>
+  <table class="mock-table"><thead><tr><th>Type</th><th>Description</th><th>Severity</th><th>Criteria</th></tr></thead><tbody>
+  ${S.precautions.map(p=>`<tr><td>${p.type}</td><td>${p.desc}</td><td>${statusPill(p.severity,p.severity==='Severe'?'ineligible':'pending')}</td><td>${p.criteria?statusPill(p.criteria,'info'):'—'}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+function renderSideEffects() {
+  return `<h4 style="font-size:14px;font-weight:600;margin:20px 0 10px;">Side Effects</h4>
+  <table class="mock-table"><thead><tr><th>Side Effect</th><th>Frequency</th><th>Severity</th><th>Monitoring</th></tr></thead><tbody>
+  ${S.sideEffects.map(s=>`<tr><td>${s.name}</td><td>${s.freq}</td><td>${s.severity==='Life-threatening'?statusPill(s.severity,'ineligible'):s.severity}</td><td>${s.monitor}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+function renderSafetyFull() { return renderWarnings() + renderInteractions() + renderPrecautions() + renderSideEffects(); }
+
+function renderEducation() {
+  return E.monographs.map(m=>`<div class="monograph-section"><h5>${m.title}</h5><p>${m.text}</p></div>`).join('') +
+  `<div class="overview-card" style="margin:16px 0"><h5>FDA Medication Guide</h5><div style="font-size:13px;font-weight:600">${E.medGuide.title}</div><div style="font-size:12px;color:var(--text2);margin-top:4px">ID: ${E.medGuide.id} · Format: ${E.medGuide.format} · ${E.medGuide.note}</div></div>` +
+  `<h4 style="font-size:14px;font-weight:600;margin:16px 0 10px;">Counseling Points</h4>
+  <table class="mock-table"><thead><tr><th>#</th><th>Message</th><th>Type</th></tr></thead><tbody>
+  ${E.counseling.map(c=>`<tr><td>${c.num}</td><td>${c.msg}</td><td>${c.type}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function renderDocuments() {
+  return `<table class="mock-table"><thead><tr><th>Document</th><th>Type</th><th>Patient</th><th>Rx</th><th>By</th><th>Date</th><th>Size</th><th>Status</th></tr></thead><tbody>
+  ${DOC.map(d=>`<tr><td>${d.name}</td><td>${d.type}</td><td>${d.patient}</td><td>${d.rx}</td><td>${d.by}</td><td>${d.date}</td><td>${d.size}</td><td>${statusPill(d.status,d.status==='Active'?'eligible':'pending')}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+
+function renderPricing() {
+  return `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;">
+    <div class="overview-card"><h5>WAC</h5><div style="font-size:22px;font-weight:700;">$${PR.wac}</div></div>
+    <div class="overview-card"><h5>340B Ceiling</h5><div style="font-size:22px;font-weight:700;color:var(--green);">$${PR.ceiling340b.toFixed(2)}</div></div>
+    <div class="overview-card"><h5>Acquisition</h5><div style="font-size:22px;font-weight:700;">$${PR.acquisition.toFixed(2)}</div></div>
+    <div class="overview-card"><h5>AWP</h5><div style="font-size:22px;font-weight:700;">$${PR.awp}</div></div>
+    <div class="overview-card"><h5>FUL</h5><div style="font-size:22px;font-weight:700;">$${PR.ful.toFixed(2)}</div></div>
+  </div>
+  <table class="mock-table"><thead><tr><th>Price Type</th><th>Unit</th><th>Package</th><th>Size</th><th>Effective</th><th>Source</th><th>Current</th></tr></thead><tbody>
+  ${PR.history.map(p=>`<tr><td>${p.type}</td><td>${p.unit}</td><td>${p.pkg}</td><td>${p.size}</td><td>${p.effective}</td><td>${p.source}</td><td>${statusPill(p.current?'Yes':'Expired',p.current?'eligible':'pending')}</td></tr>`).join('')}
+  </tbody></table>
+  <div class="sticky blue" style="margin-top:16px"><b>Savings analysis:</b> ${I.reorderQty} units at 340B ($${PR.ceiling340b.toFixed(2)}) vs WAC ($${PR.wac}) saves <b>$${P.savingsPerOrder.toLocaleString()} per order</b>. At ${C.velocity} dispensing, ~$9,920/month in 340B savings for this NDC.</div>`;
+}
+
+function renderClinical() {
+  return `<h4 style="font-size:14px;font-weight:600;margin-bottom:10px;">Dosing Guidelines</h4>
+  <table class="mock-table"><thead><tr><th>Population</th><th>Starting</th><th>Max</th><th>Frequency</th><th>Renal Adjustment</th></tr></thead><tbody>
+  ${C.dosing.map(d=>`<tr><td>${d.pop}</td><td>${d.start}</td><td>${d.max}</td><td>${d.freq}</td><td>${d.renal}</td></tr>`).join('')}</tbody></table>
+  <h4 style="font-size:14px;font-weight:600;margin:20px 0 10px;">Active Prescriptions (${C.prescriptions.length} of ${C.totalRx})</h4>
+  <table class="mock-table"><thead><tr><th>Rx #</th><th>Patient</th><th>Prescriber</th><th>Sig</th><th>Qty</th><th>Days</th><th>Refills</th><th>Written</th></tr></thead><tbody>
+  ${C.prescriptions.map(p=>`<tr><td>${p.rx}</td><td>${p.patient}</td><td>${p.prescriber}</td><td>${p.sig}</td><td>${p.qty}</td><td>${p.days}</td><td>${p.refills}</td><td>${p.written}</td></tr>`).join('')}</tbody></table>
+  <h4 style="font-size:14px;font-weight:600;margin:20px 0 10px;">Indications</h4>
+  <table class="mock-table"><thead><tr><th>Indication</th><th>Type</th><th>Labeled</th></tr></thead><tbody>
+  ${C.indications.map(i=>`<tr><td>${i.name}</td><td>${i.type}</td><td>${statusPill(i.labeled,i.labeled==='FDA-approved'?'eligible':'pending')}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function renderOverviewCards() {
+  return `<div class="overview-grid">
+    <div class="overview-card"><h5>&#128230; Inventory</h5>${statRow('On Hand',I.onHand+' units','good')}${statRow('Available',I.available+' units','good')}${statRow('Reorder Point',I.reorderPoint+' units')}${statRow('Active Lots',I.lots.length)}${statRow('Nearest Expiry','Apr 26 (12d)','warn')}</div>
+    <div class="overview-card"><h5>&#127973; 340B Program</h5>${statRow('Accumulated',P.totalAccumulated+' units','good')}${statRow('Threshold',P.threshold+' ('+Math.round(P.totalAccumulated/P.threshold*100)+'%)')}${statRow('Ceiling Price','$'+P.ceilingPrice.toFixed(2)+'/unit','good')}${statRow('Entities',P.entities.length+' active')}${statRow('Q1 Savings','$'+P.quarterlySavings.toLocaleString(),'good')}</div>
+    <div class="overview-card"><h5>&#9888; Safety</h5>${statRow('Warnings',S.warnings.length+' (1 BBW)','alert')}${statRow('Interactions',S.interactions.length+' (1 CI)','warn')}${statRow('Beers Criteria','Yes','warn')}${statRow('Controlled','No')}${statRow('REMS','No')}</div>
+    <div class="overview-card"><h5>&#128218; Education</h5>${statRow('Monographs',E.monographs.length+' sections')}${statRow('MedGuides','1 (PDF required)')}${statRow('Counseling',E.counseling.length+' messages')}</div>
+    <div class="overview-card"><h5>&#128176; Pricing</h5>${statRow('WAC','$'+PR.wac+'/unit')}${statRow('340B Ceiling','$'+PR.ceiling340b.toFixed(2)+'/unit','good')}${statRow('Acquisition','$'+PR.acquisition.toFixed(2)+'/unit')}${statRow('AWP','$'+PR.awp+'/unit')}</div>
+    <div class="overview-card"><h5>&#127981; Clinical</h5>${statRow('Active Rx',C.totalRx)}${statRow('Patients',C.totalPatients)}${statRow('Velocity',C.velocity)}${statRow('Primary Indication','Type 2 DM')}</div>
+  </div>`;
+}
+
+function renderCrossContext() {
+  return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px;">
+    <div><h5 style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px;">Recent Prescriptions</h5>
+    ${C.prescriptions.slice(0,3).map(p=>`<div style="font-size:12px;margin-bottom:4px">${p.rx} · ${p.patient} · ${p.qty} tabs · ${p.written}</div>`).join('')}
+    <div style="font-size:11px;color:var(--accent2);cursor:pointer;margin-top:4px">View all ${C.totalRx} →</div></div>
+    <div><h5 style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px;">Active Work Items</h5>
+    ${D.workItems.map(w=>`<div style="font-size:12px;margin-bottom:4px">${statusPill(w.status,w.status==='Pending'?'pending':'low')} ${w.desc} · ${w.detail}</div>`).join('')}</div>
+    <div><h5 style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px;">Patients on ${D.name.split(' ')[0]}</h5>
+    ${D.patients.slice(0,3).map(p=>`<div style="font-size:12px;margin-bottom:4px">${p.name} · ${p.sig} · since ${p.since}</div>`).join('')}
+    <div style="font-size:11px;color:var(--accent2);cursor:pointer;margin-top:4px">View all ${D.patients.length} →</div></div>
+  </div>`;
+}
+
+function renderIdentification() {
+  return `<div style="display:flex;gap:24px;align-items:flex-start;margin-bottom:20px;">
+    <div class="pill-visual">${D.imprint.side1}<br>${D.imprint.side2}</div>
+    <div><h4 style="font-size:14px;font-weight:600;margin-bottom:8px;">Physical Description</h4>
+    ${statRow('Shape',D.imprint.shape)}${statRow('Color',D.imprint.color)}${statRow('Imprint Side 1',D.imprint.side1)}${statRow('Imprint Side 2',D.imprint.side2)}${statRow('Scoring',D.imprint.scoring)}${statRow('Coating',D.imprint.coating)}${statRow('Dosage Form',D.form+', '+D.route.toLowerCase())}${statRow('Flavor',D.imprint.flavor)}</div>
+  </div>
+  <div class="overview-card"><h5>Interoperability Mappings</h5>
+  <table class="mock-table" style="margin-top:8px"><thead><tr><th>Vocabulary</th><th>Code</th><th>Description</th></tr></thead><tbody>
+  ${D.interop.map(i=>`<tr><td>${i.vocab}</td><td>${i.code}</td><td>${i.desc}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+// ═══════════════════════════════════════
+// VIEW RENDERERS
+// ═══════════════════════════════════════
+
+function renderCurrentState() {
+  return `<h2 class="view-title">Current State: Siloed Modules</h2>
+  <p class="view-desc">Drug data for <b>${D.name}</b> (${D.ndc}) is scattered across 6+ screens. Users must navigate each module independently.</p>
+  <div class="sticky"><b>Yellow dots</b> = screens containing data about ${D.name}. Today: 5+ tab switches, no shared context.</div>
+  <div class="current-layout">
+    <div class="current-sidebar">
+      <div class="nav-group"><div class="nav-group-label">Core</div>
+        <div class="nav-item">&#9633; Dashboard</div>
+        <div class="nav-item">&#9787; Patients <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#8478; Prescriptions <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#9744; Inventory <span class="highlight-dot"></span></div>
+      </div>
+      <div class="nav-group"><div class="nav-group-label">Documentation</div>
+        <div class="nav-item">&#9998; Documents <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#9878; Medical Billing</div>
+      </div>
+      <div class="nav-group"><div class="nav-group-label">Clinical</div>
+        <div class="nav-item active">&#9883; Drug Database <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#9745; Compliance</div>
+      </div>
+      <div class="nav-group"><div class="nav-group-label">340B Program</div>
+        <div class="nav-item">&#9670; Dashboard <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#9650; TPA Upload <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#9632; Virtual Inv <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#9632; Purchase Orders <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#9632; Accumulators <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#9632; Determinations <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#9632; Reconciliation <span class="highlight-dot"></span></div>
+        <div class="nav-item">&#9632; Compliance <span class="highlight-dot"></span></div>
+      </div>
+    </div>
+    <div class="current-workspace">
+      <div class="current-tab-bar">
+        <div class="current-tab">Dashboard</div>
+        <div class="current-tab active">Drug Database <span class="hl">DRUG</span></div>
+        <div class="current-tab">Inventory <span class="hl">DRUG</span></div>
+        <div class="current-tab">340B Accum <span class="hl">DRUG</span></div>
+        <div class="current-tab">Documents <span class="hl">DRUG</span></div>
+      </div>
+      <div class="current-content"><div class="placeholder">
+        <div style="font-size:48px;margin-bottom:12px">&#128138;</div>
+        <div style="font-size:16px;color:var(--text);margin-bottom:6px">${D.name} (${D.manufacturer})</div>
+        <div style="font-size:13px">GCN: ${D.gcn} · ${D.drugClass} · ${D.form}<br>
+        For inventory (${I.onHand} units, ${I.lots.length} lots) → open Inventory tab → search ${D.ndc}<br>
+        For 340B (${P.totalAccumulated} accumulated, ${Math.round(P.totalAccumulated/P.threshold*100)}% threshold) → open 340B Accumulators → filter NDC<br>
+        For safety (${S.warnings.length} warnings, ${S.interactions.length} DDIs) → switch to Interactions sub-tab<br><br>
+        <span style="color:var(--yellow)">Each switch loses context. No drug identity persists across tabs.</span></div>
+      </div></div>
+    </div>
+  </div>
+  <h3 style="font-size:16px;font-weight:600;margin-bottom:12px">Hops required for ${D.name.split(' ')[0]}:</h3>
+  <div class="hop-diagram">
+    <div class="hop-card"><h4>&#128138; "340B status of ${D.name.split(' ')[0]}?"</h4><div class="hop-steps"><span class="hop-step yellow">Drug DB</span><span class="hop-arrow">→</span><span class="hop-step yellow">Copy NDC</span><span class="hop-arrow">→</span><span class="hop-step yellow">340B Accum</span><span class="hop-arrow">→</span><span class="hop-step yellow">Filter ${D.ndc}</span><span class="hop-arrow">→</span><span class="hop-step yellow">Virtual Inv</span></div></div>
+    <div class="hop-card"><h4>&#128203; "Reorder at 340B pricing?"</h4><div class="hop-steps"><span class="hop-step yellow">Inventory</span><span class="hop-arrow">→</span><span class="hop-step yellow">${I.onHand} on hand</span><span class="hop-arrow">→</span><span class="hop-step yellow">Thresholds</span><span class="hop-arrow">→</span><span class="hop-step yellow">$${P.ceilingPrice.toFixed(2)} ceiling</span><span class="hop-arrow">→</span><span class="hop-step yellow">340B POs</span></div></div>
+    <div class="hop-card"><h4>&#9888; "Safety + lot expiry?"</h4><div class="hop-steps"><span class="hop-step yellow">Drug DB</span><span class="hop-arrow">→</span><span class="hop-step yellow">Lactic acidosis</span><span class="hop-arrow">→</span><span class="hop-step yellow">${S.interactions.length} DDIs</span><span class="hop-arrow">→</span><span class="hop-step yellow">Inventory</span><span class="hop-arrow">→</span><span class="hop-step yellow">${I.lots[1].number} exp ${I.lots[1].expires}</span></div></div>
+  </div>
+  <div class="agent-note"><span class="agent-icon">&#129302;</span><div><b>Agent problem:</b> "Tell me everything about NDC ${D.ndc}" requires 6+ unrelated API calls: /fdb/drugs/search, /inventory/products?ndc=, /340b/accumulators?ndc=, /340b/determinations?ndc=, /fdb/drugs/{id}/warnings, /fdb/drugs/{id}/interactions — with no unified drug profile.</div></div>`;
+}
+
+function renderModalView() {
+  const sections = [
+    {id:'modal-inventory',icon:'&#128230;',title:'Inventory',desc:'Stock, lots, transactions, reorder, supplier',stats:[{v:I.onHand,l:'on hand',c:'good'},{v:I.reserved,l:'reserved'},{v:I.lots.length,l:'lots'},{v:'12d',l:'nearest exp',c:'warn'}],content:renderInventoryFull()},
+    {id:'modal-340b',icon:'&#127973;',title:'340B Program',desc:'Accumulator, threshold, ceiling, determinations',stats:[{v:P.totalAccumulated,l:'accumulated',c:'good'},{v:P.threshold,l:'threshold'},{v:'$'+P.ceilingPrice.toFixed(2),l:'ceiling',c:'good'}],content:render340bFull()},
+    {id:'modal-safety',icon:'&#9888;',title:'Safety & Warnings',desc:'FDA warnings, DDIs, precautions, Beers, side effects',stats:[{v:S.warnings.length,l:'warnings',c:'alert'},{v:S.interactions.length,l:'DDIs',c:'warn'},{v:'1',l:'Beers',c:'warn'}],content:renderSafetyFull()},
+    {id:'modal-education',icon:'&#128218;',title:'Patient Education',desc:'Monographs, MedGuides, counseling messages',stats:[{v:E.monographs.length,l:'monographs'},{v:'1',l:'MedGuide'},{v:E.counseling.length,l:'counseling'}],content:renderEducation()},
+    {id:'modal-documents',icon:'&#128196;',title:'Documents',desc:'Documents linked to prescriptions for this drug',stats:[{v:DOC.length,l:'docs'},{v:DOC.filter(d=>d.status!=='Active').length,l:'pending',c:'warn'}],content:renderDocuments()},
+    {id:'modal-pricing',icon:'&#128176;',title:'Pricing',desc:'WAC, 340B ceiling, acquisition, AWP, FUL',stats:[{v:'$'+PR.wac,l:'WAC'},{v:'$'+PR.ceiling340b.toFixed(2),l:'340B',c:'good'},{v:'$'+PR.acquisition.toFixed(2),l:'acq'}],content:renderPricing()},
+    {id:'modal-clinical',icon:'&#127981;',title:'Clinical & Dosing',desc:'Dosing, prescriptions, indications, DUR',stats:[{v:C.totalRx,l:'active Rx'},{v:C.totalPatients,l:'patients'},{v:C.dosing.length,l:'dose ranges'}],content:renderClinical()},
+    {id:'modal-id',icon:'&#128300;',title:'Identification',desc:'Pill images, imprint, color, shape, interop mappings',stats:[{v:D.imprint.color,l:D.imprint.shape.toLowerCase()},{v:D.imprint.side1+'/'+D.imprint.side2,l:'imprint'},{v:D.imprint.scoring,l:'scoring'}],content:renderIdentification()},
+  ];
+
+  return `<h2 class="view-title">Option A: Modal Stack</h2>
+  <p class="view-desc">Click a drug from the list → Drug Command Modal opens. Click any domain card to expand detail. All data comes from the same source.</p>
+  <div class="pros-cons"><span class="annotation pro">+ Quick glance from any screen</span><span class="annotation pro">+ Global shortcut (Cmd+K)</span><span class="annotation pro">+ Background context preserved</span><span class="annotation con">- Deep dives feel cramped</span><span class="annotation con">- No side-by-side comparison</span><span class="annotation info">~ Best for: quick lookups</span></div>
+  ${drugSearchList("openModal()")}
+  <div id="modal-drug-detail" class="modal-backdrop-fixed" onclick="if(event.target===this)closeModal()">
+    <div class="modal-overlay">
+      <div class="modal-header"><h3>&#128138; Drug Command Center</h3><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--text3)">ESC to close</span><button class="modal-close" onclick="closeModal()">&#10005;</button></div></div>
+      <div class="modal-body">
+        ${drugHeader()}
+        <div class="domain-grid">
+          ${sections.map(s=>`<div class="domain-card" onclick="openNestedModal('${s.id}')">
+            <div style="font-size:20px;margin-bottom:8px">${s.icon}</div>
+            <h4>${s.title}</h4><p>${s.desc}</p>
+            <div class="card-stats">${s.stats.map(st=>`<div class="stat"><span class="val ${st.c||''}">${st.v}</span>${st.l}</div>`).join('')}</div>
+            <span class="click-hint">Click to drill in →</span>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>
+  ${sections.map(s=>`<div id="${s.id}" class="detail-panel-nested" onclick="if(event.target===this)closeNestedModal('${s.id}')">
+    <div class="nested-inner">
+      <div class="modal-header"><h3>${s.icon} ${s.title} — ${D.name}</h3><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--text3)">ESC to go back</span><button class="modal-close" onclick="closeNestedModal('${s.id}')">&#10005;</button></div></div>
+      <div class="modal-body">${s.content}</div>
+    </div>
+  </div>`).join('')}`;
+}
+
+function renderTabFlow() {
+  const tabs = [
+    {id:'tf-overview',label:'Overview',content:renderOverviewCards()},
+    {id:'tf-inventory',label:'Inventory',dropdown:['Stock Levels','Active Lots ('+I.lots.length+')','Transactions ('+I.transactions.length+')','Purchase Orders'],content:renderInventoryFull()},
+    {id:'tf-340b',label:'340B',dropdown:['Accumulator ('+P.totalAccumulated+')','Determinations ('+P.determinations.length+')','Virtual Inventory','Ceiling Prices'],content:render340bFull()},
+    {id:'tf-safety',label:'Safety',dropdown:['Label Warnings ('+S.warnings.length+')','Interactions ('+S.interactions.length+')','Side Effects ('+S.sideEffects.length+')','Precautions ('+S.precautions.length+')'],content:renderSafetyFull()},
+    {id:'tf-education',label:'Education',content:renderEducation()},
+    {id:'tf-documents',label:'Documents',content:renderDocuments()},
+    {id:'tf-pricing',label:'Pricing',content:renderPricing()},
+    {id:'tf-clinical',label:'Clinical',content:renderClinical()},
+    {id:'tf-ident',label:'ID & Images',content:renderIdentification()},
+  ];
+
+  return `<div id="tf-intro">
+  <h2 class="view-title">Option B: Tab Flow with Breadcrumbs</h2>
+  <p class="view-desc">Drug search → Drug Hub tab. Grouped sub-tabs with dropdowns. Breadcrumbs track path. Multiple drugs open simultaneously.</p>
+  <div class="pros-cons"><span class="annotation pro">+ Familiar browser pattern</span><span class="annotation pro">+ Compare drugs side-by-side</span><span class="annotation pro">+ Deep work friendly</span><span class="annotation pro">+ Breadcrumb navigation</span><span class="annotation con">- Tab bar crowding</span><span class="annotation info">~ Best for: power users, deep research</span></div>
+  ${drugSearchList("enterTabFlow()")}
+  </div>
+  <div id="tf-drug-view" style="display:none;">
+    <div class="tabflow-layout">
+      <div class="tabflow-breadcrumb"><span class="crumb" onclick="exitTabFlow()" style="cursor:pointer">&#8592; Drug Database</span><span class="sep">/</span><span class="crumb">${D.name}</span><span class="sep">/</span><span class="crumb current" id="tf-crumb">Overview</span></div>
+      <div class="tabflow-drug-bar">
+        <div class="drug-pill"><div class="icon">${D.name[0]}</div><div><div class="name">${D.name}</div><div class="ndc">NDC: ${D.ndc} · ${D.manufacturer} · GCN: ${D.gcn} · ${D.drugClass}</div></div></div>
+        <div class="drug-badges" style="margin-left:auto"><span class="drug-badge active-340b">340B Active</span>${statusPill(I.onHand+' In Stock','in-stock')}${statusPill(S.warnings.length+' Warnings','out')}</div>
+      </div>
+      <div class="tabflow-subtabs">
+        ${tabs.map((t,i)=>`<div class="subtab${i===0?' active':''}" onclick="switchSubtab('${t.id}','${t.label}',this)">
+          ${t.label}${t.dropdown?` <span style="font-size:10px">▾</span><div class="dropdown">${t.dropdown.map(d=>`<div class="dropdown-item" onclick="event.stopPropagation();switchSubtab('${t.id}','${t.label} > ${d}',this.closest('.subtab'))">${d}</div>`).join('')}</div>`:''}
+        </div>`).join('')}
+      </div>
+      <div class="tabflow-content">
+        ${tabs.map((t,i)=>`<div id="${t.id}" class="tabflow-content-section${i===0?' active':''}">${t.content}</div>`).join('')}
+      </div>
+      <div class="tabflow-open-tabs">
+        <div class="open-tab active">&#128138; ${D.name} <span style="font-size:10px;color:var(--text3);cursor:pointer">✕</span></div>
+        <div class="open-tab" onclick="alert('Not populated')">&#128138; Lisinopril 10mg <span style="font-size:10px;color:var(--text3)">✕</span></div>
+        <div class="open-tab" onclick="alert('Not populated')">&#128138; Atorvastatin 20mg <span style="font-size:10px;color:var(--text3)">✕</span></div>
+        <div style="margin-left:auto;padding:8px 12px;font-size:11px;color:var(--text3)">3 drugs open — split view available</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderCommandCenter() {
+  const secs = [
+    {id:'cmd-overview',icon:'&#9673;',label:'Overview',badge:'',preview:'',content:renderOverviewCards()},
+    {id:'cmd-inv',icon:'&#128230;',label:'Inventory',badge:I.onHand+' units',badgeCls:'good',preview:I.lots.length+' lots · Reorder at '+I.reorderPoint+' · '+I.lots[1].number+' exp 12d',content:renderInventoryFull()},
+    {id:'cmd-340b',icon:'&#127973;',label:'340B Program',badge:P.totalAccumulated+' / '+P.threshold,badgeCls:'warn',preview:Math.round(P.totalAccumulated/P.threshold*100)+'% to threshold · $'+P.ceilingPrice.toFixed(2)+' ceiling · '+P.entities.length+' entities',content:render340bFull()},
+    {id:'cmd-safety',icon:'&#9888;',label:'Safety',badge:S.warnings.length+' warnings',badgeCls:'alert',preview:'BBW: lactic acidosis · '+S.interactions.length+' DDIs · Beers list',content:renderSafetyFull()},
+    {id:'cmd-edu',icon:'&#128218;',label:'Education',badge:E.monographs.length+E.counseling.length+' items',badgeCls:'',preview:E.monographs.length+' monograph sections · 1 MedGuide · '+E.counseling.length+' counseling',content:renderEducation()},
+    {id:'cmd-docs',icon:'&#128196;',label:'Documents',badge:DOC.length+' docs',badgeCls:'',preview:DOC.filter(d=>d.status!=='Active').length+' pending review · '+DOC.filter(d=>d.status==='Active').length+' active',content:renderDocuments()},
+    {id:'cmd-price',icon:'&#128176;',label:'Pricing',badge:PR.history.filter(p=>p.current).length+' types',badgeCls:'',preview:'WAC $'+PR.wac+' · 340B $'+PR.ceiling340b.toFixed(2)+' · Acq $'+PR.acquisition.toFixed(2),content:renderPricing()},
+    {id:'cmd-clinical',icon:'&#127981;',label:'Clinical',badge:C.totalRx+' Rx',badgeCls:'',preview:C.totalPatients+' patients · '+C.velocity+' velocity',content:renderClinical()},
+    {id:'cmd-ident',icon:'&#128300;',label:'Identification',badge:D.imprint.color+' '+D.imprint.shape.toLowerCase(),badgeCls:'',preview:D.imprint.side1+'/'+D.imprint.side2+' · '+D.imprint.scoring+' · '+D.interop.length+' mappings',content:renderIdentification()},
+  ];
+
+  return `<div id="cmd-intro">
+  <h2 class="view-title">Option C: Split Panel Command Center</h2>
+  <p class="view-desc">Left panel = drug identity + domain accordion. Right panel = detail. Bottom drawer = cross-cutting context. Click sections to navigate.</p>
+  <div class="pros-cons"><span class="annotation pro">+ Maximum context density</span><span class="annotation pro">+ Agent-optimized</span><span class="annotation pro">+ Keyboard shortcuts (1-9)</span><span class="annotation pro">+ No modal/tab fatigue</span><span class="annotation con">- Requires 1200px+</span><span class="annotation con">- No drug comparison</span><span class="annotation info">~ Best for: agents, power users</span></div>
+  ${drugSearchList("enterCommandCenter()")}
+  </div>
+  <div id="cmd-drug-view" style="display:none;">
+    <div class="cmd-layout">
+      <div class="cmd-left">
+        <div style="padding:10px 16px;border-bottom:1px solid var(--border);font-size:12px"><span onclick="exitCommandCenter()" style="color:var(--accent2);cursor:pointer">&#8592; Back to Drug Search</span></div>
+        <div class="cmd-drug-card"><h3>${D.name}</h3><div class="meta">NDC: ${D.ndc} · ${D.manufacturer} · GCN: ${D.gcn}</div><div class="meta" style="margin-top:2px">${D.drugClass} · ${D.form} · RxNorm: ${D.rxnorm}</div><div class="tags"><span class="drug-badge active-340b">340B Active</span>${statusPill('In Stock','in-stock')}</div></div>
+        <div class="cmd-sections">
+          ${secs.map((s,i)=>`<div class="cmd-section${i===1?' active':''}" onclick="cmdSelect(this,'${s.id}','${s.icon} ${s.label}')">
+            <div class="cmd-section-header"><div class="left"><span class="icon">${s.icon}</span><span class="label">${s.label}</span></div><div>${s.badge?`<span class="badge ${s.badgeCls}">${s.badge}</span>`:''} <span class="kbd">${i+1}</span></div></div>
+            ${s.preview?`<div class="cmd-section-preview">${s.preview}</div>`:''}
+          </div>`).join('')}
+        </div>
+      </div>
+      <div class="cmd-right">
+        <div id="cmd-right-title" class="cmd-right-header"><h3>&#128230; Inventory — ${D.name}</h3><div style="display:flex;gap:8px"><button style="padding:6px 12px;border-radius:6px;background:var(--surface3);border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer">Export</button><button style="padding:6px 12px;border-radius:6px;background:var(--accent);border:none;color:#fff;font-size:12px;cursor:pointer">Action</button></div></div>
+        <div class="cmd-right-body">
+          ${secs.map((s,i)=>`<div id="${s.id}" class="cmd-detail-view${i===1?' active':''}">${s.content}</div>`).join('')}
+        </div>
+        <div class="cmd-bottom-drawer">
+          <div class="cmd-drawer-toggle" onclick="toggleDrawer()"><span>&#128279; Cross-Cutting: ${C.totalRx} Rx · ${D.workItems.length} work items · ${D.patients.length} patients</span><span id="drawer-arrow">▲</span></div>
+          <div id="drawer-content" class="cmd-drawer-content">${renderCrossContext()}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderCompare() {
+  return `<h2 class="view-title">Comparison: All Approaches</h2>
+  <p class="view-desc">Evaluated using ${D.name} (${D.ndc}) — same data rendered in each pattern.</p>
+  <h3 style="font-size:16px;font-weight:600;margin:24px 0 12px">Drug Data Map: NDC as Hub</h3>
+  <div class="sticky"><b>NDC ${D.ndc}</b> (${D.name}) connects 7 domains. Today each is a separate module. All 3 proposed views unify them through this identifier.</div>
+  <div class="data-map">
+    <div class="data-map-center">&#128138; NDC<br><span style="font-size:11px;font-weight:400">${D.ndc}</span></div>
+    <div class="data-map-ring">
+      <div class="data-map-node" style="border-color:var(--blue)">&#128300; FDB<div class="count">Detail, DUR, education, dosing, images</div></div>
+      <div class="data-map-node" style="border-color:var(--green)">&#128230; Inventory<div class="count">${I.onHand} units, ${I.lots.length} lots, ${I.transactions.length} txns</div></div>
+      <div class="data-map-node" style="border-color:var(--yellow)">&#127973; 340B<div class="count">${P.totalAccumulated} accum, $${P.ceilingPrice.toFixed(2)} ceiling</div></div>
+      <div class="data-map-node" style="border-color:var(--purple)">&#128196; Documents<div class="count">${DOC.length} docs via ${C.totalRx} prescriptions</div></div>
+      <div class="data-map-node" style="border-color:var(--pink)">&#127981; Clinical<div class="count">${C.totalRx} Rx, ${C.totalPatients} patients</div></div>
+      <div class="data-map-node" style="border-color:var(--cyan)">&#128176; Pricing<div class="count">WAC $${PR.wac}, 340B $${PR.ceiling340b.toFixed(2)}, AWP $${PR.awp}</div></div>
+      <div class="data-map-node" style="border-color:var(--orange)">&#9888; Safety<div class="count">${S.warnings.length} warnings, ${S.interactions.length} DDIs, Beers</div></div>
+    </div>
+  </div>
+  <table class="comparison-table">
+    <thead><tr><th>Dimension</th><th style="color:var(--yellow)">Current</th><th style="color:var(--blue)">A: Modal</th><th style="color:var(--green)">B: Tab Flow</th><th style="color:var(--purple)">C: Command</th></tr></thead>
+    <tbody>
+      <tr><td class="dim">Entry Point</td><td>Sidebar per module</td><td>Click NDC / ⌘K search</td><td>Drug search → hub tab</td><td>Drug search → split panel</td></tr>
+      <tr><td class="dim">Hops to Full Picture</td><td><span class="cross">5-6 tab switches</span></td><td><span class="check">1 click (modal)</span></td><td><span class="check">1 click (hub tab)</span></td><td><span class="check">1 click (workspace)</span></td></tr>
+      <tr><td class="dim">Deep Dive</td><td><span class="check">Full per module</span></td><td><span class="partial">Expandable panels</span></td><td><span class="check">Full inline rendering</span></td><td><span class="check">Full right panel</span></td></tr>
+      <tr><td class="dim">Drug Comparison</td><td><span class="partial">Manual split pane</span></td><td><span class="cross">Modal blocks</span></td><td><span class="check">Side-by-side tabs</span></td><td><span class="partial">Needs 2nd workspace</span></td></tr>
+      <tr><td class="dim">Context Preservation</td><td><span class="cross">None across tabs</span></td><td><span class="check">Background intact</span></td><td><span class="check">Breadcrumbs + drug bar</span></td><td><span class="check">Left panel always visible</span></td></tr>
+      <tr><td class="dim">Agent Friendliness</td><td><span class="cross">6+ API calls</span></td><td><span class="partial">All in modal</span></td><td><span class="partial">Hub overview good</span></td><td><span class="check">All sections + relationships</span></td></tr>
+      <tr><td class="dim">Keyboard Nav</td><td><span class="cross">None</span></td><td><span class="partial">ESC only</span></td><td><span class="partial">Tab switching</span></td><td><span class="check">1-9 section shortcuts</span></td></tr>
+      <tr><td class="dim">Mobile</td><td><span class="check">Responsive</span></td><td><span class="partial">Full-screen modal</span></td><td><span class="partial">Scrollable tabs</span></td><td><span class="cross">≥1200px</span></td></tr>
+      <tr><td class="dim">Implementation</td><td><span class="tag tag-yellow" style="font-size:11px">EXISTS</span></td><td>Medium</td><td>Medium</td><td>High</td></tr>
+      <tr><td class="dim">Cross-Cutting</td><td><span class="cross">Not shown</span></td><td><span class="partial">Clinical card</span></td><td><span class="partial">Overview counts</span></td><td><span class="check">Bottom drawer: Rx, WI, pts</span></td></tr>
+    </tbody>
+  </table>
+  <div class="sticky green" style="margin-top:24px"><b>Recommendation:</b> <b>Tab Flow (B)</b> as primary deep-work interface + <b>Modal (A)</b> as quick-lookup overlay on any NDC click. <b>Command Center (C)</b> for dedicated agent workspace mode. Backend: unified <code>GET /api/drugs/{ndc}/profile</code> aggregation endpoint.</div>
+  <div class="agent-note" style="margin-top:16px"><span class="agent-icon">&#129302;</span><div><b>For agents:</b> The backend aggregation layer is the real enabler. Option C is most aligned with agent context windows — all ${['Inventory','340B','Safety','Education','Documents','Pricing','Clinical','ID'].length} domains visible simultaneously, cross-cutting relationships in the drawer, zero hidden state.</div></div>`;
+}
+
+// ═══════════════════════════════════════
+// RENDER ALL VIEWS
+// ═══════════════════════════════════════
+document.getElementById('view-current').innerHTML = renderCurrentState();
+document.getElementById('view-modal').innerHTML = renderModalView();
+document.getElementById('view-tabflow').innerHTML = renderTabFlow();
+document.getElementById('view-command').innerHTML = renderCommandCenter();
+document.getElementById('view-compare').innerHTML = renderCompare();
+
+// ═══════════════════════════════════════
+// INTERACTIONS
+// ═══════════════════════════════════════
+function switchView(id, el) {
+  // Reset inner views back to search state when switching top-level tabs
+  closeModal();
+  const tfIntro = document.getElementById('tf-intro');
+  const tfView = document.getElementById('tf-drug-view');
+  if (tfIntro && tfView) { tfIntro.style.display = 'block'; tfView.style.display = 'none'; }
+  const cmdIntro = document.getElementById('cmd-intro');
+  const cmdView = document.getElementById('cmd-drug-view');
+  if (cmdIntro && cmdView) { cmdIntro.style.display = 'block'; cmdView.style.display = 'none'; }
+
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('view-' + id).classList.add('active');
+  el.classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// Modal stack management
+function openModal() {
+  document.getElementById('modal-drug-detail').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+  document.getElementById('modal-drug-detail').classList.remove('show');
+  document.querySelectorAll('.detail-panel-nested').forEach(p => p.classList.remove('show'));
+  document.body.style.overflow = '';
+}
+function openNestedModal(id) {
+  document.querySelectorAll('.detail-panel-nested').forEach(p => p.classList.remove('show'));
+  document.getElementById(id).classList.add('show');
+}
+function closeNestedModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+// ESC key: close nested first, then main modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const openNested = document.querySelector('.detail-panel-nested.show');
+    if (openNested) { openNested.classList.remove('show'); return; }
+    const mainModal = document.getElementById('modal-drug-detail');
+    if (mainModal && mainModal.classList.contains('show')) { closeModal(); }
+  }
+});
+
+// Tab Flow: enter/exit
+function enterTabFlow() {
+  document.getElementById('tf-intro').style.display = 'none';
+  document.getElementById('tf-drug-view').style.display = 'block';
+  document.getElementById('view-tabflow').scrollTop = 0;
+  window.scrollTo(0, document.getElementById('view-tabflow').offsetTop);
+}
+function exitTabFlow() {
+  document.getElementById('tf-drug-view').style.display = 'none';
+  document.getElementById('tf-intro').style.display = 'block';
+}
+
+// Command Center: enter/exit
+function enterCommandCenter() {
+  document.getElementById('cmd-intro').style.display = 'none';
+  document.getElementById('cmd-drug-view').style.display = 'block';
+  window.scrollTo(0, document.getElementById('view-command').offsetTop);
+}
+function exitCommandCenter() {
+  document.getElementById('cmd-drug-view').style.display = 'none';
+  document.getElementById('cmd-intro').style.display = 'block';
+}
+
+function switchSubtab(sectionId, crumbText, tabEl) {
+  const container = tabEl.closest('.tabflow-layout');
+  container.querySelectorAll('.tabflow-content-section').forEach(s => s.classList.remove('active'));
+  container.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+  document.getElementById(sectionId).classList.add('active');
+  tabEl.classList.add('active');
+  document.getElementById('tf-crumb').textContent = crumbText;
+}
+
+function cmdSelect(el, viewId, titleHtml) {
+  const layout = el.closest('.cmd-layout');
+  layout.querySelectorAll('.cmd-section').forEach(s => s.classList.remove('active'));
+  layout.querySelectorAll('.cmd-detail-view').forEach(v => v.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(viewId).classList.add('active');
+  document.getElementById('cmd-right-title').querySelector('h3').innerHTML = titleHtml + ' — ' + D.name;
+}
+
+function toggleDrawer() {
+  const c = document.getElementById('drawer-content');
+  const a = document.getElementById('drawer-arrow');
+  c.classList.toggle('show');
+  a.textContent = c.classList.contains('show') ? '▼' : '▲';
+}
+</script>
+</body>
+</html>
