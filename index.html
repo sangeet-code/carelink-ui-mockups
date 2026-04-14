@@ -1604,11 +1604,7 @@ function renderTabFlow() {
       <div class="tabflow-content">
         ${tabs.map((t,i)=>`<div id="${t.id}" class="tabflow-content-section${i===0?' active':''}">${t.content}</div>`).join('')}
       </div>
-      <div class="tabflow-open-tabs">
-        <div class="open-tab active">&#128138; ${D.name} <span style="font-size:10px;color:var(--text3);cursor:pointer">&#10005;</span></div>
-        ${DRUG_DB.searchResults.filter(sr=>sr.key!==activeDrugKey).slice(0,2).map(sr=>`<div class="open-tab" onclick="setActiveDrug('${sr.key}');reRenderAllViews();enterTabFlow();">&#128138; ${sr.name.split(' ').slice(0,2).join(' ')} <span style="font-size:10px;color:var(--text3)">&#10005;</span></div>`).join('')}
-        <div style="margin-left:auto;padding:8px 12px;font-size:11px;color:var(--text3)">3 drugs open — split view available</div>
-      </div>
+      <div id="tf-drug-tabs-container"></div>
     </div>
   </div>`;
 }
@@ -1755,29 +1751,35 @@ document.addEventListener('keydown', function(e) {
 
 // Tab Flow: enter/exit
 function enterTabFlow() {
+  pinDrugTab(activeDrugKey);
   document.getElementById('tf-intro').style.display = 'none';
   document.getElementById('tf-drug-view').style.display = 'block';
-  document.getElementById('view-tabflow').scrollTop = 0;
   window.scrollTo(0, document.getElementById('view-tabflow').offsetTop);
+  renderAllOpenTabs();
 }
 function exitTabFlow() {
   document.getElementById('tf-drug-view').style.display = 'none';
   document.getElementById('tf-intro').style.display = 'block';
 }
+function switchDrugInTabFlow(key) {
+  setActiveDrug(key);
+  document.getElementById('view-tabflow').innerHTML = renderTabFlow();
+  document.getElementById('tf-intro').style.display = 'none';
+  document.getElementById('tf-drug-view').style.display = 'block';
+  renderAllOpenTabs();
+}
 
 // Command Center: enter/exit
 function enterCommandCenter() {
+  pinDrugTab(activeDrugKey);
   document.getElementById('cmd-intro').style.display = 'none';
   document.getElementById('cmd-drug-view').style.display = 'block';
   window.scrollTo(0, document.getElementById('view-command').offsetTop);
-  pinDrugTab(activeDrugKey);
-  renderDrugTabs();
+  renderAllOpenTabs();
 }
 function exitCommandCenter() {
   document.getElementById('cmd-drug-view').style.display = 'none';
   document.getElementById('cmd-intro').style.display = 'block';
-  openDrugTabs = [];
-  showComparePanel = false;
 }
 
 function switchSubtab(sectionId, crumbText, tabEl) {
@@ -1806,58 +1808,76 @@ function toggleDrawer() {
 }
 
 // ═══════════════════════════════════════
-// COMMAND CENTER — BOTTOM DRUG TABS
+// SHARED OPEN DRUG TABS (Tab Flow + Command Center)
 // ═══════════════════════════════════════
-let openDrugTabs = []; // [{key, name}]
+let openDrugTabs = []; // [{key, name}] — max 3, shared across views
 let showComparePanel = false;
+const MAX_OPEN_TABS = 3;
 
 function pinDrugTab(key) {
-  if (!openDrugTabs.find(t => t.key === key)) {
-    const drug = DRUG_DB[key];
-    openDrugTabs.push({ key, name: drug.name });
+  // Move to front if already open
+  const existing = openDrugTabs.findIndex(t => t.key === key);
+  if (existing >= 0) return; // already pinned
+  const drug = DRUG_DB[key];
+  openDrugTabs.push({ key, name: drug.name });
+  // Evict oldest if over limit
+  while (openDrugTabs.length > MAX_OPEN_TABS) {
+    openDrugTabs.shift();
   }
-  // Don't call renderDrugTabs here — callers handle rendering
 }
 
-function closeDrugTab(key, evt) {
+function closeDrugTab(key, evt, viewType) {
   if (evt) evt.stopPropagation();
+  // Don't close if it's the only tab
+  if (openDrugTabs.length <= 1) return;
   openDrugTabs = openDrugTabs.filter(t => t.key !== key);
   if (openDrugTabs.length < 2) showComparePanel = false;
-  renderDrugTabs();
+  // If we closed the active tab, switch to the last remaining one
+  if (key === activeDrugKey) {
+    const newKey = openDrugTabs[openDrugTabs.length - 1].key;
+    if (viewType === 'cmd') switchDrugTab(newKey);
+    else switchDrugInTabFlow(newKey);
+    return;
+  }
+  renderAllOpenTabs();
 }
 
 function switchDrugTab(key) {
   setActiveDrug(key);
-  // Re-render the command center content only
-  const cmdView = document.getElementById('cmd-drug-view');
-  if (cmdView) {
-    document.getElementById('view-command').innerHTML = renderCommandCenter();
-    document.getElementById('cmd-intro').style.display = 'none';
-    document.getElementById('cmd-drug-view').style.display = 'block';
-    renderDrugTabs();
-  }
+  document.getElementById('view-command').innerHTML = renderCommandCenter();
+  document.getElementById('cmd-intro').style.display = 'none';
+  document.getElementById('cmd-drug-view').style.display = 'block';
+  renderAllOpenTabs();
 }
 
 function toggleComparePanel() {
   showComparePanel = !showComparePanel;
-  renderDrugTabs();
+  renderAllOpenTabs();
 }
 
-function renderDrugTabs() {
-  const container = document.getElementById('cmd-drug-tabs-container');
+// Render tabs into BOTH containers (whichever exists on screen)
+function renderAllOpenTabs() {
+  renderOpenTabBar('cmd-drug-tabs-container', 'cmd');
+  renderOpenTabBar('tf-drug-tabs-container', 'tf');
+}
+
+function renderOpenTabBar(containerId, viewType) {
+  const container = document.getElementById(containerId);
   if (!container) return;
 
-  // Ensure active drug is pinned (inline, no recursive call)
+  // Ensure active drug is pinned
   if (!openDrugTabs.find(t => t.key === activeDrugKey)) {
     openDrugTabs.push({ key: activeDrugKey, name: DRUG_DB[activeDrugKey].name });
+    while (openDrugTabs.length > MAX_OPEN_TABS) openDrugTabs.shift();
   }
 
+  const switchFn = viewType === 'cmd' ? 'switchDrugTab' : 'switchDrugInTabFlow';
   const tabs = openDrugTabs.map(t => {
     const drug = DRUG_DB[t.key];
     const isActive = t.key === activeDrugKey;
     const stockCls = drug.inventory.onHand <= drug.inventory.reorderPoint ? 'low' : 'in-stock';
     const shortName = drug.name.split(' ').slice(0,2).join(' ');
-    return `<div class="cmd-drug-tab ${isActive?'active':''}" onclick="switchDrugTab('${t.key}')">
+    return `<div class="cmd-drug-tab ${isActive?'active':''}" onclick="${switchFn}('${t.key}')">
       <div class="tab-icon">${drug.name[0]}</div>
       <div>
         <div>${shortName}</div>
@@ -1867,7 +1887,7 @@ function renderDrugTabs() {
         <span class="status ${stockCls}" style="font-size:10px;padding:1px 6px">${drug.inventory.onHand}</span>
         ${drug.safety.warnings.length>0?'<span class="status out" style="font-size:10px;padding:1px 6px">'+drug.safety.warnings.length+'W</span>':''}
       </div>
-      ${openDrugTabs.length > 1 ? '<span class="tab-close" onclick="closeDrugTab(\''+t.key+'\',event)">&times;</span>' : ''}
+      ${openDrugTabs.length > 1 ? `<span class="tab-close" onclick="closeDrugTab('${t.key}',event,'${viewType}')">&times;</span>` : ''}
     </div>`;
   }).join('');
 
