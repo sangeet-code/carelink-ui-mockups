@@ -252,6 +252,23 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-seri
 /* Pill visual */
 .pill-visual{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#faf8f5,#efe9e2);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text);font-weight:700;border:2px solid var(--border-strong);text-align:center;line-height:1.2;flex-shrink:0}
 
+/* Compare tray (Command Center only) */
+.compare-tray{position:sticky;bottom:0;background:var(--surface);border-top:2px solid var(--accent);padding:12px 20px;z-index:5}
+.compare-tray-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.compare-tray-header h4{font-size:13px;font-weight:600;color:var(--accent2)}
+.compare-tray-items{display:flex;gap:8px;align-items:center;overflow-x:auto;margin-bottom:10px}
+.compare-chip{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;background:var(--accent-bg);border:1px solid var(--accent);font-size:12px;font-weight:600;cursor:default}
+.compare-chip .remove{cursor:pointer;color:var(--text3);font-size:14px;line-height:1}
+.compare-chip .remove:hover{color:var(--red)}
+.compare-table-wrap{max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.compare-table{width:100%;border-collapse:collapse;font-size:12px}
+.compare-table th{padding:8px 12px;background:var(--surface2);color:var(--text2);font-weight:600;text-align:left;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;z-index:1}
+.compare-table td{padding:6px 12px;border-bottom:1px solid var(--border)}
+.compare-table td:first-child{font-weight:600;color:var(--text2);width:160px;white-space:nowrap}
+.compare-btn{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent2);transition:all .15s}
+.compare-btn:hover{background:var(--accent);color:#fff}
+.compare-btn.active{background:var(--accent);color:#fff}
+
 @media(max-width:1200px){.domain-grid{grid-template-columns:repeat(2,1fr)}.overview-grid{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
@@ -283,12 +300,12 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-seri
 const DRUG_DB = {
   // ─── Drug list (search results) ───
   searchResults: [
-    { ndc:'00093-7212-01', name:'Metformin HCl 500mg Tablet',      generic:'Metformin Hydrochloride', manufacturer:'Teva Pharmaceuticals',  gcn:'25962', rxnorm:'861004',  drugClass:'Biguanides',     form:'Tablet', route:'Oral', dea:null,   inStock:247, status340b:'active',  warnings:2, populated:true },
-    { ndc:'00071-0155-23', name:'Lipitor (Atorvastatin) 20mg Tab',  generic:'Atorvastatin Calcium',    manufacturer:'Pfizer Inc.',            gcn:'42732', rxnorm:'259255',  drugClass:'HMG-CoA Reductase Inhibitors', form:'Tablet', route:'Oral', dea:null, inStock:183, status340b:'active', warnings:1, populated:false },
-    { ndc:'00378-1805-01', name:'Lisinopril 10mg Tablet',           generic:'Lisinopril',              manufacturer:'Mylan Pharmaceuticals',  gcn:'19098', rxnorm:'314076',  drugClass:'ACE Inhibitors', form:'Tablet', route:'Oral', dea:null,   inStock:312, status340b:'active',  warnings:1, populated:false },
-    { ndc:'00002-4462-30', name:'Humalog KwikPen 100u/mL',         generic:'Insulin Lispro',          manufacturer:'Eli Lilly',              gcn:'44821', rxnorm:'1652240', drugClass:'Insulins',        form:'Pen',    route:'SubQ', dea:null,   inStock:24,  status340b:'active',  warnings:3, populated:false },
-    { ndc:'59762-0480-01', name:'Adderall XR 20mg Capsule',         generic:'Mixed Amphetamine Salts', manufacturer:'Teva (Barr)',            gcn:'33902', rxnorm:'884520',  drugClass:'CNS Stimulants', form:'Capsule',route:'Oral', dea:'CII',  inStock:56,  status340b:'inactive',warnings:4, populated:false },
-    { ndc:'63304-0683-01', name:'Omeprazole 20mg DR Capsule',       generic:'Omeprazole',              manufacturer:'Ranbaxy Pharmaceuticals',gcn:'17788', rxnorm:'198053',  drugClass:'PPIs',           form:'Capsule',route:'Oral', dea:null,   inStock:410, status340b:'active',  warnings:1, populated:false },
+    { key:'metformin',    ndc:'00093-7212-01', name:'Metformin HCl 500mg Tablet',      generic:'Metformin Hydrochloride', manufacturer:'Teva Pharmaceuticals',  gcn:'25962', rxnorm:'861004',  drugClass:'Biguanides',     form:'Tablet', route:'Oral', dea:null,   inStock:247, status340b:'active',  warnings:2, populated:true },
+    { key:'atorvastatin', ndc:'00071-0155-23', name:'Lipitor (Atorvastatin) 20mg Tab',  generic:'Atorvastatin Calcium',    manufacturer:'Pfizer Inc.',            gcn:'42732', rxnorm:'259255',  drugClass:'HMG-CoA Reductase Inhibitors', form:'Tablet', route:'Oral', dea:null, inStock:183, status340b:'active', warnings:1, populated:true },
+    { key:'lisinopril',   ndc:'00378-1805-01', name:'Lisinopril 10mg Tablet',           generic:'Lisinopril',              manufacturer:'Mylan Pharmaceuticals',  gcn:'19098', rxnorm:'314076',  drugClass:'ACE Inhibitors', form:'Tablet', route:'Oral', dea:null,   inStock:312, status340b:'active',  warnings:1, populated:true },
+    { key:'humalog',      ndc:'00002-4462-30', name:'Humalog KwikPen 100u/mL',         generic:'Insulin Lispro',          manufacturer:'Eli Lilly',              gcn:'44821', rxnorm:'1652240', drugClass:'Insulins',        form:'Pen',    route:'SubQ', dea:null,   inStock:24,  status340b:'active',  warnings:3, populated:true },
+    { key:'adderall',     ndc:'59762-0480-01', name:'Adderall XR 20mg Capsule',         generic:'Mixed Amphetamine Salts', manufacturer:'Teva (Barr)',            gcn:'33902', rxnorm:'884520',  drugClass:'CNS Stimulants', form:'Capsule',route:'Oral', dea:'CII',  inStock:56,  status340b:'inactive',warnings:4, populated:true },
+    { key:'omeprazole',   ndc:'63304-0683-01', name:'Omeprazole 20mg DR Capsule',       generic:'Omeprazole',              manufacturer:'Ranbaxy Pharmaceuticals',gcn:'17788', rxnorm:'198053',  drugClass:'PPIs',           form:'Capsule',route:'Oral', dea:null,   inStock:410, status340b:'active',  warnings:1, populated:true },
   ],
 
   // ─── The fully-populated drug: Metformin HCl 500mg ───
@@ -472,10 +489,762 @@ const DRUG_DB = {
       { name:'Helen Rodriguez',sig:'1000mg daily',since:'2025-09' },
     ],
   },
+
+  // ─── Atorvastatin (Lipitor) 20mg ───
+  atorvastatin: {
+    ndc: '00071-0155-23',
+    name: 'Lipitor (Atorvastatin) 20mg Tab',
+    generic: 'Atorvastatin Calcium',
+    manufacturer: 'Pfizer Inc.',
+    gcn: '42732',
+    rxnorm: '259255',
+    drugClass: 'HMG-CoA Reductase Inhibitors',
+    form: 'Tablet',
+    route: 'Oral',
+    dea: null,
+    conceptType: 'PackagedDrug',
+    ingredient: { name:'Atorvastatin Calcium', strength:'20', unit:'mg' },
+    imprint: { side1:'PD', side2:'155', shape:'Oval', color:'White', scoring:'Unscored', coating:'Film-coated', flavor:'None' },
+    interop: [
+      { vocab:'RxNorm',    code:'259255',    desc:'atorvastatin calcium 20 MG Oral Tablet' },
+      { vocab:'SNOMED CT', code:'373444002', desc:'Atorvastatin' },
+      { vocab:'ATC',       code:'C10AA05',   desc:'Atorvastatin' },
+    ],
+    inventory: {
+      onHand: 183, reserved: 12, available: 171,
+      reorderPoint: 75, reorderQty: 300,
+      storage: 'Room Temperature (68-77°F)', refrigeration: false, controlled: false, schedule: null,
+      supplier: { name:'McKesson Corporation', account:'MCK-44891', dea:'RM0323456', terms:'Net 30' },
+      lots: [
+        { number:'LOT-2026-0520', received:'2026-04-05', expires:'2027-09-30', qty:100, available:95, source:'Standard', location:'Shelf B-1', serial:'SN-PFZ-52001-A', status:'Active' },
+        { number:'LOT-2026-0498', received:'2026-03-20', expires:'2027-06-15', qty:83,  available:76, source:'340B',     location:'Shelf B-1', serial:'SN-PFZ-52001-B', status:'Active' },
+      ],
+      transactions: [
+        { date:'04-13 11:30', type:'Dispense',   qty:-20,  bal:183, ref:'RX-89101 (Angela Brown)',       lot:'LOT-0520', user:'J. Smith, RPh' },
+        { date:'04-12 14:10', type:'Dispense',   qty:-30,  bal:203, ref:'RX-89088 (David Park)',         lot:'LOT-0498', user:'M. Johnson, CPhT' },
+        { date:'04-11 09:45', type:'Dispense',   qty:-10,  bal:233, ref:'RX-89072 (William Chang)',      lot:'LOT-0520', user:'J. Smith, RPh' },
+        { date:'04-10 16:20', type:'Receipt',    qty:100,  bal:243, ref:'PO-2026-0052 (McKesson)',       lot:'LOT-0520', user:'System' },
+        { date:'04-09 10:15', type:'Dispense',   qty:-30,  bal:143, ref:'RX-89050 (Patricia Nguyen)',    lot:'LOT-0498', user:'J. Smith, RPh' },
+        { date:'04-08 13:40', type:'Dispense',   qty:-20,  bal:173, ref:'RX-89038 (Jennifer Adams)',     lot:'LOT-0498', user:'M. Johnson, CPhT' },
+      ],
+    },
+    program340b: {
+      totalAccumulated: 280, threshold: 350, pending: 15,
+      ceilingPrice: 0.42, ceilingEffective: '2026-01-01', ceilingSource: 'HRSA/Apexus',
+      quarterlySavings: 1794, savingsPerOrder: 2394,
+      entities: [
+        { name:'Community Health Center of Springfield', opaId:'DSH-340B-0044', balance:180, pct:'64.3%', lifetimeCredits:720,  lifetimeDebits:540, pending:15, status:'Active' },
+        { name:'Riverside Family Clinic',               opaId:'FQ-340B-0112',  balance:100, pct:'35.7%', lifetimeCredits:380,  lifetimeDebits:280, pending:0,  status:'Active' },
+      ],
+      entries: [
+        { date:'04-13', entity:'CHC Springfield', type:'Credit',   qty:'+20',  after:180, det:'DET-9101', patient:'Angela Brown',     rx:'RX-89101' },
+        { date:'04-12', entity:'Riverside',       type:'Credit',   qty:'+30',  after:100, det:'DET-9088', patient:'David Park',       rx:'RX-89088' },
+        { date:'04-11', entity:'CHC Springfield', type:'Credit',   qty:'+10',  after:160, det:'DET-9072', patient:'William Chang',    rx:'RX-89072' },
+        { date:'04-09', entity:'CHC Springfield', type:'Credit',   qty:'+30',  after:150, det:'DET-9050', patient:'Patricia Nguyen',  rx:'RX-89050' },
+        { date:'04-08', entity:'Riverside',       type:'Credit',   qty:'+20',  after:70,  det:'DET-9038', patient:'Jennifer Adams',   rx:'RX-89038' },
+      ],
+      determinations: [
+        { id:'DET-9101', date:'04-13', patient:'Angela Brown',     rx:'RX-89101', status:'Eligible',   payer:'BIN 610014', carve:'Carve-out', qty:20 },
+        { id:'DET-9088', date:'04-12', patient:'David Park',       rx:'RX-89088', status:'Eligible',   payer:'BIN 610014', carve:'Carve-out', qty:30 },
+        { id:'DET-9072', date:'04-11', patient:'William Chang',    rx:'RX-89072', status:'Eligible',   payer:'BIN 003585', carve:'Carve-out', qty:10 },
+        { id:'DET-9050', date:'04-09', patient:'Patricia Nguyen',  rx:'RX-89050', status:'Eligible',   payer:'BIN 610014', carve:'Carve-out', qty:30 },
+        { id:'DET-9038', date:'04-08', patient:'Jennifer Adams',   rx:'RX-89038', status:'Eligible',   payer:'BIN 610014', carve:'Carve-out', qty:20 },
+      ],
+    },
+    safety: {
+      warnings: [
+        { code:'LBL-0280', priority:2, title:'Hepatotoxicity — Monitor LFTs', text:'Atorvastatin can cause elevation of hepatic transaminases. Liver function tests should be performed before initiating therapy and as clinically indicated thereafter. Rare cases of fatal and non-fatal hepatic failure have been reported. Advise patients to promptly report unexplained muscle pain, tenderness, or weakness, especially with fever or malaise.', level:'moderate' },
+      ],
+      interactions: [
+        { drug:'Gemfibrozil 600mg',    severity:'Severe',   effect:'Increased risk of rhabdomyolysis; gemfibrozil inhibits OATP1B1 and increases statin exposure 2-3x',  action:'Avoid combination; use fenofibrate if fibrate needed', sevClass:'ineligible' },
+        { drug:'Cyclosporine',         severity:'Severe',   effect:'Cyclosporine significantly increases atorvastatin levels via CYP3A4 and OATP1B1 inhibition',           action:'Max atorvastatin 10mg/day if used together', sevClass:'ineligible' },
+        { drug:'Grapefruit juice (>1L/day)', severity:'Moderate', effect:'CYP3A4 inhibition increases atorvastatin exposure; large quantities (>1.2L) can double AUC',      action:'Limit grapefruit intake; counsel patient', sevClass:'pending' },
+      ],
+      precautions: [
+        { type:'Hepatic',    desc:'Active liver disease or unexplained persistent transaminase elevations are contraindications. Perform LFTs before therapy.', severity:'Severe', criteria:null },
+        { type:'Pregnancy',  desc:'Category X — contraindicated in pregnancy. Cholesterol is needed for fetal development. Advise effective contraception.', severity:'Severe', criteria:'FDA Category X' },
+        { type:'Muscle',     desc:'Risk of myopathy/rhabdomyolysis increases with higher doses, advanced age, renal impairment, and concomitant CYP3A4 inhibitors.', severity:'Moderate', criteria:null },
+      ],
+      sideEffects: [
+        { name:'Myalgia',            freq:'5-10%',  severity:'Mild-Moderate', monitor:'Check CK if symptomatic; discontinue if >10x ULN' },
+        { name:'Headache',           freq:'3-5%',   severity:'Mild',          monitor:'Usually transient' },
+        { name:'GI Disturbance',     freq:'2-4%',   severity:'Mild',          monitor:'Nausea, diarrhea, constipation; take with food' },
+        { name:'Elevated LFTs',      freq:'1-2%',   severity:'Moderate',      monitor:'Check ALT/AST at baseline; repeat if symptoms' },
+        { name:'Rhabdomyolysis',     freq:'<0.1%',  severity:'Life-threatening', monitor:'Unexplained muscle pain + dark urine = emergency' },
+      ],
+    },
+    education: {
+      monographs: [
+        { title:'What is Atorvastatin?', text:'Atorvastatin belongs to a group of medicines called statins. It lowers cholesterol and triglycerides in the blood by inhibiting HMG-CoA reductase, the enzyme that controls cholesterol production in the liver. Used along with diet to lower LDL ("bad") cholesterol and raise HDL ("good") cholesterol.' },
+        { title:'How Statins Work', text:'Statins block HMG-CoA reductase in the liver, reducing cholesterol synthesis. This causes the liver to remove more LDL cholesterol from the bloodstream. The result is lower total cholesterol, LDL, and triglycerides, and modestly increased HDL. Effects are typically seen within 2-4 weeks of starting therapy.' },
+        { title:'Important Lifestyle Changes', text:'Medication works best with a heart-healthy diet low in saturated fat and cholesterol, regular exercise (at least 30 minutes most days), maintaining a healthy weight, and not smoking. These lifestyle changes may allow your doctor to prescribe a lower dose.' },
+      ],
+      medGuide: { id:'MG-2024-0155', format:'PDF', title:'Atorvastatin Calcium Tablets', note:'Provide to patient at dispensing' },
+      counseling: [
+        { num:1, msg:'Take at the same time each evening for best results. Can be taken with or without food.', type:'Administration' },
+        { num:2, msg:'Report any unexplained muscle pain, tenderness, or weakness immediately — especially if accompanied by fever or dark urine.', type:'Safety Alert' },
+        { num:3, msg:'Avoid consuming large quantities of grapefruit juice (more than 1 quart daily) as it can increase drug levels.', type:'Diet' },
+      ],
+    },
+    documents: [
+      { name:'Lipid Panel Lab Result - TC 245, LDL 158',  type:'Lab Result',   patient:'Angela Brown',     rx:'RX-89101', by:'Dr. M. Rivera',     date:'04-10', size:'92 KB',  status:'Active' },
+      { name:'eRx - Atorvastatin 20mg #30 (Dr. Rivera)',   type:'eRx Image',   patient:'Angela Brown',     rx:'RX-89101', by:'System (RxLinc)',    date:'04-09', size:'148 KB', status:'Active' },
+      { name:'Insurance EOB - Claim #CLM-55102',           type:'EOB',         patient:'David Park',       rx:'RX-89088', by:'System (RxLinc)',    date:'04-07', size:'195 KB', status:'Active' },
+      { name:'Patient Consent - 340B Statin Program',      type:'Consent',     patient:'Patricia Nguyen',  rx:'RX-89050', by:'M. Johnson, CPhT',  date:'04-04', size:'58 KB',  status:'Active' },
+      { name:'Clinical Note - Statin Intolerance Review',  type:'Clinical Note',patient:'William Chang',   rx:'RX-89072', by:'J. Smith, RPh',     date:'04-02', size:'78 KB',  status:'Pending Review' },
+    ],
+    pricing: {
+      wac: 8.40, ceiling340b: 0.42, acquisition: 4.80, awp: 12.50, ful: 0.08, mac: 0.10,
+      history: [
+        { type:'WAC',          unit:'$8.40',  pkg:'$252.00', size:'30 tabs',  effective:'2026-01-01', source:'FDB',  current:true },
+        { type:'AWP',          unit:'$12.50', pkg:'$375.00', size:'30 tabs',  effective:'2026-01-01', source:'FDB',  current:true },
+        { type:'FUL',          unit:'$0.08',  pkg:'$2.40',   size:'30 tabs',  effective:'2026-01-01', source:'CMS',  current:true },
+        { type:'340B Ceiling', unit:'$0.42',  pkg:'$12.60',  size:'30 tabs',  effective:'2026-01-01', source:'HRSA', current:true },
+        { type:'WAC (prior)',  unit:'$7.95',  pkg:'$238.50', size:'30 tabs',  effective:'2025-07-01', source:'FDB',  current:false },
+      ],
+    },
+    clinical: {
+      dosing: [
+        { pop:'Adults',           start:'10-20mg once daily', max:'80mg/day',  freq:'Once daily (evening preferred)', renal:'No adjustment needed' },
+        { pop:'Geriatric (≥65y)', start:'10mg once daily',    max:'80mg/day',  freq:'Once daily',                     renal:'Start low; monitor for myopathy' },
+        { pop:'Pediatric (10-17y)',start:'10mg once daily',    max:'20mg/day',  freq:'Once daily',                     renal:'Heterozygous FH only' },
+      ],
+      prescriptions: [
+        { rx:'RX-89101', patient:'Angela Brown',     prescriber:'Dr. M. Rivera (NPI 2345678901)', sig:'20mg PO daily',  qty:30,  days:30, refills:'5/11',  written:'04-09' },
+        { rx:'RX-89088', patient:'David Park',       prescriber:'Dr. M. Rivera',                  sig:'20mg PO daily',  qty:30,  days:30, refills:'8/11',  written:'03-12' },
+        { rx:'RX-89072', patient:'William Chang',    prescriber:'Dr. L. Tran (NPI 9876543210)',   sig:'10mg PO daily',  qty:30,  days:30, refills:'3/5',   written:'02-20' },
+        { rx:'RX-89050', patient:'Patricia Nguyen',  prescriber:'Dr. M. Rivera',                  sig:'40mg PO daily',  qty:30,  days:30, refills:'2/11',  written:'01-15' },
+        { rx:'RX-89038', patient:'Jennifer Adams',   prescriber:'Dr. S. Kumar (NPI 5551234567)',  sig:'20mg PO daily',  qty:90,  days:90, refills:'1/3',   written:'2025-12-01' },
+      ],
+      indications: [
+        { name:'Hyperlipidemia',                     type:'Treatment',  labeled:'FDA-approved' },
+        { name:'Atherosclerotic Cardiovascular Disease Prevention', type:'Prevention', labeled:'FDA-approved' },
+        { name:'Familial Hypercholesterolemia',      type:'Treatment',  labeled:'FDA-approved' },
+      ],
+      velocity: '~60 units/week',
+      totalRx: 15, totalPatients: 11,
+    },
+    workItems: [
+      { status:'Review', desc:'Status correction', detail:'DET-9072 status update from TPA' },
+    ],
+    patients: [
+      { name:'Angela Brown',     sig:'20mg daily', since:'2026-01' },
+      { name:'David Park',       sig:'20mg daily', since:'2025-09' },
+      { name:'William Chang',    sig:'10mg daily', since:'2026-02' },
+      { name:'Patricia Nguyen',  sig:'40mg daily', since:'2025-11' },
+      { name:'Jennifer Adams',   sig:'20mg daily', since:'2025-12' },
+      { name:'Mark Thompson',    sig:'20mg daily', since:'2025-07' },
+    ],
+  },
+
+  // ─── Lisinopril 10mg ───
+  lisinopril: {
+    ndc: '00378-1805-01',
+    name: 'Lisinopril 10mg Tablet',
+    generic: 'Lisinopril',
+    manufacturer: 'Mylan Pharmaceuticals',
+    gcn: '19098',
+    rxnorm: '314076',
+    drugClass: 'ACE Inhibitors',
+    form: 'Tablet',
+    route: 'Oral',
+    dea: null,
+    conceptType: 'PackagedDrug',
+    ingredient: { name:'Lisinopril', strength:'10', unit:'mg' },
+    imprint: { side1:'M', side2:'L25', shape:'Round', color:'Yellow', scoring:'Unscored', coating:'None', flavor:'None' },
+    interop: [
+      { vocab:'RxNorm',    code:'314076',    desc:'lisinopril 10 MG Oral Tablet' },
+      { vocab:'SNOMED CT', code:'386873009', desc:'Lisinopril' },
+      { vocab:'ATC',       code:'C09AA03',   desc:'Lisinopril' },
+    ],
+    inventory: {
+      onHand: 312, reserved: 25, available: 287,
+      reorderPoint: 80, reorderQty: 500,
+      storage: 'Room Temperature (68-77°F)', refrigeration: false, controlled: false, schedule: null,
+      supplier: { name:'McKesson Corporation', account:'MCK-44891', dea:'RM0323456', terms:'Net 30' },
+      lots: [
+        { number:'LOT-2026-0610', received:'2026-04-08', expires:'2027-12-31', qty:200, available:188, source:'Standard', location:'Shelf A-5', serial:'SN-MYL-61001-A', status:'Active' },
+        { number:'LOT-2026-0589', received:'2026-03-25', expires:'2027-10-15', qty:70,  available:62,  source:'340B',     location:'Shelf A-5', serial:'SN-MYL-61001-B', status:'Active' },
+        { number:'LOT-2026-0540', received:'2026-03-01', expires:'2027-08-01', qty:42,  available:37,  source:'Standard', location:'Shelf A-5', serial:'SN-MYL-61001-C', status:'Active' },
+      ],
+      transactions: [
+        { date:'04-14 08:10', type:'Dispense',   qty:-30,  bal:312, ref:'RX-89210 (Karen Mitchell)',     lot:'LOT-0610', user:'J. Smith, RPh' },
+        { date:'04-13 15:30', type:'Dispense',   qty:-60,  bal:342, ref:'RX-89195 (George Foster)',      lot:'LOT-0610', user:'M. Johnson, CPhT' },
+        { date:'04-12 10:00', type:'Dispense',   qty:-30,  bal:402, ref:'RX-89180 (Susan Bell)',         lot:'LOT-0589', user:'J. Smith, RPh' },
+        { date:'04-11 11:20', type:'Dispense',   qty:-45,  bal:432, ref:'RX-89165 (Raymond Torres)',     lot:'LOT-0540', user:'J. Smith, RPh' },
+        { date:'04-10 09:00', type:'Receipt',    qty:200,  bal:477, ref:'PO-2026-0058 (McKesson)',       lot:'LOT-0610', user:'System' },
+        { date:'04-09 14:45', type:'Dispense',   qty:-30,  bal:277, ref:'RX-89148 (Deborah Cox)',        lot:'LOT-0589', user:'M. Johnson, CPhT' },
+        { date:'04-08 16:30', type:'Dispense',   qty:-30,  bal:307, ref:'RX-89130 (Christopher Lee)',    lot:'LOT-0540', user:'J. Smith, RPh' },
+        { date:'04-07 11:10', type:'Dispense',   qty:-30,  bal:337, ref:'RX-89112 (Amanda Harris)',      lot:'LOT-0589', user:'M. Johnson, CPhT' },
+      ],
+    },
+    program340b: {
+      totalAccumulated: 520, threshold: 500, pending: 40,
+      ceilingPrice: 0.03, ceilingEffective: '2026-01-01', ceilingSource: 'HRSA/Apexus',
+      quarterlySavings: 4752, savingsPerOrder: 1585,
+      entities: [
+        { name:'Community Health Center of Springfield', opaId:'DSH-340B-0044', balance:320, pct:'61.5%', lifetimeCredits:1580, lifetimeDebits:1260, pending:25, status:'Active' },
+        { name:'Riverside Family Clinic',               opaId:'FQ-340B-0112',  balance:200, pct:'38.5%', lifetimeCredits:840,  lifetimeDebits:640,  pending:15, status:'Active' },
+      ],
+      entries: [
+        { date:'04-14', entity:'CHC Springfield', type:'Credit',   qty:'+30',  after:320, det:'DET-9210', patient:'Karen Mitchell',    rx:'RX-89210' },
+        { date:'04-13', entity:'CHC Springfield', type:'Credit',   qty:'+60',  after:290, det:'DET-9195', patient:'George Foster',     rx:'RX-89195' },
+        { date:'04-12', entity:'Riverside',       type:'Credit',   qty:'+30',  after:200, det:'DET-9180', patient:'Susan Bell',        rx:'RX-89180' },
+        { date:'04-11', entity:'CHC Springfield', type:'Credit',   qty:'+45',  after:230, det:'DET-9165', patient:'Raymond Torres',    rx:'RX-89165' },
+        { date:'04-09', entity:'Riverside',       type:'Reversal', qty:'-15',  after:170, det:'DET-9148', patient:'Deborah Cox',       rx:'RX-89148' },
+        { date:'04-08', entity:'CHC Springfield', type:'Credit',   qty:'+30',  after:185, det:'DET-9130', patient:'Christopher Lee',   rx:'RX-89130' },
+      ],
+      determinations: [
+        { id:'DET-9210', date:'04-14', patient:'Karen Mitchell',    rx:'RX-89210', status:'Eligible',               payer:'BIN 610014', carve:'Carve-out', qty:30 },
+        { id:'DET-9195', date:'04-13', patient:'George Foster',     rx:'RX-89195', status:'Eligible',               payer:'BIN 610014', carve:'Carve-out', qty:60 },
+        { id:'DET-9180', date:'04-12', patient:'Susan Bell',        rx:'RX-89180', status:'Eligible',               payer:'BIN 003585', carve:'Carve-out', qty:30 },
+        { id:'DET-9165', date:'04-11', patient:'Raymond Torres',    rx:'RX-89165', status:'Eligible',               payer:'BIN 610014', carve:'Carve-out', qty:45 },
+        { id:'DET-9148', date:'04-09', patient:'Deborah Cox',       rx:'RX-89148', status:'Override → Inelig.',     payer:'BIN 003585', carve:'Carve-in',  qty:30 },
+      ],
+    },
+    safety: {
+      warnings: [
+        { code:'BBW-0102', priority:1, title:'Black Box Warning: Fetal Toxicity', text:'When pregnancy is detected, discontinue lisinopril as soon as possible. Drugs that act directly on the renin-angiotensin system can cause injury and death to the developing fetus. ACE inhibitors cause oligohydramnios, which can result in fetal limb contractures, craniofacial deformation, and hypoplastic lung development.', level:'critical' },
+      ],
+      interactions: [
+        { drug:'Potassium-sparing Diuretics (Spironolactone)', severity:'Severe', effect:'Additive hyperkalemia risk; ACE inhibitors reduce aldosterone secretion, compounding potassium retention', action:'Monitor potassium closely; avoid if K+ >5.0', sevClass:'ineligible' },
+        { drug:'NSAIDs (Ibuprofen, Naproxen)',  severity:'Moderate', effect:'NSAIDs reduce antihypertensive effect and may worsen renal function in susceptible patients',                    action:'Use lowest NSAID dose for shortest duration', sevClass:'pending' },
+        { drug:'Lithium',                       severity:'Moderate', effect:'ACE inhibitors reduce lithium clearance; toxicity possible. Monitor lithium levels and renal function',            action:'Monitor lithium levels frequently', sevClass:'pending' },
+        { drug:'Aliskiren (in diabetic patients)',severity:'Contraindicated', effect:'Dual RAAS blockade in diabetics increases hyperkalemia, hypotension, and renal impairment risk',          action:'Contraindicated combination in DM; avoid in renal impairment', sevClass:'ineligible' },
+      ],
+      precautions: [
+        { type:'Angioedema',  desc:'ACE inhibitor-associated angioedema can be life-threatening. Higher incidence in Black patients. Discontinue immediately if angioedema of face, extremities, lips, tongue, or larynx occurs.', severity:'Severe', criteria:null },
+        { type:'Renal',       desc:'Renal function may deteriorate. Monitor BUN/creatinine. Avoid in bilateral renal artery stenosis. Dose adjust if CrCl <30 mL/min.',                                                           severity:'Moderate', criteria:null },
+        { type:'Hypotension', desc:'Symptomatic hypotension may occur, especially in volume-depleted patients. Start low dose in patients on diuretics.',                                                                          severity:'Moderate', criteria:null },
+      ],
+      sideEffects: [
+        { name:'Cough',             freq:'5-10%',  severity:'Mild-Moderate', monitor:'Dry, persistent cough; switch to ARB if intolerable' },
+        { name:'Dizziness',         freq:'3-6%',   severity:'Mild',          monitor:'Assess orthostatic BP; advise slow position changes' },
+        { name:'Hyperkalemia',      freq:'2-5%',   severity:'Moderate',      monitor:'Check K+ at baseline and periodically; more often with renal impairment' },
+        { name:'Headache',          freq:'3-5%',   severity:'Mild',          monitor:'Usually transient' },
+        { name:'Angioedema',        freq:'<1%',    severity:'Life-threatening', monitor:'Facial/tongue swelling = emergency; discontinue permanently' },
+      ],
+    },
+    education: {
+      monographs: [
+        { title:'What is Lisinopril?', text:'Lisinopril is an ACE (angiotensin-converting enzyme) inhibitor used to treat high blood pressure, heart failure, and to improve survival after a heart attack. It works by relaxing blood vessels, allowing blood to flow more easily and the heart to pump more efficiently.' },
+        { title:'How ACE Inhibitors Work', text:'ACE inhibitors block the conversion of angiotensin I to angiotensin II, a potent vasoconstrictor. This results in decreased blood pressure, reduced aldosterone secretion (less fluid retention), and decreased cardiac workload. Benefits extend beyond blood pressure to include kidney protection in diabetic patients.' },
+        { title:'Important Warnings', text:'ACE inhibitors can cause a rare but serious allergic reaction called angioedema — swelling of the face, lips, tongue, or throat. Seek immediate medical attention if this occurs. This medication must NOT be taken during pregnancy as it can cause serious harm to an unborn baby.' },
+      ],
+      medGuide: { id:'MG-2024-0102', format:'PDF', title:'Lisinopril Tablets USP', note:'Provide at dispensing' },
+      counseling: [
+        { num:1, msg:'Do not stop taking this medication abruptly without consulting your doctor — blood pressure may spike.', type:'Administration' },
+        { num:2, msg:'Avoid salt substitutes containing potassium — risk of dangerously high potassium levels.', type:'Diet' },
+        { num:3, msg:'Report any swelling of face, lips, tongue, or throat immediately — this is a medical emergency.', type:'Safety Alert' },
+        { num:4, msg:'Women of childbearing age must use effective contraception. Discontinue immediately if pregnancy is suspected.', type:'Pregnancy Warning' },
+      ],
+    },
+    documents: [
+      { name:'BMP Lab - K+ 4.2, Cr 1.1, BUN 18',          type:'Lab Result',    patient:'Karen Mitchell',    rx:'RX-89210', by:'Dr. A. Patel',      date:'04-12', size:'88 KB',  status:'Active' },
+      { name:'eRx - Lisinopril 10mg #30 (Dr. Patel)',       type:'eRx Image',    patient:'Karen Mitchell',    rx:'RX-89210', by:'System (RxLinc)',    date:'04-11', size:'142 KB', status:'Active' },
+      { name:'Insurance EOB - Claim #CLM-66201',            type:'EOB',          patient:'George Foster',     rx:'RX-89195', by:'System (RxLinc)',    date:'04-09', size:'188 KB', status:'Active' },
+      { name:'Patient Consent - 340B ACE Program',          type:'Consent',      patient:'Susan Bell',        rx:'RX-89180', by:'M. Johnson, CPhT',  date:'04-06', size:'62 KB',  status:'Active' },
+      { name:'Fax - BP Log from Home Monitoring',           type:'Fax',          patient:'Raymond Torres',    rx:'RX-89165', by:'System (Telnyx)',    date:'04-04', size:'275 KB', status:'Pending Review' },
+      { name:'Clinical Note - ACE Cough Assessment',        type:'Clinical Note', patient:'Deborah Cox',      rx:'RX-89148', by:'J. Smith, RPh',     date:'04-01', size:'55 KB',  status:'Pending Review' },
+    ],
+    pricing: {
+      wac: 3.20, ceiling340b: 0.03, acquisition: 1.80, awp: 5.10, ful: 0.02, mac: 0.03,
+      history: [
+        { type:'WAC',          unit:'$3.20', pkg:'$320.00',  size:'100 tabs', effective:'2026-01-01', source:'FDB',  current:true },
+        { type:'AWP',          unit:'$5.10', pkg:'$510.00',  size:'100 tabs', effective:'2026-01-01', source:'FDB',  current:true },
+        { type:'FUL',          unit:'$0.02', pkg:'$2.00',    size:'100 tabs', effective:'2026-01-01', source:'CMS',  current:true },
+        { type:'340B Ceiling', unit:'$0.03', pkg:'$3.00',    size:'100 tabs', effective:'2026-01-01', source:'HRSA', current:true },
+        { type:'WAC (prior)',  unit:'$3.05', pkg:'$305.00',  size:'100 tabs', effective:'2025-07-01', source:'FDB',  current:false },
+      ],
+    },
+    clinical: {
+      dosing: [
+        { pop:'Adults (HTN)',     start:'10mg once daily',  max:'80mg/day', freq:'Once daily',     renal:'CrCl 10-30: start 5mg. CrCl <10: 2.5mg' },
+        { pop:'Adults (CHF)',     start:'2.5-5mg once daily', max:'40mg/day', freq:'Once daily',   renal:'Same as HTN; titrate cautiously' },
+        { pop:'Pediatric (≥6y)',  start:'0.07mg/kg once daily', max:'0.6mg/kg or 40mg', freq:'Once daily', renal:'Not studied in pediatric renal impairment' },
+      ],
+      prescriptions: [
+        { rx:'RX-89210', patient:'Karen Mitchell',    prescriber:'Dr. A. Patel (NPI 1234567890)',  sig:'10mg PO daily',  qty:30,  days:30, refills:'5/11',  written:'04-11' },
+        { rx:'RX-89195', patient:'George Foster',     prescriber:'Dr. A. Patel',                   sig:'20mg PO daily',  qty:60,  days:30, refills:'3/11',  written:'03-15' },
+        { rx:'RX-89180', patient:'Susan Bell',        prescriber:'Dr. L. Tran (NPI 9876543210)',   sig:'10mg PO daily',  qty:30,  days:30, refills:'8/11',  written:'02-28' },
+        { rx:'RX-89165', patient:'Raymond Torres',    prescriber:'Dr. A. Patel',                   sig:'20mg PO daily',  qty:90,  days:90, refills:'2/3',   written:'01-10' },
+        { rx:'RX-89148', patient:'Deborah Cox',       prescriber:'Dr. S. Kumar (NPI 5551234567)',  sig:'5mg PO daily',   qty:30,  days:30, refills:'0/5',   written:'2025-11-20' },
+      ],
+      indications: [
+        { name:'Hypertension',                    type:'Treatment',  labeled:'FDA-approved' },
+        { name:'Heart Failure',                   type:'Treatment',  labeled:'FDA-approved' },
+        { name:'Diabetic Nephropathy',            type:'Prevention', labeled:'FDA-approved' },
+      ],
+      velocity: '~220 units/week',
+      totalRx: 18, totalPatients: 14,
+    },
+    workItems: [
+      { status:'Pending', desc:'Reconciliation mismatch', detail:'TPA vs internal count drift on DET-9148' },
+    ],
+    patients: [
+      { name:'Karen Mitchell',    sig:'10mg daily', since:'2026-01' },
+      { name:'George Foster',     sig:'20mg daily', since:'2025-08' },
+      { name:'Susan Bell',        sig:'10mg daily', since:'2025-10' },
+      { name:'Raymond Torres',    sig:'20mg daily', since:'2025-06' },
+      { name:'Deborah Cox',       sig:'5mg daily',  since:'2025-11' },
+      { name:'Christopher Lee',   sig:'10mg daily', since:'2026-02' },
+      { name:'Amanda Harris',     sig:'10mg daily', since:'2025-12' },
+    ],
+  },
+
+  // ─── Humalog KwikPen 100u/mL ───
+  humalog: {
+    ndc: '00002-4462-30',
+    name: 'Humalog KwikPen 100u/mL',
+    generic: 'Insulin Lispro',
+    manufacturer: 'Eli Lilly',
+    gcn: '44821',
+    rxnorm: '1652240',
+    drugClass: 'Insulins (Rapid-Acting)',
+    form: 'Pen',
+    route: 'SubQ',
+    dea: null,
+    conceptType: 'PackagedDrug',
+    ingredient: { name:'Insulin Lispro (rDNA origin)', strength:'100', unit:'units/mL' },
+    imprint: { side1:'N/A', side2:'(Pen)', shape:'Pen device', color:'Orange/White', scoring:'N/A', coating:'N/A', flavor:'N/A' },
+    interop: [
+      { vocab:'RxNorm',    code:'1652240',   desc:'3 ML insulin lispro 100 UNT/ML Pen Injector' },
+      { vocab:'SNOMED CT', code:'325072002', desc:'Insulin lispro' },
+      { vocab:'ATC',       code:'A10AB04',   desc:'Insulin lispro' },
+    ],
+    inventory: {
+      onHand: 24, reserved: 8, available: 16,
+      reorderPoint: 15, reorderQty: 50,
+      storage: 'Refrigerated (36-46°F / 2-8°C)', refrigeration: true, controlled: false, schedule: null,
+      supplier: { name:'Cardinal Health', account:'CDH-77204', dea:'RC0412789', terms:'Net 30' },
+      lots: [
+        { number:'LOT-2026-0715', received:'2026-04-02', expires:'2027-01-15', qty:15, available:12, source:'Standard', location:'Refrigerator R-2', serial:'SN-LLY-71501-A', status:'Active' },
+        { number:'LOT-2026-0690', received:'2026-03-10', expires:'2026-10-30', qty:9,  available:4,  source:'340B',     location:'Refrigerator R-2', serial:'SN-LLY-71501-B', status:'Expiring 199d' },
+      ],
+      transactions: [
+        { date:'04-13 16:00', type:'Dispense',   qty:-2,  bal:24, ref:'RX-89301 (Michael Zhang)',       lot:'LOT-0715', user:'J. Smith, RPh' },
+        { date:'04-12 11:30', type:'Dispense',   qty:-3,  bal:26, ref:'RX-89289 (Teresa Washington)',   lot:'LOT-0690', user:'J. Smith, RPh' },
+        { date:'04-10 09:45', type:'Dispense',   qty:-2,  bal:29, ref:'RX-89270 (Daniel Rivera)',       lot:'LOT-0715', user:'M. Johnson, CPhT' },
+        { date:'04-08 14:20', type:'Receipt',    qty:15,  bal:31, ref:'PO-2026-0061 (Cardinal Health)', lot:'LOT-0715', user:'System' },
+        { date:'04-06 10:00', type:'Dispense',   qty:-3,  bal:16, ref:'RX-89248 (Nancy Cooper)',        lot:'LOT-0690', user:'J. Smith, RPh' },
+        { date:'04-04 15:30', type:'Dispense',   qty:-2,  bal:19, ref:'RX-89230 (Brian Stewart)',       lot:'LOT-0690', user:'M. Johnson, CPhT' },
+      ],
+    },
+    program340b: {
+      totalAccumulated: 85, threshold: 100, pending: 5,
+      ceilingPrice: 35.82, ceilingEffective: '2026-01-01', ceilingSource: 'HRSA/Apexus',
+      quarterlySavings: 14809, savingsPerOrder: 14809,
+      entities: [
+        { name:'Community Health Center of Springfield', opaId:'DSH-340B-0044', balance:85, pct:'100%', lifetimeCredits:220, lifetimeDebits:135, pending:5, status:'Active' },
+      ],
+      entries: [
+        { date:'04-13', entity:'CHC Springfield', type:'Credit',   qty:'+2',   after:85, det:'DET-9301', patient:'Michael Zhang',      rx:'RX-89301' },
+        { date:'04-12', entity:'CHC Springfield', type:'Credit',   qty:'+3',   after:83, det:'DET-9289', patient:'Teresa Washington',  rx:'RX-89289' },
+        { date:'04-10', entity:'CHC Springfield', type:'Credit',   qty:'+2',   after:80, det:'DET-9270', patient:'Daniel Rivera',      rx:'RX-89270' },
+        { date:'04-06', entity:'CHC Springfield', type:'Reversal', qty:'-1',   after:78, det:'DET-9248', patient:'Nancy Cooper',       rx:'RX-89248' },
+      ],
+      determinations: [
+        { id:'DET-9301', date:'04-13', patient:'Michael Zhang',      rx:'RX-89301', status:'Eligible',           payer:'BIN 610014', carve:'Carve-out', qty:2 },
+        { id:'DET-9289', date:'04-12', patient:'Teresa Washington',  rx:'RX-89289', status:'Eligible',           payer:'BIN 610014', carve:'Carve-out', qty:3 },
+        { id:'DET-9270', date:'04-10', patient:'Daniel Rivera',      rx:'RX-89270', status:'Eligible',           payer:'BIN 003585', carve:'Carve-out', qty:2 },
+        { id:'DET-9248', date:'04-06', patient:'Nancy Cooper',       rx:'RX-89248', status:'Override → Inelig.', payer:'BIN 003585', carve:'Carve-in',  qty:3 },
+      ],
+    },
+    safety: {
+      warnings: [
+        { code:'BBW-0201', priority:1, title:'Black Box Warning: Hypoglycemia', text:'Insulin, including Humalog, can cause life-threatening hypoglycemia. Glucose monitoring is essential. Changes in insulin regimen should be made cautiously under medical supervision. Hypoglycemia is the most common adverse reaction. Severe hypoglycemia can cause seizures, loss of consciousness, and death.', level:'critical' },
+        { code:'LBL-0330', priority:2, title:'Hypokalemia Risk', text:'All insulin products can shift potassium from extracellular to intracellular space, potentially causing hypokalemia. Untreated hypokalemia may cause respiratory paralysis, ventricular arrhythmia, and death. Monitor potassium in patients at risk (those using potassium-lowering medications or with conditions sensitive to potassium).', level:'moderate' },
+        { code:'LBL-0331', priority:3, title:'Lipodystrophy at Injection Sites', text:'Rotate injection sites within the same region to reduce risk of lipodystrophy (lipohypertrophy or lipoatrophy). Do not inject into areas of lipodystrophy as absorption may be altered and unpredictable, affecting glycemic control.', level:'moderate' },
+      ],
+      interactions: [
+        { drug:'Thiazolidinediones (Pioglitazone)',  severity:'Moderate', effect:'TZDs cause fluid retention; combination with insulin increases risk of edema and CHF',          action:'Monitor for signs of CHF; consider dose reduction', sevClass:'pending' },
+        { drug:'Beta-blockers (Metoprolol)',          severity:'Moderate', effect:'Beta-blockers may mask hypoglycemia symptoms (tachycardia, tremor) and impair glucose recovery', action:'Educate patient on alternate hypo signs; check BG more often', sevClass:'pending' },
+        { drug:'ACE Inhibitors (Lisinopril)',         severity:'Moderate', effect:'ACE inhibitors may enhance insulin sensitivity and increase hypoglycemia risk',                   action:'Monitor blood glucose; may need insulin dose reduction', sevClass:'pending' },
+        { drug:'Alcohol',                            severity:'Moderate', effect:'Alcohol potentiates hypoglycemia by inhibiting hepatic gluconeogenesis',                           action:'Avoid excessive alcohol; never skip meals with alcohol', sevClass:'pending' },
+      ],
+      precautions: [
+        { type:'Hypoglycemia',       desc:'Most common adverse effect. Risk increased with dose changes, meal pattern changes, exercise, renal/hepatic impairment.', severity:'Severe', criteria:null },
+        { type:'Renal/Hepatic',      desc:'Insulin requirements may be reduced in renal or hepatic impairment. Increased monitoring required.',                      severity:'Moderate', criteria:null },
+        { type:'Mixing Insulins',    desc:'Do not mix Humalog with other insulins when used in KwikPen. Only mix if using syringe, and only with NPH.',              severity:'Moderate', criteria:null },
+      ],
+      sideEffects: [
+        { name:'Hypoglycemia',               freq:'15-30%', severity:'Moderate-Severe', monitor:'Monitor BG before meals and at bedtime; treat promptly with fast-acting glucose' },
+        { name:'Injection Site Reactions',    freq:'3-5%',   severity:'Mild',            monitor:'Redness, swelling, itching; usually resolves; rotate sites' },
+        { name:'Lipodystrophy',              freq:'1-3%',   severity:'Mild-Moderate',   monitor:'Rotate injection sites; palpate for lumps at each visit' },
+        { name:'Weight Gain',                freq:'2-5%',   severity:'Mild',            monitor:'Counsel on diet/exercise; expected with improved glycemic control' },
+        { name:'Allergic Reactions',          freq:'<1%',    severity:'Moderate-Severe', monitor:'Localized or generalized; discontinue if severe' },
+      ],
+    },
+    education: {
+      monographs: [
+        { title:'What is Humalog?', text:'Humalog (insulin lispro) is a rapid-acting insulin analog used to control high blood sugar in adults and children with diabetes mellitus. It begins working within 15 minutes after injection, peaks in about 1 hour, and continues working for 2 to 4 hours. It is typically used in combination with a longer-acting insulin.' },
+        { title:'Injection Technique', text:'Inject subcutaneously into the abdomen, thigh, or upper arm. Rotate injection sites within the same body area to reduce lipodystrophy risk. Do not inject into a vein or muscle. Prime the pen before each injection (2 units). Attach a new needle for each injection and remove it after use.' },
+        { title:'Storage Instructions', text:'Unopened pens: Refrigerate at 36-46°F (2-8°C). Do NOT freeze. In-use pens: May be stored at room temperature (below 86°F/30°C) for up to 28 days. Discard after 28 days even if insulin remains. Protect from direct heat and light. Do not use if cloudy, discolored, or contains particles.' },
+      ],
+      medGuide: { id:'MG-2024-0201', format:'PDF', title:'Humalog KwikPen Medication Guide', note:'FDA REMS — required at every dispensing' },
+      counseling: [
+        { num:1, msg:'Inject within 15 minutes before or immediately after a meal. Timing with meals is critical to avoid hypoglycemia.', type:'Administration' },
+        { num:2, msg:'In-use pens can be kept at room temp for 28 days. Unopened pens must be refrigerated. Never freeze.', type:'Storage' },
+        { num:3, msg:'Dispose of needles in FDA-cleared sharps container. Never reuse needles.', type:'Disposal' },
+        { num:4, msg:'Always carry fast-acting glucose (juice, glucose tabs) in case of low blood sugar. Know your symptoms.', type:'Safety Alert' },
+      ],
+    },
+    documents: [
+      { name:'Prior Auth Approval - Humalog KwikPen',      type:'Prior Auth',      patient:'Michael Zhang',      rx:'RX-89301', by:'Dr. L. Tran',       date:'04-11', size:'180 KB', status:'Active' },
+      { name:'Patient Training Log - Pen Injection',        type:'Training Record', patient:'Teresa Washington',  rx:'RX-89289', by:'J. Smith, RPh',     date:'04-08', size:'95 KB',  status:'Active' },
+      { name:'Cold Chain Verification - LOT-0715',          type:'Cold Chain',      patient:'N/A',                rx:'N/A',      by:'M. Johnson, CPhT',  date:'04-02', size:'42 KB',  status:'Active' },
+      { name:'eRx - Humalog KwikPen 5ct (Dr. Tran)',       type:'eRx Image',       patient:'Daniel Rivera',      rx:'RX-89270', by:'System (RxLinc)',    date:'04-01', size:'165 KB', status:'Active' },
+    ],
+    pricing: {
+      wac: 332.00, ceiling340b: 35.82, acquisition: 280.00, awp: 425.00, ful: 28.50, mac: null,
+      history: [
+        { type:'WAC',          unit:'$332.00', pkg:'$1,660.00', size:'5 pens', effective:'2026-01-01', source:'FDB',  current:true },
+        { type:'AWP',          unit:'$425.00', pkg:'$2,125.00', size:'5 pens', effective:'2026-01-01', source:'FDB',  current:true },
+        { type:'FUL',          unit:'$28.50',  pkg:'$142.50',   size:'5 pens', effective:'2026-01-01', source:'CMS',  current:true },
+        { type:'340B Ceiling', unit:'$35.82',  pkg:'$179.10',   size:'5 pens', effective:'2026-01-01', source:'HRSA', current:true },
+        { type:'WAC (prior)',  unit:'$318.00', pkg:'$1,590.00', size:'5 pens', effective:'2025-07-01', source:'FDB',  current:false },
+      ],
+    },
+    clinical: {
+      dosing: [
+        { pop:'Adults (T1DM/T2DM)', start:'Per physician', max:'Per needs', freq:'With each meal (15min before)', renal:'May need dose reduction in renal impairment' },
+        { pop:'Pediatric (≥3y)',     start:'Per physician', max:'Per needs', freq:'With each meal',                 renal:'Same as adults; close monitoring required' },
+        { pop:'Insulin Pump',        start:'Per physician', max:'Per pump protocol', freq:'Continuous + bolus',    renal:'Pump-specific dose settings' },
+      ],
+      prescriptions: [
+        { rx:'RX-89301', patient:'Michael Zhang',     prescriber:'Dr. L. Tran (NPI 9876543210)',  sig:'10u SQ TID ac', qty:5,  days:30, refills:'5/11',  written:'04-09' },
+        { rx:'RX-89289', patient:'Teresa Washington', prescriber:'Dr. L. Tran',                   sig:'8u SQ TID ac',  qty:5,  days:30, refills:'3/11',  written:'03-12' },
+        { rx:'RX-89270', patient:'Daniel Rivera',     prescriber:'Dr. A. Patel (NPI 1234567890)', sig:'12u SQ TID ac', qty:5,  days:30, refills:'2/5',   written:'02-15' },
+        { rx:'RX-89248', patient:'Nancy Cooper',      prescriber:'Dr. L. Tran',                   sig:'6u SQ TID ac',  qty:5,  days:30, refills:'8/11',  written:'01-20' },
+      ],
+      indications: [
+        { name:'Type 1 Diabetes Mellitus', type:'Treatment', labeled:'FDA-approved' },
+        { name:'Type 2 Diabetes Mellitus', type:'Treatment', labeled:'FDA-approved' },
+      ],
+      velocity: '~12 pens/week',
+      totalRx: 6, totalPatients: 5,
+    },
+    workItems: [
+      { status:'Pending', desc:'Unmatched NDC reference',  detail:'TPA file NDC mismatch on LOT-0690' },
+      { status:'Review',  desc:'Expiring lot alert',       detail:'LOT-0690 expires 2026-10-30 (199d) — 4 units remain' },
+    ],
+    patients: [
+      { name:'Michael Zhang',     sig:'10u TID ac', since:'2025-09' },
+      { name:'Teresa Washington', sig:'8u TID ac',  since:'2025-11' },
+      { name:'Daniel Rivera',     sig:'12u TID ac', since:'2026-02' },
+      { name:'Nancy Cooper',      sig:'6u TID ac',  since:'2025-06' },
+      { name:'Brian Stewart',     sig:'10u TID ac', since:'2025-12' },
+    ],
+  },
+
+  // ─── Adderall XR 20mg ───
+  adderall: {
+    ndc: '59762-0480-01',
+    name: 'Adderall XR 20mg Capsule',
+    generic: 'Mixed Amphetamine Salts',
+    manufacturer: 'Teva (Barr)',
+    gcn: '33902',
+    rxnorm: '884520',
+    drugClass: 'CNS Stimulants',
+    form: 'Capsule',
+    route: 'Oral',
+    dea: 'CII',
+    conceptType: 'PackagedDrug',
+    ingredient: { name:'Mixed Amphetamine Salts (d- and l- amphetamine)', strength:'20', unit:'mg' },
+    imprint: { side1:'ADDERALL XR', side2:'20 mg', shape:'Capsule', color:'Orange', scoring:'N/A', coating:'Extended-release beads', flavor:'None' },
+    interop: [
+      { vocab:'RxNorm',    code:'884520',    desc:'24 HR amphetamine aspartate/amphetamine sulfate 20 MG Extended Release Oral Capsule' },
+      { vocab:'SNOMED CT', code:'387278002', desc:'Amphetamine' },
+      { vocab:'ATC',       code:'N06BA01',   desc:'Amphetamine' },
+    ],
+    inventory: {
+      onHand: 56, reserved: 4, available: 52,
+      reorderPoint: 20, reorderQty: 100,
+      storage: 'Vault V-1 (Secure Controlled Storage)', refrigeration: false, controlled: true, schedule: 'CII',
+      supplier: { name:'McKesson Corporation', account:'MCK-44891', dea:'RM0323456', terms:'Net 30' },
+      lots: [
+        { number:'LOT-2026-0801', received:'2026-04-01', expires:'2027-08-31', qty:56, available:52, source:'Standard', location:'Vault V-1', serial:'SN-TVA-80101-A', status:'Active' },
+      ],
+      transactions: [
+        { date:'04-13 10:00', type:'Dispense',   qty:-30,  bal:56,  ref:'RX-89401 (Ethan Brooks)',       lot:'LOT-0801', user:'J. Smith, RPh' },
+        { date:'04-11 14:30', type:'Dispense',   qty:-30,  bal:86,  ref:'RX-89385 (Olivia Price)',       lot:'LOT-0801', user:'J. Smith, RPh' },
+        { date:'04-09 09:15', type:'Dispense',   qty:-30,  bal:116, ref:'RX-89370 (Noah Sanders)',       lot:'LOT-0801', user:'J. Smith, RPh' },
+        { date:'04-05 11:00', type:'Receipt',    qty:100,  bal:146, ref:'PO-2026-0059 (McKesson)',       lot:'LOT-0801', user:'System' },
+        { date:'04-03 13:20', type:'Dispense',   qty:-30,  bal:46,  ref:'RX-89350 (Sophia Reed)',        lot:'LOT-0801', user:'J. Smith, RPh' },
+        { date:'04-01 16:45', type:'Dispense',   qty:-30,  bal:76,  ref:'RX-89335 (Ethan Brooks)',       lot:'LOT-0801', user:'J. Smith, RPh' },
+      ],
+    },
+    program340b: {
+      totalAccumulated: 0, threshold: 0, pending: 0,
+      ceilingPrice: 0, ceilingEffective: null, ceilingSource: 'N/A (CII Excluded)',
+      quarterlySavings: 0, savingsPerOrder: 0,
+      entities: [],
+      entries: [],
+      determinations: [],
+    },
+    safety: {
+      warnings: [
+        { code:'BBW-0301', priority:1, title:'Black Box Warning: Abuse & Dependence', text:'CNS stimulants, including Adderall XR, have a high potential for abuse and dependence. Assess the risk of abuse prior to prescribing, and monitor for signs of abuse and dependence while on therapy. Amphetamines are Schedule II controlled substances. Abrupt cessation after prolonged use can cause extreme fatigue and severe depression.', level:'critical' },
+        { code:'BBW-0302', priority:1, title:'Sudden Cardiac Death', text:'Sudden death, stroke, and myocardial infarction have been reported in adults taking CNS stimulants at recommended doses. Avoid use in patients with known structural cardiac abnormalities, cardiomyopathy, serious heart rhythm abnormalities, or coronary artery disease. Conduct cardiac evaluation before initiating therapy.', level:'critical' },
+        { code:'LBL-0420', priority:2, title:'Psychiatric Adverse Reactions', text:'Stimulants may cause treatment-emergent psychotic or manic symptoms in patients without prior history. New psychotic symptoms (hallucinations, delusional thinking) or new manic symptoms may occur. Consider discontinuation if such symptoms occur.', level:'moderate' },
+        { code:'LBL-0421', priority:2, title:'Growth Suppression in Pediatric Patients', text:'Stimulants have been associated with weight loss and slowing of growth rate in pediatric patients. Growth should be monitored during treatment. Patients who are not growing or gaining height as expected may need to have their treatment interrupted.', level:'moderate' },
+      ],
+      interactions: [
+        { drug:'MAOIs (Phenelzine, Selegiline)',     severity:'Contraindicated', effect:'Hypertensive crisis can occur; potentially fatal interaction. Do not use within 14 days of MAOI discontinuation', action:'Absolutely contraindicated; 14-day washout required', sevClass:'ineligible' },
+        { drug:'SSRIs (Sertraline, Fluoxetine)',      severity:'Severe',          effect:'Increased risk of serotonin syndrome; amphetamines increase serotonin release',                                  action:'Monitor closely; reduce dose if symptoms appear', sevClass:'ineligible' },
+        { drug:'Antacids / PPIs',                     severity:'Moderate',        effect:'GI alkalinizers increase amphetamine absorption and reduce urinary excretion, prolonging effects',                 action:'Monitor for increased stimulant effects', sevClass:'pending' },
+        { drug:'CYP2D6 Inhibitors (Paroxetine)',      severity:'Moderate',        effect:'May increase amphetamine levels by inhibiting metabolism; altered d-amphetamine exposure',                         action:'Consider dose reduction; monitor for adverse effects', sevClass:'pending' },
+        { drug:'Urinary Acidifiers (Ascorbic Acid)',   severity:'Moderate',        effect:'Acidification of urine increases renal excretion of amphetamines, reducing efficacy and half-life',               action:'Be aware of reduced effectiveness', sevClass:'pending' },
+      ],
+      precautions: [
+        { type:'Cardiovascular', desc:'Pre-existing cardiac conditions increase risk. Obtain baseline ECG and cardiac history before starting. Monitor heart rate and BP regularly.', severity:'Severe', criteria:null },
+        { type:'Psychiatric',    desc:'Screen for bipolar disorder before starting. Stimulants may trigger manic episodes or exacerbate anxiety, agitation, or psychosis.',           severity:'Moderate', criteria:null },
+        { type:'Substance Abuse', desc:'Assess risk of drug abuse/diversion before prescribing. Schedule II requires tamper-resistant Rx in many states.',                            severity:'Severe', criteria:'PDMP Required' },
+      ],
+      sideEffects: [
+        { name:'Insomnia',           freq:'15-25%', severity:'Moderate',        monitor:'Take dose in morning; avoid afternoon dosing' },
+        { name:'Decreased Appetite', freq:'20-35%', severity:'Mild-Moderate',   monitor:'Monitor weight; nutritional supplements may be needed in children' },
+        { name:'Dry Mouth',          freq:'5-10%',  severity:'Mild',            monitor:'Sugar-free gum/lozenges; adequate hydration' },
+        { name:'Anxiety',            freq:'5-8%',   severity:'Mild-Moderate',   monitor:'Assess baseline anxiety; dose reduction if needed' },
+        { name:'Tachycardia',        freq:'3-5%',   severity:'Moderate',        monitor:'Check HR at each visit; ECG if symptomatic' },
+        { name:'Serious Cardiac Events', freq:'<0.1%', severity:'Life-threatening', monitor:'Chest pain, syncope, SOB = immediate medical evaluation' },
+      ],
+    },
+    education: {
+      monographs: [
+        { title:'What is Adderall XR?', text:'Adderall XR is an extended-release central nervous system stimulant used to treat ADHD. It contains a mixture of amphetamine salts that help increase attention and decrease impulsiveness and hyperactivity. The XR (extended-release) formulation releases medicine throughout the day so it only needs to be taken once daily.' },
+        { title:'Important REMS Information', text:'This medication carries a Risk Evaluation and Mitigation Strategy (REMS) requirement. A Medication Guide must be provided with each dispensing. This medication has a high potential for abuse and physical dependence. It should be prescribed in the smallest amount feasible to minimize the risk of overdose.' },
+        { title:'Controlled Substance Responsibilities', text:'As a Schedule II controlled substance, this medication requires a new prescription for each fill (no refills). Prescriptions may not be phoned in except in emergencies. Keep medication in a secure location. Never share this medication with others — it is a federal crime. Report lost or stolen medication immediately.' },
+      ],
+      medGuide: { id:'MG-2024-0301', format:'PDF', title:'Adderall XR Medication Guide (REMS)', note:'REMS — MANDATORY at every dispensing' },
+      counseling: [
+        { num:1, msg:'Take in the morning with or without food. Do NOT crush, chew, or open capsules — swallow whole.', type:'Administration' },
+        { num:2, msg:'This is a controlled substance with abuse potential. Store securely and never share with anyone.', type:'Safety Alert' },
+        { num:3, msg:'Report chest pain, shortness of breath, fainting, or new psychiatric symptoms immediately.', type:'Safety Alert' },
+        { num:4, msg:'Do not stop abruptly — discuss tapering with your doctor to avoid withdrawal symptoms.', type:'Discontinuation' },
+      ],
+    },
+    documents: [
+      { name:'CII Rx Hard Copy - Adderall XR 20mg #30',  type:'CII Prescription',  patient:'Ethan Brooks',   rx:'RX-89401', by:'Dr. J. Nakamura',   date:'04-12', size:'210 KB', status:'Active' },
+      { name:'Patient Agreement - Stimulant Therapy',     type:'Patient Agreement', patient:'Olivia Price',   rx:'RX-89385', by:'J. Smith, RPh',     date:'04-08', size:'85 KB',  status:'Active' },
+      { name:'PDMP Report - Adderall XR (Q1 2026)',       type:'PDMP Report',       patient:'All CII patients', rx:'Multiple', by:'System (PDMP)',  date:'04-01', size:'320 KB', status:'Active' },
+    ],
+    pricing: {
+      wac: 285.00, ceiling340b: null, acquisition: 220.00, awp: 380.00, ful: 175.00, mac: null,
+      history: [
+        { type:'WAC',          unit:'$285.00', pkg:'$285.00',  size:'100 caps', effective:'2026-01-01', source:'FDB', current:true },
+        { type:'AWP',          unit:'$380.00', pkg:'$380.00',  size:'100 caps', effective:'2026-01-01', source:'FDB', current:true },
+        { type:'FUL',          unit:'$175.00', pkg:'$175.00',  size:'100 caps', effective:'2026-01-01', source:'CMS', current:true },
+        { type:'340B Ceiling', unit:'N/A',     pkg:'N/A',      size:'N/A',      effective:'N/A',        source:'CII Excluded', current:false },
+        { type:'WAC (prior)',  unit:'$270.00', pkg:'$270.00',  size:'100 caps', effective:'2025-07-01', source:'FDB', current:false },
+      ],
+    },
+    clinical: {
+      dosing: [
+        { pop:'Adults (ADHD)',     start:'20mg once daily AM', max:'40mg/day', freq:'Once daily in morning', renal:'No dose adjustment; caution in severe renal impairment' },
+        { pop:'Children (6-12y)',  start:'10mg once daily AM', max:'30mg/day', freq:'Once daily in morning', renal:'Same as adults' },
+        { pop:'Adolescents (13-17y)', start:'10mg once daily AM', max:'30mg/day', freq:'Once daily in morning', renal:'Same as adults' },
+      ],
+      prescriptions: [
+        { rx:'RX-89401', patient:'Ethan Brooks',  prescriber:'Dr. J. Nakamura (NPI 3456789012)', sig:'20mg PO qAM',  qty:30, days:30, refills:'0/0',  written:'04-12' },
+        { rx:'RX-89385', patient:'Olivia Price',  prescriber:'Dr. J. Nakamura',                  sig:'20mg PO qAM',  qty:30, days:30, refills:'0/0',  written:'03-10' },
+        { rx:'RX-89370', patient:'Noah Sanders',  prescriber:'Dr. J. Nakamura',                  sig:'15mg PO qAM',  qty:30, days:30, refills:'0/0',  written:'02-08' },
+        { rx:'RX-89350', patient:'Sophia Reed',   prescriber:'Dr. S. Kumar (NPI 5551234567)',    sig:'20mg PO qAM',  qty:30, days:30, refills:'0/0',  written:'01-05' },
+      ],
+      indications: [
+        { name:'Attention Deficit Hyperactivity Disorder (ADHD)', type:'Treatment', labeled:'FDA-approved' },
+        { name:'Narcolepsy',                                       type:'Treatment', labeled:'FDA-approved' },
+      ],
+      velocity: '~30 caps/week',
+      totalRx: 4, totalPatients: 4,
+    },
+    workItems: [
+      { status:'Pending', desc:'PDMP compliance check', detail:'Quarterly PDMP review due for CII patients' },
+    ],
+    patients: [
+      { name:'Ethan Brooks',  sig:'20mg qAM', since:'2025-10' },
+      { name:'Olivia Price',  sig:'20mg qAM', since:'2025-08' },
+      { name:'Noah Sanders',  sig:'15mg qAM', since:'2025-12' },
+      { name:'Sophia Reed',   sig:'20mg qAM', since:'2026-01' },
+    ],
+  },
+
+  // ─── Omeprazole 20mg DR Capsule ───
+  omeprazole: {
+    ndc: '63304-0683-01',
+    name: 'Omeprazole 20mg DR Capsule',
+    generic: 'Omeprazole',
+    manufacturer: 'Ranbaxy Pharmaceuticals',
+    gcn: '17788',
+    rxnorm: '198053',
+    drugClass: 'Proton Pump Inhibitors (PPIs)',
+    form: 'DR Capsule',
+    route: 'Oral',
+    dea: null,
+    conceptType: 'PackagedDrug',
+    ingredient: { name:'Omeprazole', strength:'20', unit:'mg' },
+    imprint: { side1:'R158', side2:'', shape:'Capsule', color:'Purple/Gray', scoring:'N/A', coating:'Delayed-release enteric', flavor:'None' },
+    interop: [
+      { vocab:'RxNorm',    code:'198053',    desc:'omeprazole 20 MG Delayed Release Oral Capsule' },
+      { vocab:'SNOMED CT', code:'387137007', desc:'Omeprazole' },
+      { vocab:'ATC',       code:'A02BC01',   desc:'Omeprazole' },
+    ],
+    inventory: {
+      onHand: 410, reserved: 30, available: 380,
+      reorderPoint: 100, reorderQty: 1000,
+      storage: 'Room Temperature (68-77°F)', refrigeration: false, controlled: false, schedule: null,
+      supplier: { name:'McKesson Corporation', account:'MCK-44891', dea:'RM0323456', terms:'Net 30' },
+      lots: [
+        { number:'LOT-2026-0920', received:'2026-04-10', expires:'2028-01-31', qty:200, available:185, source:'Standard', location:'Shelf C-2', serial:'SN-RBX-92001-A', status:'Active' },
+        { number:'LOT-2026-0895', received:'2026-03-28', expires:'2027-11-15', qty:100, available:92,  source:'340B',     location:'Shelf C-2', serial:'SN-RBX-92001-B', status:'Active' },
+        { number:'LOT-2026-0860', received:'2026-03-10', expires:'2027-09-30', qty:70,  available:66,  source:'Standard', location:'Shelf C-2', serial:'SN-RBX-92001-C', status:'Active' },
+        { number:'LOT-2026-0830', received:'2026-02-15', expires:'2027-07-15', qty:40,  available:37,  source:'Standard', location:'Shelf C-2', serial:'SN-RBX-92001-D', status:'Active' },
+      ],
+      transactions: [
+        { date:'04-14 09:30', type:'Dispense',   qty:-30,  bal:410, ref:'RX-89510 (Lisa Thompson)',      lot:'LOT-0920', user:'J. Smith, RPh' },
+        { date:'04-13 14:15', type:'Dispense',   qty:-60,  bal:440, ref:'RX-89498 (Ryan Garcia)',        lot:'LOT-0895', user:'M. Johnson, CPhT' },
+        { date:'04-12 11:45', type:'Dispense',   qty:-30,  bal:500, ref:'RX-89482 (Emily White)',        lot:'LOT-0920', user:'J. Smith, RPh' },
+        { date:'04-11 10:00', type:'Receipt',    qty:200,  bal:530, ref:'PO-2026-0065 (McKesson)',       lot:'LOT-0920', user:'System' },
+        { date:'04-10 15:30', type:'Dispense',   qty:-30,  bal:330, ref:'RX-89465 (Carlos Mendez)',      lot:'LOT-0860', user:'J. Smith, RPh' },
+        { date:'04-09 09:20', type:'Dispense',   qty:-30,  bal:360, ref:'RX-89450 (Heather James)',      lot:'LOT-0860', user:'M. Johnson, CPhT' },
+        { date:'04-08 13:00', type:'Dispense',   qty:-60,  bal:390, ref:'RX-89435 (Kevin Nguyen)',       lot:'LOT-0895', user:'J. Smith, RPh' },
+        { date:'04-07 11:40', type:'Dispense',   qty:-30,  bal:450, ref:'RX-89420 (Maria Santos)',       lot:'LOT-0830', user:'M. Johnson, CPhT' },
+      ],
+    },
+    program340b: {
+      totalAccumulated: 680, threshold: 600, pending: 50,
+      ceilingPrice: 0.03, ceilingEffective: '2026-01-01', ceilingSource: 'HRSA/Apexus',
+      quarterlySavings: 8310, savingsPerOrder: 2770,
+      entities: [
+        { name:'Community Health Center of Springfield', opaId:'DSH-340B-0044', balance:420, pct:'61.8%', lifetimeCredits:2100, lifetimeDebits:1680, pending:30, status:'Active' },
+        { name:'Riverside Family Clinic',               opaId:'FQ-340B-0112',  balance:260, pct:'38.2%', lifetimeCredits:1050, lifetimeDebits:790,  pending:20, status:'Active' },
+      ],
+      entries: [
+        { date:'04-14', entity:'CHC Springfield', type:'Credit',   qty:'+30',  after:420, det:'DET-9510', patient:'Lisa Thompson',   rx:'RX-89510' },
+        { date:'04-13', entity:'Riverside',       type:'Credit',   qty:'+60',  after:260, det:'DET-9498', patient:'Ryan Garcia',     rx:'RX-89498' },
+        { date:'04-12', entity:'CHC Springfield', type:'Credit',   qty:'+30',  after:390, det:'DET-9482', patient:'Emily White',     rx:'RX-89482' },
+        { date:'04-10', entity:'CHC Springfield', type:'Credit',   qty:'+30',  after:360, det:'DET-9465', patient:'Carlos Mendez',   rx:'RX-89465' },
+        { date:'04-09', entity:'Riverside',       type:'Credit',   qty:'+30',  after:200, det:'DET-9450', patient:'Heather James',   rx:'RX-89450' },
+        { date:'04-08', entity:'CHC Springfield', type:'Credit',   qty:'+60',  after:330, det:'DET-9435', patient:'Kevin Nguyen',    rx:'RX-89435' },
+      ],
+      determinations: [
+        { id:'DET-9510', date:'04-14', patient:'Lisa Thompson',  rx:'RX-89510', status:'Eligible',   payer:'BIN 610014', carve:'Carve-out', qty:30 },
+        { id:'DET-9498', date:'04-13', patient:'Ryan Garcia',    rx:'RX-89498', status:'Eligible',   payer:'BIN 610014', carve:'Carve-out', qty:60 },
+        { id:'DET-9482', date:'04-12', patient:'Emily White',    rx:'RX-89482', status:'Eligible',   payer:'BIN 003585', carve:'Carve-out', qty:30 },
+        { id:'DET-9465', date:'04-10', patient:'Carlos Mendez',  rx:'RX-89465', status:'Eligible',   payer:'BIN 610014', carve:'Carve-out', qty:30 },
+        { id:'DET-9450', date:'04-09', patient:'Heather James',  rx:'RX-89450', status:'Eligible',   payer:'BIN 610014', carve:'Carve-out', qty:30 },
+      ],
+    },
+    safety: {
+      warnings: [
+        { code:'LBL-0510', priority:2, title:'C. difficile Risk with Prolonged Use', text:'Prolonged PPI therapy (>14 days) may increase the risk of Clostridioides difficile-associated diarrhea (CDAD). Use the lowest dose and shortest duration consistent with the condition being treated. If persistent diarrhea develops during PPI therapy, evaluate for C. difficile infection.', level:'moderate' },
+      ],
+      interactions: [
+        { drug:'Clopidogrel (Plavix)',   severity:'Major',    effect:'Omeprazole inhibits CYP2C19, reducing activation of clopidogrel prodrug by ~45%; reduced antiplatelet effect',   action:'Use pantoprazole or H2 blocker instead; avoid combination', sevClass:'ineligible' },
+        { drug:'Methotrexate',           severity:'Moderate', effect:'PPIs may reduce renal clearance of methotrexate, especially at high doses; elevated levels and toxicity risk',    action:'Consider temporary PPI withdrawal during high-dose methotrexate', sevClass:'pending' },
+      ],
+      precautions: [
+        { type:'Bone Fracture',  desc:'Long-term PPI use (>1 year) associated with increased risk of osteoporosis-related fractures of hip, wrist, and spine. Use lowest dose for shortest duration.', severity:'Moderate', criteria:null },
+        { type:'B12/Mg Deficiency', desc:'Prolonged treatment may lead to vitamin B12 and hypomagnesemia. Monitor magnesium if therapy exceeds 1 year or if on concurrent diuretics.',                  severity:'Moderate', criteria:null },
+      ],
+      sideEffects: [
+        { name:'Headache',          freq:'5-7%',  severity:'Mild',     monitor:'Usually transient; consider dose reduction' },
+        { name:'Diarrhea',          freq:'3-4%',  severity:'Mild',     monitor:'Evaluate for C. difficile if persistent' },
+        { name:'Nausea',            freq:'2-3%',  severity:'Mild',     monitor:'Take before meals; usually resolves' },
+        { name:'Abdominal Pain',    freq:'2-3%',  severity:'Mild',     monitor:'Assess for underlying pathology if persistent' },
+        { name:'B12/Mg Deficiency', freq:'<2%',   severity:'Moderate', monitor:'Check B12 and Mg annually if on long-term therapy' },
+      ],
+    },
+    education: {
+      monographs: [
+        { title:'What is Omeprazole?', text:'Omeprazole is a proton pump inhibitor (PPI) that decreases the amount of acid produced in the stomach. It is used to treat gastroesophageal reflux disease (GERD), stomach ulcers, and conditions where the stomach produces too much acid. It provides sustained acid suppression for up to 24 hours with once-daily dosing.' },
+        { title:'How PPIs Work', text:'Omeprazole works by irreversibly blocking the hydrogen-potassium ATPase enzyme system (the proton pump) of the gastric parietal cell. This is the final step of acid production, so omeprazole blocks acid secretion regardless of the stimulus. Full effect may take 1-4 days to develop as it accumulates and inhibits more pumps.' },
+        { title:'Duration of Therapy', text:'Short-term use (4-8 weeks) is recommended for most conditions. Long-term use should be periodically re-evaluated. If symptoms resolve, try stepping down to the lowest effective dose or switching to as-needed use. Discuss with your doctor before using for more than 14 consecutive days for self-treatment.' },
+      ],
+      medGuide: { id:'MG-2024-0510', format:'PDF', title:'Omeprazole Delayed-Release Capsules', note:'Provide at dispensing' },
+      counseling: [
+        { num:1, msg:'Take 30 minutes before your first meal of the day on an empty stomach. Swallow capsule whole — do not crush or chew the delayed-release capsule.', type:'Administration' },
+        { num:2, msg:'Do not use for more than 14 days unless directed by your doctor. Long-term use has risks.', type:'Duration' },
+        { num:3, msg:'Report persistent diarrhea, especially if watery or bloody — this could indicate a serious infection.', type:'Safety Alert' },
+      ],
+    },
+    documents: [
+      { name:'Upper GI Endoscopy Report',                  type:'Lab Result',    patient:'Lisa Thompson',    rx:'RX-89510', by:'Dr. A. Patel',      date:'04-12', size:'145 KB', status:'Active' },
+      { name:'eRx - Omeprazole 20mg #30 (Dr. Patel)',      type:'eRx Image',    patient:'Lisa Thompson',    rx:'RX-89510', by:'System (RxLinc)',    date:'04-11', size:'138 KB', status:'Active' },
+      { name:'Insurance EOB - Claim #CLM-77310',           type:'EOB',          patient:'Ryan Garcia',      rx:'RX-89498', by:'System (RxLinc)',    date:'04-09', size:'175 KB', status:'Active' },
+      { name:'H. pylori Breath Test Result',               type:'Lab Result',    patient:'Emily White',      rx:'RX-89482', by:'Dr. L. Tran',       date:'04-08', size:'68 KB',  status:'Active' },
+      { name:'Patient Consent - 340B PPI Program',         type:'Consent',      patient:'Carlos Mendez',    rx:'RX-89465', by:'M. Johnson, CPhT',  date:'04-05', size:'55 KB',  status:'Active' },
+      { name:'Fax - GI Referral from PCP',                 type:'Fax',          patient:'Heather James',    rx:'RX-89450', by:'System (Telnyx)',    date:'04-03', size:'290 KB', status:'Pending Review' },
+      { name:'Refill Auth - Verbal Order (Dr. Patel)',     type:'Clinical Note', patient:'Kevin Nguyen',    rx:'RX-89435', by:'J. Smith, RPh',     date:'03-30', size:'42 KB',  status:'Active' },
+      { name:'Clinical Note - PPI Step-down Assessment',   type:'Clinical Note', patient:'Maria Santos',    rx:'RX-89420', by:'J. Smith, RPh',     date:'03-25', size:'65 KB',  status:'Pending Review' },
+    ],
+    pricing: {
+      wac: 2.80, ceiling340b: 0.03, acquisition: 0.90, awp: 4.20, ful: 0.02, mac: 0.03,
+      history: [
+        { type:'WAC',          unit:'$2.80',  pkg:'$280.00',   size:'100 caps', effective:'2026-01-01', source:'FDB',  current:true },
+        { type:'AWP',          unit:'$4.20',  pkg:'$420.00',   size:'100 caps', effective:'2026-01-01', source:'FDB',  current:true },
+        { type:'FUL',          unit:'$0.02',  pkg:'$2.00',     size:'100 caps', effective:'2026-01-01', source:'CMS',  current:true },
+        { type:'340B Ceiling', unit:'$0.03',  pkg:'$3.00',     size:'100 caps', effective:'2026-01-01', source:'HRSA', current:true },
+        { type:'WAC (prior)',  unit:'$2.65',  pkg:'$265.00',   size:'100 caps', effective:'2025-07-01', source:'FDB',  current:false },
+      ],
+    },
+    clinical: {
+      dosing: [
+        { pop:'Adults (GERD)',        start:'20mg once daily', max:'40mg/day (erosive)', freq:'Once daily before breakfast', renal:'No adjustment needed' },
+        { pop:'Adults (Ulcer)',       start:'20mg once daily', max:'40mg/day',            freq:'Once daily × 4-8 weeks',     renal:'No adjustment needed' },
+        { pop:'H. pylori (Triple)',   start:'20mg BID',        max:'20mg BID',            freq:'BID × 10-14 days with antibiotics', renal:'No adjustment needed' },
+        { pop:'Pediatric (1-16y)',    start:'0.7-3.3mg/kg/day', max:'20mg/day',           freq:'Once daily',                  renal:'Limited data' },
+      ],
+      prescriptions: [
+        { rx:'RX-89510', patient:'Lisa Thompson',  prescriber:'Dr. A. Patel (NPI 1234567890)',  sig:'20mg PO daily ac', qty:30, days:30, refills:'5/11',  written:'04-11' },
+        { rx:'RX-89498', patient:'Ryan Garcia',    prescriber:'Dr. A. Patel',                   sig:'20mg PO BID',      qty:60, days:30, refills:'2/5',   written:'03-20' },
+        { rx:'RX-89482', patient:'Emily White',    prescriber:'Dr. L. Tran (NPI 9876543210)',   sig:'20mg PO daily ac', qty:30, days:30, refills:'8/11',  written:'03-01' },
+        { rx:'RX-89465', patient:'Carlos Mendez',  prescriber:'Dr. A. Patel',                   sig:'20mg PO daily ac', qty:30, days:30, refills:'3/5',   written:'02-15' },
+        { rx:'RX-89450', patient:'Heather James',  prescriber:'Dr. S. Kumar (NPI 5551234567)',  sig:'40mg PO daily ac', qty:30, days:30, refills:'1/3',   written:'01-28' },
+        { rx:'RX-89435', patient:'Kevin Nguyen',   prescriber:'Dr. A. Patel',                   sig:'20mg PO daily ac', qty:60, days:30, refills:'0/11',  written:'2025-11-10' },
+      ],
+      indications: [
+        { name:'Gastroesophageal Reflux Disease (GERD)',    type:'Treatment',  labeled:'FDA-approved' },
+        { name:'Peptic Ulcer Disease',                      type:'Treatment',  labeled:'FDA-approved' },
+        { name:'H. pylori Eradication (Triple Therapy)',    type:'Treatment',  labeled:'FDA-approved' },
+        { name:'Zollinger-Ellison Syndrome',                type:'Treatment',  labeled:'FDA-approved' },
+      ],
+      velocity: '~280 units/week',
+      totalRx: 22, totalPatients: 18,
+    },
+    workItems: [],
+    patients: [
+      { name:'Lisa Thompson',   sig:'20mg daily', since:'2025-07' },
+      { name:'Ryan Garcia',     sig:'20mg BID',   since:'2025-10' },
+      { name:'Emily White',     sig:'20mg daily', since:'2025-04' },
+      { name:'Carlos Mendez',   sig:'20mg daily', since:'2025-12' },
+      { name:'Heather James',   sig:'40mg daily', since:'2026-01' },
+      { name:'Kevin Nguyen',    sig:'20mg daily', since:'2025-11' },
+      { name:'Maria Santos',    sig:'20mg daily', since:'2025-08' },
+      { name:'Ashley Morgan',   sig:'20mg daily', since:'2025-06' },
+      { name:'Justin Clark',    sig:'20mg BID',   since:'2025-09' },
+      { name:'Stephanie Lee',   sig:'20mg daily', since:'2026-02' },
+    ],
+  },
 };
 
-const D = DRUG_DB.metformin;
-const S = D.safety, I = D.inventory, P = D.program340b, PR = D.pricing, C = D.clinical, E = D.education, DOC = D.documents;
+let activeDrugKey = 'metformin';
+let D = DRUG_DB.metformin;
+let S = D.safety, I = D.inventory, P = D.program340b, PR = D.pricing, C = D.clinical, E = D.education, DOC = D.documents;
+
+function setActiveDrug(key) {
+  activeDrugKey = key;
+  D = DRUG_DB[key];
+  S = D.safety; I = D.inventory; P = D.program340b; PR = D.pricing; C = D.clinical; E = D.education; DOC = D.documents;
+}
+
+function reRenderAllViews() {
+  document.getElementById('view-current').innerHTML = renderCurrentState();
+  document.getElementById('view-modal').innerHTML = renderModalView();
+  document.getElementById('view-tabflow').innerHTML = renderTabFlow();
+  document.getElementById('view-command').innerHTML = renderCommandCenter();
+  document.getElementById('view-compare').innerHTML = renderCompare();
+}
 
 // ─── Helpers ───
 const h = s => s; // passthrough (no html escaping needed for static data)
@@ -483,10 +1252,13 @@ const statusPill = (label, cls) => `<span class="status ${cls}">${label}</span>`
 const statRow = (label, val, cls='') => `<div class="stat-row"><span class="label">${label}</span><span class="value ${cls}">${val}</span></div>`;
 
 function drugHeader() {
+  const badge340b = D.dea ? `<span class="drug-badge controlled">${D.dea} Controlled</span>` :
+    (P.threshold > 0 ? `<span class="drug-badge active-340b">340B Active</span>` : `<span class="drug-badge" style="background:var(--surface3);color:var(--text2)">340B Inactive</span>`);
+  const stockCls = I.onHand <= I.reorderPoint ? 'low' : 'in-stock';
   return `<div class="drug-header-card">
     <div class="drug-icon-lg">${D.name[0]}</div>
     <div class="drug-meta"><h2>${D.name}</h2><div class="sub"><span>NDC: ${D.ndc}</span><span>GCN: ${D.gcn}</span><span>${D.manufacturer}</span><span>RxNorm: ${D.rxnorm}</span><span>Class: ${D.drugClass}</span></div></div>
-    <div class="drug-badges"><span class="drug-badge active-340b">340B Active</span>${statusPill(I.onHand+' In Stock','in-stock')}</div>
+    <div class="drug-badges">${badge340b}${statusPill(I.onHand+' In Stock',stockCls)}</div>
   </div>`;
 }
 
@@ -494,9 +1266,9 @@ function drugSearchList(onClickFn) {
   let rows = DRUG_DB.searchResults.map(d => {
     const pop = d.populated;
     const cls = pop ? 'populated' : 'dim';
-    const click = pop ? `onclick="${onClickFn}"` : `onclick="alert('Data not populated for this drug — only Metformin has full data in this mockup.')"`;
+    const click = pop ? `onclick="setActiveDrug('${d.key}');reRenderAllViews();${onClickFn}"` : `onclick="alert('Data not populated for this drug.')"`;
     return `<div class="drug-list-row ${cls}" ${click}>
-      <span>${d.name}${pop?' &#9733;':''}</span>
+      <span>${d.name}</span>
       <span>${d.ndc}</span>
       <span>${d.manufacturer}</span>
       <span>${d.generic}</span>
@@ -544,9 +1316,13 @@ function renderInventoryFull() { return renderInventorySummary() + renderLots() 
   </div>`; }
 
 function render340bSummary() {
+  if (P.threshold === 0 && P.totalAccumulated === 0) {
+    return `<div class="sticky" style="margin-bottom:20px"><b>340B Program:</b> This drug is not enrolled in the 340B program. ${D.dea ? 'Schedule '+D.dea+' controlled substances are typically excluded from 340B.' : ''}</div>`;
+  }
+  const pct = P.threshold > 0 ? Math.round(P.totalAccumulated/P.threshold*100) : 0;
   return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
     <div class="overview-card"><h5>Accumulated</h5><div style="font-size:22px;font-weight:700;color:var(--green);">${P.totalAccumulated}</div><div style="font-size:11px;color:var(--text2)">across ${P.entities.length} entities</div></div>
-    <div class="overview-card"><h5>Threshold</h5><div style="font-size:22px;font-weight:700;">${P.threshold}</div><div style="font-size:11px;color:var(--text2)">${Math.round(P.totalAccumulated/P.threshold*100)}% reached</div></div>
+    <div class="overview-card"><h5>Threshold</h5><div style="font-size:22px;font-weight:700;">${P.threshold}</div><div style="font-size:11px;color:var(--text2)">${pct}% reached${pct>=100?' — PO needed!':''}</div></div>
     <div class="overview-card"><h5>Ceiling Price</h5><div style="font-size:22px;font-weight:700;color:var(--green);">$${P.ceilingPrice.toFixed(2)}</div><div style="font-size:11px;color:var(--text2)">per unit · ${P.ceilingSource}</div></div>
     <div class="overview-card"><h5>Savings/Order</h5><div style="font-size:22px;font-weight:700;color:var(--accent2);">$${P.savingsPerOrder.toLocaleString()}</div><div style="font-size:11px;color:var(--text2)">${I.reorderQty} × ($${PR.wac} - $${P.ceilingPrice.toFixed(2)})</div></div>
   </div>`;
@@ -609,17 +1385,22 @@ function renderDocuments() {
 }
 
 function renderPricing() {
+  const ceilingStr = PR.ceiling340b != null ? '$'+PR.ceiling340b.toFixed(2) : 'N/A';
+  const fulStr = PR.ful != null ? '$'+PR.ful.toFixed(2) : 'N/A';
+  const savingsNote = P.threshold > 0 && PR.ceiling340b != null
+    ? `<div class="sticky blue" style="margin-top:16px"><b>Savings analysis:</b> ${I.reorderQty} units at 340B (${ceilingStr}) vs WAC ($${PR.wac}) saves <b>$${P.savingsPerOrder.toLocaleString()} per order</b>. At ${C.velocity} dispensing.</div>`
+    : (D.dea ? `<div class="sticky" style="margin-top:16px"><b>Note:</b> No 340B savings available — Schedule ${D.dea} controlled substances are excluded from the 340B program.</div>` : '');
   return `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;">
-    <div class="overview-card"><h5>WAC</h5><div style="font-size:22px;font-weight:700;">$${PR.wac}</div></div>
-    <div class="overview-card"><h5>340B Ceiling</h5><div style="font-size:22px;font-weight:700;color:var(--green);">$${PR.ceiling340b.toFixed(2)}</div></div>
+    <div class="overview-card"><h5>WAC</h5><div style="font-size:22px;font-weight:700;">$${PR.wac.toFixed(2)}</div></div>
+    <div class="overview-card"><h5>340B Ceiling</h5><div style="font-size:22px;font-weight:700;color:${PR.ceiling340b!=null?'var(--green)':'var(--text3)'};">${ceilingStr}</div></div>
     <div class="overview-card"><h5>Acquisition</h5><div style="font-size:22px;font-weight:700;">$${PR.acquisition.toFixed(2)}</div></div>
-    <div class="overview-card"><h5>AWP</h5><div style="font-size:22px;font-weight:700;">$${PR.awp}</div></div>
-    <div class="overview-card"><h5>FUL</h5><div style="font-size:22px;font-weight:700;">$${PR.ful.toFixed(2)}</div></div>
+    <div class="overview-card"><h5>AWP</h5><div style="font-size:22px;font-weight:700;">$${PR.awp.toFixed(2)}</div></div>
+    <div class="overview-card"><h5>FUL</h5><div style="font-size:22px;font-weight:700;">${fulStr}</div></div>
   </div>
   <table class="mock-table"><thead><tr><th>Price Type</th><th>Unit</th><th>Package</th><th>Size</th><th>Effective</th><th>Source</th><th>Current</th></tr></thead><tbody>
   ${PR.history.map(p=>`<tr><td>${p.type}</td><td>${p.unit}</td><td>${p.pkg}</td><td>${p.size}</td><td>${p.effective}</td><td>${p.source}</td><td>${statusPill(p.current?'Yes':'Expired',p.current?'eligible':'pending')}</td></tr>`).join('')}
   </tbody></table>
-  <div class="sticky blue" style="margin-top:16px"><b>Savings analysis:</b> ${I.reorderQty} units at 340B ($${PR.ceiling340b.toFixed(2)}) vs WAC ($${PR.wac}) saves <b>$${P.savingsPerOrder.toLocaleString()} per order</b>. At ${C.velocity} dispensing, ~$9,920/month in 340B savings for this NDC.</div>`;
+  ${savingsNote}`;
 }
 
 function renderClinical() {
@@ -635,13 +1416,19 @@ function renderClinical() {
 }
 
 function renderOverviewCards() {
+  const bbwCount = S.warnings.filter(w=>w.level==='critical').length;
+  const ciCount = S.interactions.filter(i=>i.severity==='Contraindicated').length;
+  const pct340b = P.threshold > 0 ? Math.round(P.totalAccumulated/P.threshold*100)+'%' : 'N/A';
+  const ceilingStr = P.ceilingPrice > 0 ? '$'+P.ceilingPrice.toFixed(2)+'/unit' : 'N/A';
+  const ceilingCls = P.ceilingPrice > 0 ? 'good' : '';
+  const primaryInd = C.indications.length > 0 ? C.indications[0].name.split(' ').slice(0,3).join(' ') : 'N/A';
   return `<div class="overview-grid">
-    <div class="overview-card"><h5>&#128230; Inventory</h5>${statRow('On Hand',I.onHand+' units','good')}${statRow('Available',I.available+' units','good')}${statRow('Reorder Point',I.reorderPoint+' units')}${statRow('Active Lots',I.lots.length)}${statRow('Nearest Expiry','Apr 26 (12d)','warn')}</div>
-    <div class="overview-card"><h5>&#127973; 340B Program</h5>${statRow('Accumulated',P.totalAccumulated+' units','good')}${statRow('Threshold',P.threshold+' ('+Math.round(P.totalAccumulated/P.threshold*100)+'%)')}${statRow('Ceiling Price','$'+P.ceilingPrice.toFixed(2)+'/unit','good')}${statRow('Entities',P.entities.length+' active')}${statRow('Q1 Savings','$'+P.quarterlySavings.toLocaleString(),'good')}</div>
-    <div class="overview-card"><h5>&#9888; Safety</h5>${statRow('Warnings',S.warnings.length+' (1 BBW)','alert')}${statRow('Interactions',S.interactions.length+' (1 CI)','warn')}${statRow('Beers Criteria','Yes','warn')}${statRow('Controlled','No')}${statRow('REMS','No')}</div>
-    <div class="overview-card"><h5>&#128218; Education</h5>${statRow('Monographs',E.monographs.length+' sections')}${statRow('MedGuides','1 (PDF required)')}${statRow('Counseling',E.counseling.length+' messages')}</div>
-    <div class="overview-card"><h5>&#128176; Pricing</h5>${statRow('WAC','$'+PR.wac+'/unit')}${statRow('340B Ceiling','$'+PR.ceiling340b.toFixed(2)+'/unit','good')}${statRow('Acquisition','$'+PR.acquisition.toFixed(2)+'/unit')}${statRow('AWP','$'+PR.awp+'/unit')}</div>
-    <div class="overview-card"><h5>&#127981; Clinical</h5>${statRow('Active Rx',C.totalRx)}${statRow('Patients',C.totalPatients)}${statRow('Velocity',C.velocity)}${statRow('Primary Indication','Type 2 DM')}</div>
+    <div class="overview-card"><h5>&#128230; Inventory</h5>${statRow('On Hand',I.onHand+' units',I.onHand>I.reorderPoint?'good':'warn')}${statRow('Available',I.available+' units',I.available>I.reorderPoint?'good':'warn')}${statRow('Reorder Point',I.reorderPoint+' units')}${statRow('Active Lots',I.lots.length)}${statRow('Storage',I.refrigeration?'Refrigerated':'Room Temp',I.refrigeration?'warn':'')}</div>
+    <div class="overview-card"><h5>&#127973; 340B Program</h5>${statRow('Accumulated',P.totalAccumulated+' units',P.totalAccumulated>0?'good':'')}${statRow('Threshold',P.threshold>0?P.threshold+' ('+pct340b+')':'N/A')}${statRow('Ceiling Price',ceilingStr,ceilingCls)}${statRow('Entities',P.entities.length>0?P.entities.length+' active':'None')}${statRow('Q1 Savings',P.quarterlySavings>0?'$'+P.quarterlySavings.toLocaleString():'N/A',P.quarterlySavings>0?'good':'')}</div>
+    <div class="overview-card"><h5>&#9888; Safety</h5>${statRow('Warnings',S.warnings.length+(bbwCount?' ('+bbwCount+' BBW)':''),'alert')}${statRow('Interactions',S.interactions.length+(ciCount?' ('+ciCount+' CI)':''),'warn')}${statRow('Controlled',I.controlled?I.schedule:'No',I.controlled?'alert':'')}${statRow('REMS',E.medGuide.note&&E.medGuide.note.includes('REMS')?'Yes':'No',E.medGuide.note&&E.medGuide.note.includes('REMS')?'warn':'')}</div>
+    <div class="overview-card"><h5>&#128218; Education</h5>${statRow('Monographs',E.monographs.length+' sections')}${statRow('MedGuides','1 (PDF)')}${statRow('Counseling',E.counseling.length+' messages')}</div>
+    <div class="overview-card"><h5>&#128176; Pricing</h5>${statRow('WAC','$'+PR.wac.toFixed(2)+'/unit')}${statRow('340B Ceiling',ceilingStr,ceilingCls)}${statRow('Acquisition','$'+PR.acquisition.toFixed(2)+'/unit')}${statRow('AWP','$'+PR.awp.toFixed(2)+'/unit')}</div>
+    <div class="overview-card"><h5>&#127981; Clinical</h5>${statRow('Active Rx',C.totalRx)}${statRow('Patients',C.totalPatients)}${statRow('Velocity',C.velocity)}${statRow('Primary Ind.',primaryInd)}</div>
   </div>`;
 }
 
@@ -717,7 +1504,7 @@ function renderCurrentState() {
         <div style="font-size:16px;color:var(--text);margin-bottom:6px">${D.name} (${D.manufacturer})</div>
         <div style="font-size:13px">GCN: ${D.gcn} · ${D.drugClass} · ${D.form}<br>
         For inventory (${I.onHand} units, ${I.lots.length} lots) → open Inventory tab → search ${D.ndc}<br>
-        For 340B (${P.totalAccumulated} accumulated, ${Math.round(P.totalAccumulated/P.threshold*100)}% threshold) → open 340B Accumulators → filter NDC<br>
+        For 340B (${P.totalAccumulated} accumulated${P.threshold>0?', '+Math.round(P.totalAccumulated/P.threshold*100)+'% threshold':' — not enrolled'}) → open 340B Accumulators → filter NDC<br>
         For safety (${S.warnings.length} warnings, ${S.interactions.length} DDIs) → switch to Interactions sub-tab<br><br>
         <span style="color:var(--yellow)">Each switch loses context. No drug identity persists across tabs.</span></div>
       </div></div>
@@ -726,8 +1513,8 @@ function renderCurrentState() {
   <h3 style="font-size:16px;font-weight:600;margin-bottom:12px">Hops required for ${D.name.split(' ')[0]}:</h3>
   <div class="hop-diagram">
     <div class="hop-card"><h4>&#128138; "340B status of ${D.name.split(' ')[0]}?"</h4><div class="hop-steps"><span class="hop-step yellow">Drug DB</span><span class="hop-arrow">→</span><span class="hop-step yellow">Copy NDC</span><span class="hop-arrow">→</span><span class="hop-step yellow">340B Accum</span><span class="hop-arrow">→</span><span class="hop-step yellow">Filter ${D.ndc}</span><span class="hop-arrow">→</span><span class="hop-step yellow">Virtual Inv</span></div></div>
-    <div class="hop-card"><h4>&#128203; "Reorder at 340B pricing?"</h4><div class="hop-steps"><span class="hop-step yellow">Inventory</span><span class="hop-arrow">→</span><span class="hop-step yellow">${I.onHand} on hand</span><span class="hop-arrow">→</span><span class="hop-step yellow">Thresholds</span><span class="hop-arrow">→</span><span class="hop-step yellow">$${P.ceilingPrice.toFixed(2)} ceiling</span><span class="hop-arrow">→</span><span class="hop-step yellow">340B POs</span></div></div>
-    <div class="hop-card"><h4>&#9888; "Safety + lot expiry?"</h4><div class="hop-steps"><span class="hop-step yellow">Drug DB</span><span class="hop-arrow">→</span><span class="hop-step yellow">Lactic acidosis</span><span class="hop-arrow">→</span><span class="hop-step yellow">${S.interactions.length} DDIs</span><span class="hop-arrow">→</span><span class="hop-step yellow">Inventory</span><span class="hop-arrow">→</span><span class="hop-step yellow">${I.lots[1].number} exp ${I.lots[1].expires}</span></div></div>
+    <div class="hop-card"><h4>&#128203; "Reorder at 340B pricing?"</h4><div class="hop-steps"><span class="hop-step yellow">Inventory</span><span class="hop-arrow">→</span><span class="hop-step yellow">${I.onHand} on hand</span><span class="hop-arrow">→</span><span class="hop-step yellow">Thresholds</span><span class="hop-arrow">→</span><span class="hop-step yellow">${P.ceilingPrice>0?'$'+P.ceilingPrice.toFixed(2)+' ceiling':'N/A'}</span><span class="hop-arrow">→</span><span class="hop-step yellow">340B POs</span></div></div>
+    <div class="hop-card"><h4>&#9888; "Safety + lot expiry?"</h4><div class="hop-steps"><span class="hop-step yellow">Drug DB</span><span class="hop-arrow">→</span><span class="hop-step yellow">${S.warnings.length>0?S.warnings[0].title.split(':').pop().trim().split(' ').slice(0,2).join(' '):'No warnings'}</span><span class="hop-arrow">→</span><span class="hop-step yellow">${S.interactions.length} DDIs</span><span class="hop-arrow">→</span><span class="hop-step yellow">Inventory</span><span class="hop-arrow">→</span><span class="hop-step yellow">${I.lots.length>0?I.lots[I.lots.length-1].number+' exp '+I.lots[I.lots.length-1].expires:'No lots'}</span></div></div>
   </div>
   <div class="agent-note"><span class="agent-icon">&#129302;</span><div><b>Agent problem:</b> "Tell me everything about NDC ${D.ndc}" requires 6+ unrelated API calls: /fdb/drugs/search, /inventory/products?ndc=, /340b/accumulators?ndc=, /340b/determinations?ndc=, /fdb/drugs/{id}/warnings, /fdb/drugs/{id}/interactions — with no unified drug profile.</div></div>`;
 }
@@ -735,11 +1522,11 @@ function renderCurrentState() {
 function renderModalView() {
   const sections = [
     {id:'modal-inventory',icon:'&#128230;',title:'Inventory',desc:'Stock, lots, transactions, reorder, supplier',stats:[{v:I.onHand,l:'on hand',c:'good'},{v:I.reserved,l:'reserved'},{v:I.lots.length,l:'lots'},{v:'12d',l:'nearest exp',c:'warn'}],content:renderInventoryFull()},
-    {id:'modal-340b',icon:'&#127973;',title:'340B Program',desc:'Accumulator, threshold, ceiling, determinations',stats:[{v:P.totalAccumulated,l:'accumulated',c:'good'},{v:P.threshold,l:'threshold'},{v:'$'+P.ceilingPrice.toFixed(2),l:'ceiling',c:'good'}],content:render340bFull()},
-    {id:'modal-safety',icon:'&#9888;',title:'Safety & Warnings',desc:'FDA warnings, DDIs, precautions, Beers, side effects',stats:[{v:S.warnings.length,l:'warnings',c:'alert'},{v:S.interactions.length,l:'DDIs',c:'warn'},{v:'1',l:'Beers',c:'warn'}],content:renderSafetyFull()},
+    {id:'modal-340b',icon:'&#127973;',title:'340B Program',desc:'Accumulator, threshold, ceiling, determinations',stats:[{v:P.totalAccumulated,l:'accumulated',c:P.totalAccumulated>0?'good':''},{v:P.threshold||'N/A',l:'threshold'},{v:P.ceilingPrice>0?'$'+P.ceilingPrice.toFixed(2):'N/A',l:'ceiling',c:P.ceilingPrice>0?'good':''}],content:render340bFull()},
+    {id:'modal-safety',icon:'&#9888;',title:'Safety & Warnings',desc:'FDA warnings, DDIs, precautions, side effects',stats:[{v:S.warnings.length,l:'warnings',c:'alert'},{v:S.interactions.length,l:'DDIs',c:'warn'},{v:S.precautions.length,l:'precautions'}],content:renderSafetyFull()},
     {id:'modal-education',icon:'&#128218;',title:'Patient Education',desc:'Monographs, MedGuides, counseling messages',stats:[{v:E.monographs.length,l:'monographs'},{v:'1',l:'MedGuide'},{v:E.counseling.length,l:'counseling'}],content:renderEducation()},
     {id:'modal-documents',icon:'&#128196;',title:'Documents',desc:'Documents linked to prescriptions for this drug',stats:[{v:DOC.length,l:'docs'},{v:DOC.filter(d=>d.status!=='Active').length,l:'pending',c:'warn'}],content:renderDocuments()},
-    {id:'modal-pricing',icon:'&#128176;',title:'Pricing',desc:'WAC, 340B ceiling, acquisition, AWP, FUL',stats:[{v:'$'+PR.wac,l:'WAC'},{v:'$'+PR.ceiling340b.toFixed(2),l:'340B',c:'good'},{v:'$'+PR.acquisition.toFixed(2),l:'acq'}],content:renderPricing()},
+    {id:'modal-pricing',icon:'&#128176;',title:'Pricing',desc:'WAC, 340B ceiling, acquisition, AWP, FUL',stats:[{v:'$'+PR.wac.toFixed(2),l:'WAC'},{v:PR.ceiling340b!=null?'$'+PR.ceiling340b.toFixed(2):'N/A',l:'340B',c:PR.ceiling340b!=null?'good':''},{v:'$'+PR.acquisition.toFixed(2),l:'acq'}],content:renderPricing()},
     {id:'modal-clinical',icon:'&#127981;',title:'Clinical & Dosing',desc:'Dosing, prescriptions, indications, DUR',stats:[{v:C.totalRx,l:'active Rx'},{v:C.totalPatients,l:'patients'},{v:C.dosing.length,l:'dose ranges'}],content:renderClinical()},
     {id:'modal-id',icon:'&#128300;',title:'Identification',desc:'Pill images, imprint, color, shape, interop mappings',stats:[{v:D.imprint.color,l:D.imprint.shape.toLowerCase()},{v:D.imprint.side1+'/'+D.imprint.side2,l:'imprint'},{v:D.imprint.scoring,l:'scoring'}],content:renderIdentification()},
   ];
@@ -796,7 +1583,7 @@ function renderTabFlow() {
       <div class="tabflow-breadcrumb"><span class="crumb" onclick="exitTabFlow()" style="cursor:pointer">&#8592; Drug Database</span><span class="sep">/</span><span class="crumb">${D.name}</span><span class="sep">/</span><span class="crumb current" id="tf-crumb">Overview</span></div>
       <div class="tabflow-drug-bar">
         <div class="drug-pill"><div class="icon">${D.name[0]}</div><div><div class="name">${D.name}</div><div class="ndc">NDC: ${D.ndc} · ${D.manufacturer} · GCN: ${D.gcn} · ${D.drugClass}</div></div></div>
-        <div class="drug-badges" style="margin-left:auto"><span class="drug-badge active-340b">340B Active</span>${statusPill(I.onHand+' In Stock','in-stock')}${statusPill(S.warnings.length+' Warnings','out')}</div>
+        <div class="drug-badges" style="margin-left:auto">${D.dea?'<span class="drug-badge controlled">'+D.dea+'</span>':(P.threshold>0?'<span class="drug-badge active-340b">340B Active</span>':'<span class="drug-badge" style="background:var(--surface3);color:var(--text2)">340B Inactive</span>')}${statusPill(I.onHand+' In Stock',I.onHand>I.reorderPoint?'in-stock':'low')}${statusPill(S.warnings.length+' Warnings','out')}</div>
       </div>
       <div class="tabflow-subtabs">
         ${tabs.map((t,i)=>`<div class="subtab${i===0?' active':''}" onclick="switchSubtab('${t.id}','${t.label}',this)">
@@ -807,9 +1594,8 @@ function renderTabFlow() {
         ${tabs.map((t,i)=>`<div id="${t.id}" class="tabflow-content-section${i===0?' active':''}">${t.content}</div>`).join('')}
       </div>
       <div class="tabflow-open-tabs">
-        <div class="open-tab active">&#128138; ${D.name} <span style="font-size:10px;color:var(--text3);cursor:pointer">✕</span></div>
-        <div class="open-tab" onclick="alert('Not populated')">&#128138; Lisinopril 10mg <span style="font-size:10px;color:var(--text3)">✕</span></div>
-        <div class="open-tab" onclick="alert('Not populated')">&#128138; Atorvastatin 20mg <span style="font-size:10px;color:var(--text3)">✕</span></div>
+        <div class="open-tab active">&#128138; ${D.name} <span style="font-size:10px;color:var(--text3);cursor:pointer">&#10005;</span></div>
+        ${DRUG_DB.searchResults.filter(sr=>sr.key!==activeDrugKey).slice(0,2).map(sr=>`<div class="open-tab" onclick="setActiveDrug('${sr.key}');reRenderAllViews();enterTabFlow();">&#128138; ${sr.name.split(' ').slice(0,2).join(' ')} <span style="font-size:10px;color:var(--text3)">&#10005;</span></div>`).join('')}
         <div style="margin-left:auto;padding:8px 12px;font-size:11px;color:var(--text3)">3 drugs open — split view available</div>
       </div>
     </div>
@@ -819,12 +1605,12 @@ function renderTabFlow() {
 function renderCommandCenter() {
   const secs = [
     {id:'cmd-overview',icon:'&#9673;',label:'Overview',badge:'',preview:'',content:renderOverviewCards()},
-    {id:'cmd-inv',icon:'&#128230;',label:'Inventory',badge:I.onHand+' units',badgeCls:'good',preview:I.lots.length+' lots · Reorder at '+I.reorderPoint+' · '+I.lots[1].number+' exp 12d',content:renderInventoryFull()},
-    {id:'cmd-340b',icon:'&#127973;',label:'340B Program',badge:P.totalAccumulated+' / '+P.threshold,badgeCls:'warn',preview:Math.round(P.totalAccumulated/P.threshold*100)+'% to threshold · $'+P.ceilingPrice.toFixed(2)+' ceiling · '+P.entities.length+' entities',content:render340bFull()},
-    {id:'cmd-safety',icon:'&#9888;',label:'Safety',badge:S.warnings.length+' warnings',badgeCls:'alert',preview:'BBW: lactic acidosis · '+S.interactions.length+' DDIs · Beers list',content:renderSafetyFull()},
-    {id:'cmd-edu',icon:'&#128218;',label:'Education',badge:E.monographs.length+E.counseling.length+' items',badgeCls:'',preview:E.monographs.length+' monograph sections · 1 MedGuide · '+E.counseling.length+' counseling',content:renderEducation()},
+    {id:'cmd-inv',icon:'&#128230;',label:'Inventory',badge:I.onHand+' units',badgeCls:I.onHand>I.reorderPoint?'good':'alert',preview:I.lots.length+' lots · Reorder at '+I.reorderPoint+(I.lots.length>1?' · '+I.lots[I.lots.length-1].number:''),content:renderInventoryFull()},
+    {id:'cmd-340b',icon:'&#127973;',label:'340B Program',badge:P.threshold>0?P.totalAccumulated+' / '+P.threshold:'Inactive',badgeCls:P.threshold>0?(P.totalAccumulated>=P.threshold?'alert':'warn'):'',preview:P.threshold>0?(Math.round(P.totalAccumulated/P.threshold*100)+'% to threshold · $'+P.ceilingPrice.toFixed(2)+' ceiling · '+P.entities.length+' entities'):(D.dea?'CII excluded from 340B':'Not enrolled'),content:render340bFull()},
+    {id:'cmd-safety',icon:'&#9888;',label:'Safety',badge:S.warnings.length+' warnings',badgeCls:'alert',preview:S.warnings.filter(w=>w.level==='critical').map(w=>w.title.split(':')[0]+': '+w.title.split(':').slice(1).join(':').trim().split(' ').slice(0,3).join(' ')).join(' · ')+' · '+S.interactions.length+' DDIs',content:renderSafetyFull()},
+    {id:'cmd-edu',icon:'&#128218;',label:'Education',badge:(E.monographs.length+E.counseling.length)+' items',badgeCls:'',preview:E.monographs.length+' monograph sections · 1 MedGuide · '+E.counseling.length+' counseling',content:renderEducation()},
     {id:'cmd-docs',icon:'&#128196;',label:'Documents',badge:DOC.length+' docs',badgeCls:'',preview:DOC.filter(d=>d.status!=='Active').length+' pending review · '+DOC.filter(d=>d.status==='Active').length+' active',content:renderDocuments()},
-    {id:'cmd-price',icon:'&#128176;',label:'Pricing',badge:PR.history.filter(p=>p.current).length+' types',badgeCls:'',preview:'WAC $'+PR.wac+' · 340B $'+PR.ceiling340b.toFixed(2)+' · Acq $'+PR.acquisition.toFixed(2),content:renderPricing()},
+    {id:'cmd-price',icon:'&#128176;',label:'Pricing',badge:PR.history.filter(p=>p.current).length+' types',badgeCls:'',preview:'WAC $'+PR.wac.toFixed(2)+(PR.ceiling340b!=null?' · 340B $'+PR.ceiling340b.toFixed(2):' · 340B N/A')+' · Acq $'+PR.acquisition.toFixed(2),content:renderPricing()},
     {id:'cmd-clinical',icon:'&#127981;',label:'Clinical',badge:C.totalRx+' Rx',badgeCls:'',preview:C.totalPatients+' patients · '+C.velocity+' velocity',content:renderClinical()},
     {id:'cmd-ident',icon:'&#128300;',label:'Identification',badge:D.imprint.color+' '+D.imprint.shape.toLowerCase(),badgeCls:'',preview:D.imprint.side1+'/'+D.imprint.side2+' · '+D.imprint.scoring+' · '+D.interop.length+' mappings',content:renderIdentification()},
   ];
@@ -832,14 +1618,14 @@ function renderCommandCenter() {
   return `<div id="cmd-intro">
   <h2 class="view-title">Option C: Split Panel Command Center</h2>
   <p class="view-desc">Left panel = drug identity + domain accordion. Right panel = detail. Bottom drawer = cross-cutting context. Click sections to navigate.</p>
-  <div class="pros-cons"><span class="annotation pro">+ Maximum context density</span><span class="annotation pro">+ Agent-optimized</span><span class="annotation pro">+ Keyboard shortcuts (1-9)</span><span class="annotation pro">+ No modal/tab fatigue</span><span class="annotation con">- Requires 1200px+</span><span class="annotation con">- No drug comparison</span><span class="annotation info">~ Best for: agents, power users</span></div>
+  <div class="pros-cons"><span class="annotation pro">+ Maximum context density</span><span class="annotation pro">+ Agent-optimized</span><span class="annotation pro">+ Keyboard shortcuts (1-9)</span><span class="annotation pro">+ No modal/tab fatigue</span><span class="annotation pro">+ Compare tray (pin up to 4)</span><span class="annotation con">- Requires 1200px+</span><span class="annotation info">~ Best for: agents, power users</span></div>
   ${drugSearchList("enterCommandCenter()")}
   </div>
   <div id="cmd-drug-view" style="display:none;">
     <div class="cmd-layout">
       <div class="cmd-left">
         <div style="padding:10px 16px;border-bottom:1px solid var(--border);font-size:12px"><span onclick="exitCommandCenter()" style="color:var(--accent2);cursor:pointer">&#8592; Back to Drug Search</span></div>
-        <div class="cmd-drug-card"><h3>${D.name}</h3><div class="meta">NDC: ${D.ndc} · ${D.manufacturer} · GCN: ${D.gcn}</div><div class="meta" style="margin-top:2px">${D.drugClass} · ${D.form} · RxNorm: ${D.rxnorm}</div><div class="tags"><span class="drug-badge active-340b">340B Active</span>${statusPill('In Stock','in-stock')}</div></div>
+        <div class="cmd-drug-card"><h3>${D.name}</h3><div class="meta">NDC: ${D.ndc} · ${D.manufacturer} · GCN: ${D.gcn}</div><div class="meta" style="margin-top:2px">${D.drugClass} · ${D.form} · RxNorm: ${D.rxnorm}</div><div class="tags">${D.dea?'<span class="drug-badge controlled">'+D.dea+' Controlled</span>':(P.threshold>0?'<span class="drug-badge active-340b">340B Active</span>':'<span class="drug-badge" style="background:var(--surface3);color:var(--text2)">340B Inactive</span>')}${statusPill(I.onHand+' In Stock',I.onHand>I.reorderPoint?'in-stock':'low')}</div></div>
         <div class="cmd-sections">
           ${secs.map((s,i)=>`<div class="cmd-section${i===1?' active':''}" onclick="cmdSelect(this,'${s.id}','${s.icon} ${s.label}')">
             <div class="cmd-section-header"><div class="left"><span class="icon">${s.icon}</span><span class="label">${s.label}</span></div><div>${s.badge?`<span class="badge ${s.badgeCls}">${s.badge}</span>`:''} <span class="kbd">${i+1}</span></div></div>
@@ -848,7 +1634,7 @@ function renderCommandCenter() {
         </div>
       </div>
       <div class="cmd-right">
-        <div id="cmd-right-title" class="cmd-right-header"><h3>&#128230; Inventory — ${D.name}</h3><div style="display:flex;gap:8px"><button style="padding:6px 12px;border-radius:6px;background:var(--surface3);border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer">Export</button><button style="padding:6px 12px;border-radius:6px;background:var(--accent);border:none;color:#fff;font-size:12px;cursor:pointer">Action</button></div></div>
+        <div id="cmd-right-title" class="cmd-right-header"><h3>&#128230; Inventory — ${D.name}</h3><div style="display:flex;gap:8px"><button class="compare-btn" onclick="addToCompare('${activeDrugKey}')">+ Compare</button><button style="padding:6px 12px;border-radius:6px;background:var(--surface3);border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer">Export</button><button style="padding:6px 12px;border-radius:6px;background:var(--accent);border:none;color:#fff;font-size:12px;cursor:pointer">Action</button></div></div>
         <div class="cmd-right-body">
           ${secs.map((s,i)=>`<div id="${s.id}" class="cmd-detail-view${i===1?' active':''}">${s.content}</div>`).join('')}
         </div>
@@ -858,6 +1644,7 @@ function renderCommandCenter() {
         </div>
       </div>
     </div>
+    <div id="compare-tray-container"></div>
   </div>`;
 }
 
@@ -871,10 +1658,10 @@ function renderCompare() {
     <div class="data-map-ring">
       <div class="data-map-node" style="border-color:var(--blue)">&#128300; FDB<div class="count">Detail, DUR, education, dosing, images</div></div>
       <div class="data-map-node" style="border-color:var(--green)">&#128230; Inventory<div class="count">${I.onHand} units, ${I.lots.length} lots, ${I.transactions.length} txns</div></div>
-      <div class="data-map-node" style="border-color:var(--yellow)">&#127973; 340B<div class="count">${P.totalAccumulated} accum, $${P.ceilingPrice.toFixed(2)} ceiling</div></div>
+      <div class="data-map-node" style="border-color:var(--yellow)">&#127973; 340B<div class="count">${P.totalAccumulated} accum${P.ceilingPrice>0?', $'+P.ceilingPrice.toFixed(2)+' ceiling':''}</div></div>
       <div class="data-map-node" style="border-color:var(--purple)">&#128196; Documents<div class="count">${DOC.length} docs via ${C.totalRx} prescriptions</div></div>
       <div class="data-map-node" style="border-color:var(--pink)">&#127981; Clinical<div class="count">${C.totalRx} Rx, ${C.totalPatients} patients</div></div>
-      <div class="data-map-node" style="border-color:var(--cyan)">&#128176; Pricing<div class="count">WAC $${PR.wac}, 340B $${PR.ceiling340b.toFixed(2)}, AWP $${PR.awp}</div></div>
+      <div class="data-map-node" style="border-color:var(--cyan)">&#128176; Pricing<div class="count">WAC $${PR.wac.toFixed(2)}${PR.ceiling340b!=null?', 340B $'+PR.ceiling340b.toFixed(2):''}, AWP $${PR.awp.toFixed(2)}</div></div>
       <div class="data-map-node" style="border-color:var(--orange)">&#9888; Safety<div class="count">${S.warnings.length} warnings, ${S.interactions.length} DDIs, Beers</div></div>
     </div>
   </div>
@@ -999,6 +1786,71 @@ function toggleDrawer() {
   const a = document.getElementById('drawer-arrow');
   c.classList.toggle('show');
   a.textContent = c.classList.contains('show') ? '▼' : '▲';
+}
+
+// ═══════════════════════════════════════
+// COMPARISON TRAY (Command Center only)
+// ═══════════════════════════════════════
+let compareList = [];
+
+function addToCompare(drugKey) {
+  if (!compareList.includes(drugKey) && compareList.length < 4) {
+    compareList.push(drugKey);
+    renderCompareTray();
+  }
+}
+
+function removeFromCompare(drugKey) {
+  compareList = compareList.filter(k => k !== drugKey);
+  renderCompareTray();
+}
+
+function renderCompareTray() {
+  const container = document.getElementById('compare-tray-container');
+  if (!container) return;
+  if (compareList.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const chips = compareList.map(key => {
+    const drug = DRUG_DB[key];
+    return `<div class="compare-chip"><span>${drug.name.split(' ').slice(0,2).join(' ')}</span><span class="remove" onclick="removeFromCompare('${key}')">&times;</span></div>`;
+  }).join('');
+
+  let tableHtml = '';
+  if (compareList.length >= 2) {
+    const drugs = compareList.map(k => DRUG_DB[k]);
+    const rows = [
+      { label:'Drug Name',     fn: d => d.name },
+      { label:'NDC',           fn: d => d.ndc },
+      { label:'Class',         fn: d => d.drugClass },
+      { label:'Manufacturer',  fn: d => d.manufacturer },
+      { label:'Stock On Hand', fn: d => d.inventory.onHand + ' units' },
+      { label:'Reorder Point', fn: d => d.inventory.reorderPoint + ' units' },
+      { label:'Storage',       fn: d => d.inventory.refrigeration ? 'Refrigerated' : 'Room Temp' },
+      { label:'Controlled',    fn: d => d.inventory.controlled ? d.inventory.schedule : 'No' },
+      { label:'340B Accumulated', fn: d => d.program340b.totalAccumulated > 0 ? d.program340b.totalAccumulated + ' units' : 'N/A' },
+      { label:'340B Threshold',   fn: d => d.program340b.threshold > 0 ? d.program340b.threshold + ' units' : 'N/A' },
+      { label:'340B Ceiling',     fn: d => d.program340b.ceilingPrice > 0 ? '$' + d.program340b.ceilingPrice.toFixed(2) : 'N/A' },
+      { label:'Warnings',      fn: d => d.safety.warnings.length + ' (' + d.safety.warnings.filter(w=>w.level==='critical').length + ' BBW)' },
+      { label:'DDIs',          fn: d => d.safety.interactions.length },
+      { label:'WAC',           fn: d => '$' + d.pricing.wac.toFixed(2) },
+      { label:'Acquisition',   fn: d => '$' + d.pricing.acquisition.toFixed(2) },
+      { label:'AWP',           fn: d => '$' + d.pricing.awp.toFixed(2) },
+      { label:'Active Rx',     fn: d => d.clinical.totalRx },
+      { label:'Patients',      fn: d => d.clinical.totalPatients },
+    ];
+    const headerCells = drugs.map(d => `<th>${d.name.split(' ').slice(0,2).join(' ')}</th>`).join('');
+    const bodyRows = rows.map(r => `<tr><td>${r.label}</td>${drugs.map(d => `<td>${r.fn(d)}</td>`).join('')}</tr>`).join('');
+    tableHtml = `<div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Metric</th>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+  }
+
+  container.innerHTML = `<div class="compare-tray">
+    <div class="compare-tray-header"><h4>&#128203; Compare Tray (${compareList.length}/4)</h4><button class="compare-btn" onclick="compareList=[];renderCompareTray();" style="font-size:11px">Clear All</button></div>
+    <div class="compare-tray-items">${chips}</div>
+    ${tableHtml}
+  </div>`;
 }
 </script>
 </body>
