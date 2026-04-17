@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1400">
+<title>CareLink — Agent Orchestration Architecture</title>
+<style>
+:root{
+  --bg:#F5F0EB;--surface:#FDFBF8;--surface2:#f7f3ef;--surface3:#efe9e2;
+  --border:rgba(120,100,80,.12);--border-strong:rgba(120,100,80,.25);
+  --text:#3B3530;--text2:#7A7168;--text3:#9e958c;
+  --accent:#5B7FA4;--accent2:#3E5F7E;--accent-bg:rgba(91,127,164,.08);
+  --green:#2e7d32;--green-bg:#f1f8f4;--green-border:#c8e6c9;
+  --red:#d32f2f;--red-bg:#ffebee;--red-border:#ef9a9a;
+  --yellow:#ed6c02;--yellow-bg:#fff3e0;--yellow-border:#ffe0b2;
+  --blue:#1976d2;--blue-bg:#e3f2fd;--blue-border:#90caf9;
+  --purple:#7b1fa2;--purple-bg:rgba(123,31,162,.06);--purple-border:rgba(123,31,162,.2);
+  --radius:8px;--radius-lg:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.5}
+
+/* Header */
+.header{background:var(--accent2);color:#fff;padding:20px 32px}
+.header h1{font-size:22px;font-weight:700}
+.header p{font-size:13px;opacity:.8;margin-top:4px}
+
+/* Top-level tabs */
+.top-tabs{display:flex;gap:4px;padding:12px 32px 0;background:var(--surface);border-bottom:1px solid var(--border)}
+.top-tab{padding:10px 20px;border-radius:var(--radius) var(--radius) 0 0;cursor:pointer;font-size:13px;font-weight:600;background:transparent;border:1px solid transparent;border-bottom:none;color:var(--text2);transition:all .15s}
+.top-tab:hover{background:var(--surface2);color:var(--text)}
+.top-tab.active{background:var(--bg);color:var(--accent2);border-color:var(--border);border-bottom:1px solid var(--bg);margin-bottom:-1px}
+
+/* Tab content */
+.tab-content{display:none;padding:24px 32px;max-width:1600px;margin:0 auto}
+.tab-content.active{display:block}
+
+/* Section titles */
+.section-title{font-size:16px;font-weight:700;color:var(--accent2);margin:28px 0 12px;display:flex;align-items:center;gap:8px}
+.section-title .line{flex:1;height:1px;background:var(--border-strong)}
+.section-title:first-child{margin-top:0}
+.desc{color:var(--text2);margin-bottom:16px;max-width:900px;font-size:13px}
+
+/* Flow diagram */
+.flow{display:flex;align-items:center;gap:0;margin:16px 0;overflow-x:auto;padding-bottom:8px}
+.phase-box{min-width:120px;padding:10px 14px;border-radius:var(--radius);text-align:center;font-weight:600;font-size:12px;border:2px solid;flex-shrink:0}
+.phase-box.blue{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+.phase-box.red{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+.phase-box.yellow{background:var(--yellow-bg);border-color:var(--yellow);color:var(--yellow)}
+.phase-box.green{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.phase-box.purple{background:var(--purple-bg);border-color:var(--purple-border);color:var(--purple)}
+.phase-box .num{font-size:10px;opacity:.6;display:block}
+.arr{width:28px;height:2px;background:var(--text3);flex-shrink:0;position:relative}
+.arr::after{content:'';position:absolute;right:0;top:-4px;border:5px solid transparent;border-left-color:var(--text3)}
+.arr.down{width:2px;height:28px;margin:0 auto}
+.arr.down::after{right:auto;top:auto;bottom:0;left:-4px;border:5px solid transparent;border-top-color:var(--text3)}
+
+/* Decision diamond */
+.diamond{width:80px;height:80px;transform:rotate(45deg);background:var(--yellow-bg);border:2px solid var(--yellow);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin:0 8px}
+.diamond span{transform:rotate(-45deg);font-size:11px;font-weight:700;color:var(--yellow)}
+
+/* Branch pills */
+.branch-row{display:flex;gap:8px;justify-content:center;margin-top:6px}
+.pill{padding:3px 10px;border-radius:10px;font-size:10px;font-weight:600}
+.pill.g{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.pill.r{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.pill.b{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)}
+.pill.y{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+.pill.p{background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple-border)}
+
+/* Expert cards */
+.experts-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:16px 0}
+.expert-card{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);padding:14px;border-top:3px solid var(--accent)}
+.expert-card .name{font-size:14px;font-weight:700;margin-bottom:2px}
+.expert-card .role{font-size:11px;color:var(--text2);margin-bottom:10px}
+.expert-card ul{list-style:none;margin:0 0 10px}
+.expert-card li{font-size:12px;padding:2px 0}
+.expert-card li::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-right:7px;vertical-align:middle}
+.expert-card .tools{font-size:10px;color:var(--text3);border-top:1px solid var(--border);padding-top:8px}
+.expert-card .tools code{background:var(--surface2);padding:1px 4px;border-radius:3px}
+
+/* Harness cards */
+.harness-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:16px 0}
+.h-card{border-radius:var(--radius);padding:16px;border:1.5px solid}
+.h-card h4{font-size:14px;margin-bottom:8px}
+.h-card p{font-size:12px;margin-bottom:6px}
+.h-card.restrict{background:var(--red-bg);border-color:var(--red-border)}.h-card.restrict h4{color:var(--red)}
+.h-card.contract{background:var(--yellow-bg);border-color:var(--yellow-border)}.h-card.contract h4{color:var(--yellow)}
+.h-card.gating{background:var(--blue-bg);border-color:var(--blue-border)}.h-card.gating h4{color:var(--blue)}
+.denied{color:var(--red);font-size:11px;margin:2px 0}
+.allowed{color:var(--green);font-size:11px;margin:2px 0}
+
+/* Context flow */
+.ctx-flow{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);padding:16px;margin:16px 0}
+.ctx-step{display:flex;gap:16px;padding:6px 8px;border-radius:4px;font-size:12px}
+.ctx-step:nth-child(odd){background:var(--surface2)}
+.ctx-step .label{min-width:110px;font-weight:700;color:var(--accent2);font-size:11px}
+.ctx-step .added{color:var(--green);font-weight:600;font-family:monospace;font-size:11px}
+
+/* Vertical flow (for Option A & B) */
+.v-flow{display:flex;flex-direction:column;align-items:center;gap:0;margin:16px auto;max-width:700px}
+.v-flow .phase-box{width:100%;max-width:500px;text-align:left;padding:14px 20px;display:flex;align-items:center;gap:12px}
+.v-flow .phase-box .icon{font-size:20px;flex-shrink:0}
+.v-flow .phase-box .info{flex:1}
+.v-flow .phase-box .info .title{font-weight:700;font-size:13px}
+.v-flow .phase-box .info .sub{font-size:11px;opacity:.7;margin-top:2px}
+.v-arrow{width:2px;height:24px;background:var(--text3);position:relative}
+.v-arrow::after{content:'';position:absolute;bottom:0;left:-4px;border:5px solid transparent;border-top-color:var(--text3)}
+
+/* Comparison */
+.compare{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px}
+.compare th{background:var(--accent2);color:#fff;padding:10px 14px;text-align:left}
+.compare td{padding:8px 14px;border-bottom:1px solid var(--border)}
+.compare tr:nth-child(even) td{background:var(--surface2)}
+.good{color:var(--green)}.bad{color:var(--red)}
+
+/* Side-by-side layout */
+.side-by-side{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:16px 0}
+.side-panel{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);padding:20px;overflow:hidden}
+.side-panel h3{font-size:15px;font-weight:700;margin-bottom:4px}
+.side-panel .subtitle{font-size:11px;color:var(--text2);margin-bottom:16px}
+
+/* Annotation callouts */
+.callout{padding:12px 16px;border-radius:var(--radius);margin:12px 0;font-size:12px;display:flex;gap:10px;align-items:flex-start}
+.callout.info{background:var(--blue-bg);border:1px solid var(--blue-border);color:var(--blue)}
+.callout.warn{background:var(--yellow-bg);border:1px solid var(--yellow-border);color:var(--yellow)}
+.callout.good{background:var(--green-bg);border:1px solid var(--green-border);color:var(--green)}
+.callout.bad{background:var(--red-bg);border:1px solid var(--red-border);color:var(--red)}
+.callout b{font-weight:700}
+
+.footer{text-align:center;padding:32px;color:var(--text3);font-size:11px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>CareLink &mdash; Agent Orchestration Architecture</h1>
+  <p>From monolith prompt to orchestrator + domain experts with harness, contracts, and three deployment patterns</p>
+</div>
+
+<!-- ── TOP TABS ──────────────────────────────────────────── -->
+<div class="top-tabs">
+  <div class="top-tab active" onclick="showTab(0)">Decomposition</div>
+  <div class="top-tab" onclick="showTab(1)">Harness &amp; Restrictions</div>
+  <div class="top-tab" onclick="showTab(2)">Option A: Inngest Orchestrates</div>
+  <div class="top-tab" onclick="showTab(3)">Option B: Claude Orchestrates</div>
+  <div class="top-tab" onclick="showTab(4)">Option C: Claude + DAG Memory</div>
+  <div class="top-tab" onclick="showTab(5)">Comparison</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- TAB 0: DECOMPOSITION                                    -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="tab-content active" id="tab-0">
+
+<!-- Role legend -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+  <div style="background:var(--purple-bg);border:2px solid var(--purple-border);border-radius:var(--radius);padding:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="width:36px;height:36px;border-radius:50%;background:var(--purple);display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff">&#127919;</div>
+      <div>
+        <div style="font-weight:700;font-size:16px;color:var(--purple)">THE ORCHESTRATOR</div>
+        <div style="font-size:11px;color:var(--text2)">One per workflow &mdash; the "Rx Flow Orchestrator" for prescription processing</div>
+      </div>
+    </div>
+    <div style="font-size:12px;line-height:1.7">
+      <b>Responsibilities:</b> routing between phases, deciding branches, managing the shared context, escalating to humans, emitting reports, advancing the rx_status.
+      <br><br>
+      <b>Does NOT know:</b> how to interpret a sig code, how to classify a rejection, how to screen for DDIs, or how carrier rates work. It delegates all domain knowledge.
+      <br><br>
+      <b>Tools:</b> <code>invoke_expert</code>, <code>request_human_review</code>, <code>emit_report</code>, <code>update_rx_status</code>
+    </div>
+  </div>
+  <div style="background:var(--accent-bg);border:2px solid var(--accent);border-radius:var(--radius);padding:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff">&#128218;</div>
+      <div>
+        <div style="font-weight:700;font-size:16px;color:var(--accent2)">DOMAIN EXPERTS</div>
+        <div style="font-size:11px;color:var(--text2)">8 specialists &mdash; each expert in ONE thing, invoked by the orchestrator</div>
+      </div>
+    </div>
+    <div style="font-size:12px;line-height:1.7">
+      <b>Responsibilities:</b> execute a focused task in one domain &mdash; patient matching, DUR screening, claim submission, etc. Return structured results.
+      <br><br>
+      <b>Do NOT know:</b> the overall workflow, which phase comes next, other experts' work, or how to interact with the operator directly.
+      <br><br>
+      <b>Tools:</b> scoped subset of CareLink APIs specific to their domain (e.g., DUR agent gets FDB screening tools, billing agent gets claim-submit tool).
+    </div>
+  </div>
+</div>
+
+<div class="section-title">&#127919; Orchestrator &mdash; Phase Graph<span class="line"></span></div>
+<p class="desc">The orchestrator knows the phase sequence and branching logic. It does NOT contain clinical, billing, or regulatory knowledge. It delegates each phase to a domain expert and uses the structured result to decide what happens next.</p>
+
+<div class="flow">
+  <div class="phase-box blue"><span class="num">Phase 1</span>Intake</div><div class="arr"></div>
+  <div class="phase-box blue"><span class="num">Phase 2</span>Data Entry</div><div class="arr"></div>
+  <div class="phase-box blue"><span class="num">Phase 3</span>Clinical</div><div class="arr"></div>
+  <div class="phase-box blue"><span class="num">Phase 4</span>Billing</div><div class="arr"></div>
+  <div class="diamond"><span>Paid?</span></div><div class="arr"></div>
+  <div class="phase-box blue"><span class="num">Phase 5</span>DUR Review</div><div class="arr"></div>
+  <div class="phase-box blue"><span class="num">Phase 6</span>Fulfillment</div><div class="arr"></div>
+  <div class="phase-box red"><span class="num">Phase 7</span>PV2 (HITL)</div><div class="arr"></div>
+  <div class="phase-box blue"><span class="num">Phase 8</span>Shipping</div><div class="arr"></div>
+  <div class="phase-box green"><span class="num">&check;</span>Complete</div>
+</div>
+<div style="display:flex;gap:16px;margin:4px 0 0 480px">
+  <div style="text-align:center">
+    <div style="font-size:11px;color:var(--red);margin-bottom:4px">&darr; Rejected</div>
+    <div class="phase-box yellow" style="min-width:150px;margin-bottom:6px"><span class="num">Classifier</span>Rejection Agent</div>
+    <div class="branch-row">
+      <span class="pill r">PA Required</span>
+      <span class="pill g">Retry</span>
+      <span class="pill r">Escalate</span>
+    </div>
+  </div>
+</div>
+
+<div class="section-title">&#128218; Domain Experts<span class="line"></span></div>
+<p class="desc">Each expert gets a focused prompt (~300 words), a scoped tool set, and a typed input/output contract. The expert knows its domain deeply but has zero visibility into other phases.</p>
+
+<div class="experts-grid">
+  <div class="expert-card">
+    <div class="name">&#128203; Intake Agent</div>
+    <div class="role">Entity matching &amp; resolution</div>
+    <ul><li>Patient match (fuzzy, confidence)</li><li>Prescriber match (NPI first)</li><li>Drug match (DAW-aware)</li><li>Insurance match</li></ul>
+    <div class="tools"><code>list-patients</code> <code>create-patient</code> <code>list-prescribers</code> <code>create-prescriber</code> <code>list-products</code> <code>create-product</code> <code>search-drugs</code> <code>get-drug</code></div>
+  </div>
+  <div class="expert-card">
+    <div class="name">&#128221; Data Entry Agent</div>
+    <div class="role">Validation &amp; field mapping</div>
+    <ul><li>NCPDP field mapping</li><li>Sig interpretation</li><li>Qty / day supply validation</li><li>Compliance (DEA, state rules)</li></ul>
+    <div class="tools"><code>get-prescription</code> <code>update-prescription</code> <code>get-drug</code> <code>get-product-stock</code></div>
+  </div>
+  <div class="expert-card">
+    <div class="name">&#9877;&#65039; Clinical Agent</div>
+    <div class="role">Checklist &amp; clinical review</div>
+    <ul><li>REMS enrollment check</li><li>Clinical checklist build</li><li>Lab / monitoring requirements</li><li>Inventory availability</li></ul>
+    <div class="tools"><code>get-drug</code> <code>get-high-risk</code> <code>get-precautions</code> <code>get-indications</code> <code>get-label-warnings</code> <code>get-clinical-checklist</code> <code>get-product-stock</code> <code>create-work-item</code></div>
+  </div>
+  <div class="expert-card">
+    <div class="name">&#128179; Billing Agent</div>
+    <div class="role">Claim submission &amp; adjudication</div>
+    <ul><li>Pricing lookup (FDB)</li><li>Claim submission (D.0)</li><li>Profitability analysis</li><li>Response parsing</li></ul>
+    <div class="tools"><code>submit-claim</code> <code>get-drug-pricing</code> <code>get-product-stock</code></div>
+  </div>
+  <div class="expert-card">
+    <div class="name">&#128269; Rejection Classifier</div>
+    <div class="role">Reject code interpretation</div>
+    <ul><li>Reject code classification</li><li>Action recommendation</li><li>Fix field suggestion</li><li>Next eligible date calc</li></ul>
+    <div class="tools">No tools &mdash; receives all data in input. Stateless, fast classification.</div>
+  </div>
+  <div class="expert-card">
+    <div class="name">&#128138; DUR Agent</div>
+    <div class="role">Drug utilization review</div>
+    <ul><li>Drug-drug interaction screen</li><li>Allergy screen</li><li>Drug-disease screen</li><li>Duplicate therapy screen</li></ul>
+    <div class="tools"><code>screen-dur</code> <code>screen-ddi</code> <code>screen-allergies</code> <code>screen-drug-disease</code> <code>screen-duplicate-therapy</code> <code>list-prescriptions</code></div>
+  </div>
+  <div class="expert-card">
+    <div class="name">&#128230; Fulfillment Agent</div>
+    <div class="role">Physical dispensing workflow</div>
+    <ul><li>Label generation</li><li>Barcode scan verification</li><li>Order sweep (batch check)</li><li>Lot / expiry capture</li></ul>
+    <div class="tools"><code>print-rx-label</code> <code>scan-product</code> <code>barcode-lookup</code> <code>list-prescriptions</code></div>
+  </div>
+  <div class="expert-card">
+    <div class="name">&#128666; Shipping Agent</div>
+    <div class="role">Packaging &amp; carrier logistics</div>
+    <ul><li>Cold chain detection</li><li>Rate estimation</li><li>Label purchase</li><li>Shipment creation</li></ul>
+    <div class="tools"><code>create-shipment</code> <code>estimate-rates</code> <code>purchase-label</code> <code>update-shipment</code></div>
+  </div>
+</div>
+
+<div class="section-title">&#128203; Dynamic Context Accumulation<span class="line"></span></div>
+<p class="desc">The context starts empty and gets richer at each phase. Each expert reads what it needs, returns what it learned. The orchestrator merges results into the shared context.</p>
+<div class="ctx-flow">
+  <div class="ctx-step"><div class="label">After Intake</div><div class="added">+ patient_id, prescriber_id, product_id, ndc, insurance_matched</div></div>
+  <div class="ctx-step"><div class="label">After Data Entry</div><div class="added">+ sig, quantity, day_supply, refills, daw, rx_id</div></div>
+  <div class="ctx-step"><div class="label">After Clinical</div><div class="added">+ rems_status, checklist_items[], inventory_available, clinical_flags[]</div></div>
+  <div class="ctx-step"><div class="label">After Billing</div><div class="added">+ claim_id, paid_amount, copay, rejection_codes[]?</div></div>
+  <div class="ctx-step"><div class="label">After DUR</div><div class="added">+ ddi_findings[], allergy_alerts[], overall_severity, rph_approved</div></div>
+  <div class="ctx-step"><div class="label">After Fulfillment</div><div class="added">+ lot_id, expiration_date, ndc_scanned, scan_matched</div></div>
+  <div class="ctx-step"><div class="label">After PV2</div><div class="added">+ pv2_approved, verified_by, verification_checklist{}</div></div>
+  <div class="ctx-step"><div class="label">After Shipping</div><div class="added">+ shipment_id, tracking_number, carrier, cold_chain</div></div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- TAB 1: HARNESS & RESTRICTIONS                           -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-1">
+
+<div class="section-title">&#128274; Harness &amp; Restrictions<span class="line"></span></div>
+<p class="desc">Three enforcement layers prevent experts from going rogue or crossing domain boundaries. Every expert operates inside a sandbox defined by its registration.</p>
+
+<div class="harness-grid">
+  <div class="h-card restrict">
+    <h4>&#128274; Tool Scoping</h4>
+    <p>Each expert gets ONLY its tools via <code>allowed_tools</code> in the agent session options. If it tries to call a tool outside its set, the call is rejected.</p>
+    <p style="margin-top:8px"><b>Intake Agent:</b></p>
+    <div class="denied">&cross; submit-claim (billing only)</div>
+    <div class="denied">&cross; screen-ddi (DUR only)</div>
+    <div class="denied">&cross; purchase-label (shipping only)</div>
+    <div class="denied">&cross; update-prescription (orchestrator only)</div>
+    <p style="margin-top:8px"><b>DUR Agent:</b></p>
+    <div class="denied">&cross; create-patient (intake only)</div>
+    <div class="denied">&cross; submit-claim (billing only)</div>
+    <div class="denied">&cross; create-shipment (shipping only)</div>
+    <p style="margin-top:8px"><b>Billing Agent:</b></p>
+    <div class="denied">&cross; screen-dur (DUR only)</div>
+    <div class="denied">&cross; print-rx-label (fulfillment only)</div>
+    <div class="denied">&cross; create-patient (intake only)</div>
+  </div>
+
+  <div class="h-card contract">
+    <h4>&#128208; Typed Contracts</h4>
+    <p>Every expert declares input/output schemas. The orchestrator validates BEFORE dispatch and AFTER return. Malformed output triggers retry, then escalation.</p>
+    <p style="margin-top:10px"><b>Intake &rarr; must return:</b></p>
+    <code style="font-size:11px;color:var(--yellow);display:block;margin:4px 0">{ patient_id, prescriber_id, product_id,<br>&nbsp;&nbsp;insurance_matched, needs_human,<br>&nbsp;&nbsp;human_questions[], created_records[] }</code>
+    <p style="margin-top:10px"><b>DUR &rarr; must return:</b></p>
+    <code style="font-size:11px;color:var(--yellow);display:block;margin:4px 0">{ findings[], overall_severity,<br>&nbsp;&nbsp;needs_human, human_questions[] }</code>
+    <p style="margin-top:10px"><b>Billing &rarr; must return:</b></p>
+    <code style="font-size:11px;color:var(--yellow);display:block;margin:4px 0">{ status, paid_amount?, copay?,<br>&nbsp;&nbsp;reject_codes[]?, needs_human }</code>
+  </div>
+
+  <div class="h-card gating">
+    <h4>&#128678; Phase Gating</h4>
+    <p>Experts <b>cannot advance the workflow</b>. Only the orchestrator controls state transitions.</p>
+    <p style="margin-top:10px"><b>Only orchestrator can call:</b></p>
+    <div class="allowed">&check; update_rx_status(rx_id, status)</div>
+    <div class="allowed">&check; emit_report(phase, data)</div>
+    <div class="allowed">&check; request_human_review(question)</div>
+    <div class="allowed">&check; spawn_sub_workflow(type, context)</div>
+    <p style="margin-top:10px">When an expert returns <code>needs_human: true</code>, it's the orchestrator that decides whether to escalate, retry with more context, or override.</p>
+    <p style="margin-top:6px">Experts cannot create work items in arbitrary categories, trigger other workflows, or modify records outside their scope.</p>
+  </div>
+</div>
+
+<div class="section-title">How Restrictions Are Enforced<span class="line"></span></div>
+
+<div class="callout info"><b>Tool allowlist:</b> The Claude Agent SDK accepts <code>allowed_tools</code> in session options. Tools not in the list are invisible to the agent &mdash; it can't even see them in its tool catalog.</div>
+<div class="callout info"><b>Scope guard hook:</b> A <code>PreToolUse</code> hook inspects every tool call before execution. If the agent somehow references a tool outside its allowlist, the hook rejects the call with an error message.</div>
+<div class="callout info"><b>Workspace isolation:</b> Each expert session gets its own workspace directory with only its skill files. No access to other experts' prompts or tools.</div>
+<div class="callout warn"><b>Output validation:</b> After the expert returns, the orchestrator validates the output against the declared JSON schema. Schema violations trigger one retry with an error hint, then escalation to the operator.</div>
+<div class="callout warn"><b>Turn limits:</b> Each expert has a max turn count. If it exceeds the limit without producing valid output, the session is terminated and the orchestrator escalates.</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- TAB 2: OPTION A — INNGEST ORCHESTRATES                  -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-2">
+
+<div class="section-title">Option A: Inngest Orchestrates, Claude Reasons<span class="line"></span></div>
+<p class="desc">The durable execution engine (Inngest) owns the phase graph. Claude is invoked INSIDE each step as a reasoning engine. The orchestrator is deterministic Python code. Claude handles judgment calls within domain experts.</p>
+
+<div class="callout good"><b>Key idea:</b> Inngest is the process that never dies &mdash; it handles crash recovery, multi-day waits, and state persistence. Claude is ephemeral &mdash; each expert invocation is a short session that starts, reasons, returns a result, and ends.</div>
+
+<div class="side-by-side">
+  <div class="side-panel">
+    <h3>Execution Flow</h3>
+    <div class="subtitle">Each box is an Inngest <code>step.run()</code> &mdash; durable, memoized, crash-recoverable</div>
+    <div class="v-flow">
+      <div class="phase-box green" style="border-color:var(--green)"><div class="icon">&#128229;</div><div class="info"><div class="title">Event: rx/new_rx</div><div class="sub">Inngest function triggered by NCPDP message arrival</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#128203;</div><div class="info"><div class="title">step.run("intake")</div><div class="sub">invoke_expert("intake-agent") &rarr; Claude session &rarr; structured result</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box red"><div class="icon">&#9995;</div><div class="info"><div class="title">step.wait_for_event("intake-hitl")</div><div class="sub">If needs_human=true &rarr; pause for operator. Inngest sleeps (no cost). Resumes when operator responds.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#128221;</div><div class="info"><div class="title">step.run("data-entry")</div><div class="sub">invoke_expert("data-entry-agent") &rarr; Claude session &rarr; validated fields</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#9877;&#65039;</div><div class="info"><div class="title">step.run("clinical")</div><div class="sub">invoke_expert("clinical-agent") &rarr; REMS, checklist, inventory</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#128179;</div><div class="info"><div class="title">step.run("billing")</div><div class="sub">invoke_expert("billing-agent") &rarr; claim submission &rarr; paid/rejected</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box yellow"><div class="icon">&#128269;</div><div class="info"><div class="title">if rejected: step.run("classify")</div><div class="sub">invoke_expert("rejection-classifier") &rarr; action recommendation</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box purple"><div class="icon">&#128260;</div><div class="info"><div class="title">if PA required: step.send_event("pa/initiate")</div><div class="sub">Spawn PA sub-orchestrator. step.wait_for_event("pa/completed", timeout="30d") &mdash; Inngest sleeps for days/weeks.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#128138;</div><div class="info"><div class="title">step.run("dur")</div><div class="sub">invoke_expert("dur-agent") &rarr; DDI, allergies, drug-disease, duplicates</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#128230;</div><div class="info"><div class="title">step.run("fulfillment")</div><div class="sub">invoke_expert("fulfillment-agent") &rarr; label, scan, sweep (HITL-heavy)</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box red"><div class="icon">&#128203;</div><div class="info"><div class="title">step.wait_for_event("pv2-approval")</div><div class="sub">Pharmacist final verification (PV2). Hard HITL gate.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#128666;</div><div class="info"><div class="title">step.run("shipping")</div><div class="sub">invoke_expert("shipping-agent") &rarr; cold chain, rates, label, shipment</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box green" style="border-color:var(--green)"><div class="icon">&check;</div><div class="info"><div class="title">Complete</div><div class="sub">rx_status = "completed". Work item closed.</div></div></div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <h3>What Lives Where</h3>
+    <div class="subtitle">Clear separation between durable execution and intelligent reasoning</div>
+
+    <div class="callout info" style="margin-top:0"><b>Inngest owns:</b>
+      <br>&bull; Phase graph (which step runs after which)
+      <br>&bull; State persistence (rx_context survives crashes)
+      <br>&bull; Multi-day waits (PA approval, HITL gates)
+      <br>&bull; Retry logic (if a step fails, memoized retry)
+      <br>&bull; Event routing (rx/new_rx &rarr; this function)
+      <br>&bull; Concurrency (rate limits, parallel Rx flows)
+    </div>
+
+    <div class="callout warn"><b>Claude owns:</b>
+      <br>&bull; Fuzzy matching (patient matching with confidence)
+      <br>&bull; Interpretation (sig codes, rejection classification)
+      <br>&bull; Clinical reasoning (DUR severity assessment)
+      <br>&bull; Decision support (when results are ambiguous)
+      <br>&bull; Natural language (drafting outreach messages)
+    </div>
+
+    <div class="callout good"><b>invoke_expert() is the bridge:</b>
+      <br>&bull; Looks up expert in registry
+      <br>&bull; Creates a Claude agent session with scoped tools
+      <br>&bull; Sends the input as a prompt
+      <br>&bull; Collects the structured result
+      <br>&bull; Validates against output schema
+      <br>&bull; Returns to Inngest step
+    </div>
+
+    <h4 style="margin-top:24px;color:var(--accent2)">Sub-workflow pattern (PA, REMS)</h4>
+    <p style="font-size:12px;color:var(--text2);margin:8px 0">When a phase needs to spawn a multi-day saga:</p>
+    <div style="font-size:12px">
+      1. Current Inngest step calls <code>step.send_event("pa/initiate")</code><br>
+      2. A SEPARATE Inngest function handles PA lifecycle<br>
+      3. Current function calls <code>step.wait_for_event("pa/completed")</code><br>
+      4. Inngest releases all resources &mdash; zero cost while waiting<br>
+      5. Days/weeks later: PA function fires <code>pa/completed</code> event<br>
+      6. Original Rx function wakes up, resumes from where it left off<br>
+      7. Context is intact because Inngest memoized all previous steps
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- TAB 3: OPTION B — CLAUDE ORCHESTRATES                   -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-3">
+
+<div class="section-title">Option B: Claude Orchestrates Everything<span class="line"></span></div>
+<p class="desc">A single Claude session acts as both the orchestrator AND the execution engine. It holds the phase graph in its system prompt, calls domain experts as subagents, and manages the full lifecycle.</p>
+
+<div class="callout warn"><b>This is what the current monolith prompt does</b> &mdash; but decomposed into subagents instead of doing everything inline. Claude holds the workflow state in its conversation context.</div>
+
+<div class="side-by-side">
+  <div class="side-panel">
+    <h3>Execution Flow</h3>
+    <div class="subtitle">One long-lived Claude session with subagent tool calls</div>
+    <div class="v-flow">
+      <div class="phase-box purple"><div class="icon">&#127919;</div><div class="info"><div class="title">Orchestrator Session Starts</div><div class="sub">System prompt: phase graph + invoke_expert tool + context shape</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#128203;</div><div class="info"><div class="title">Turn 1: "Starting intake."</div><div class="sub">Claude calls invoke_expert("intake-agent", ncpdp_data) &rarr; subagent session &rarr; result</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box red"><div class="icon">&#9995;</div><div class="info"><div class="title">Turn 2: "Intake needs human review."</div><div class="sub">Claude calls request_human_review() &rarr; AskUserQuestion &rarr; operator responds &rarr; Claude reads answer</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#128221;</div><div class="info"><div class="title">Turn 3: "Data entry."</div><div class="sub">Claude calls invoke_expert("data-entry-agent", rx_data) &rarr; subagent &rarr; result</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#9877;&#65039;</div><div class="info"><div class="title">Turn 4: "Clinical review."</div><div class="sub">Claude calls invoke_expert("clinical-agent", context) &rarr; subagent &rarr; checklist</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#128179;</div><div class="info"><div class="title">Turn 5: "Submitting claim."</div><div class="sub">Claude calls invoke_expert("billing-agent", claim_data) &rarr; subagent &rarr; paid/rejected</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box yellow"><div class="icon">&#129300;</div><div class="info"><div class="title">Turn 6: Claude REASONS about rejection</div><div class="sub">"Reject code 75 means PA required. I'll create a work item and inform the operator."</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box red"><div class="icon">&#128721;</div><div class="info"><div class="title">SESSION ENDS</div><div class="sub">Claude can't wait days for PA. Session must end. State persisted externally. New session when PA completes.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box purple"><div class="icon">&#128260;</div><div class="info"><div class="title">NEW Session (days later)</div><div class="sub">PA approved. New orchestrator session with resumed context. "PA approved. Continuing from billing."</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">&#128138;</div><div class="info"><div class="title">Turn 1 (new session): "DUR review."</div><div class="sub">Claude calls invoke_expert("dur-agent", context) &rarr; subagent &rarr; findings</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue"><div class="icon">...</div><div class="info"><div class="title">Turns 2-5: Fulfillment, PV2, Shipping</div><div class="sub">Each phase = one invoke_expert call + orchestrator reasoning</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box green" style="border-color:var(--green)"><div class="icon">&check;</div><div class="info"><div class="title">Complete</div><div class="sub">Orchestrator emits final report, updates rx_status</div></div></div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <h3>What Lives Where</h3>
+    <div class="subtitle">Claude does the thinking AND the routing</div>
+
+    <div class="callout warn" style="margin-top:0"><b>Claude owns:</b>
+      <br>&bull; Phase graph (encoded in system prompt)
+      <br>&bull; Decision logic (what to do after each phase)
+      <br>&bull; Context management (in conversation history)
+      <br>&bull; HITL interaction (via AskUserQuestion tool)
+      <br>&bull; Report generation (emit_report tool)
+      <br>&bull; Expert invocation (invoke_expert tool)
+    </div>
+
+    <div class="callout info"><b>External system needed for:</b>
+      <br>&bull; Multi-day waits (Claude can't hold a session open)
+      <br>&bull; State persistence across session boundaries
+      <br>&bull; Event triggers (something must wake Claude back up)
+      <br>&bull; Crash recovery (if Claude session dies mid-flow)
+    </div>
+
+    <h4 style="margin-top:24px;color:var(--accent2)">The session boundary problem</h4>
+    <p style="font-size:12px;color:var(--text2);margin:8px 0">Claude sessions are ephemeral. When the Rx flow hits a multi-day wait (PA approval, prescriber callback), the session MUST end. This means:</p>
+    <div style="font-size:12px;margin:8px 0">
+      1. Before ending: serialize rx_context to database<br>
+      2. Create a trigger: "when event X arrives, start new session"<br>
+      3. New session loads serialized context from DB<br>
+      4. System prompt says: "You are resuming from Phase N"<br>
+      5. Claude re-orients and continues<br>
+    </div>
+    <div class="callout bad"><b>Risk:</b> Context loss across session boundaries. The new session doesn't have the conversation history from the previous session &mdash; only the serialized context dict. Nuanced reasoning from earlier turns (why a particular match was chosen, operator preferences) may be lost.</div>
+
+    <h4 style="margin-top:24px;color:var(--accent2)">The orchestrator's invoke_expert tool</h4>
+    <p style="font-size:12px;color:var(--text2);margin:8px 0">When the orchestrator calls invoke_expert(), a tool handler:</p>
+    <div style="font-size:12px;margin:8px 0">
+      1. Looks up the expert in the registry<br>
+      2. Creates a NEW Claude subagent session<br>
+      3. Gives it the expert's scoped prompt + tools<br>
+      4. Sends the input data as the query<br>
+      5. Waits for the subagent to complete<br>
+      6. Validates output against schema<br>
+      7. Returns structured result to orchestrator<br>
+    </div>
+    <p style="font-size:11px;color:var(--text3);margin-top:8px">This is a nested Claude session &mdash; technically feasible via the MCP tool server pattern. The subagent runs in its own workspace with its own tool allowlist.</p>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- TAB 4: OPTION C — CLAUDE + DAG MEMORY                   -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-4">
+
+<div class="section-title">Option C: Claude Orchestrates + Durable DAG Memory<span class="line"></span></div>
+<p class="desc">Claude is the orchestrator AND the DAG planner. The workflow graph lives in a mutable JSONB memory file that Claude reads and writes. Every decision, expert result, and state transition is checkpointed. Session crashes are survivable. Claude can modify the DAG mid-flow based on discoveries.</p>
+
+<div class="callout good"><b>Key insight:</b> The DAG is data, not code. Claude reads the DAG, decides the next node, invokes the expert, writes the result, and checkpoints state. If the session dies, a new session reads the file and resumes from the last checkpoint. This gives you durability (from state serialization) AND non-determinism (Claude can replan).</div>
+
+<div class="section-title">Execution Flow<span class="line"></span></div>
+<p class="desc">The saga lives longer than any single Claude session. Each session is short-lived &mdash; it reads state, makes one or more decisions, checkpoints, then ends. External triggers wake new sessions when work arrives (human response, fax, scheduled event). The JSONB memory file is the thread that ties them together.</p>
+
+<div class="side-by-side">
+  <div class="side-panel">
+    <h3>Saga Lifecycle</h3>
+    <div class="subtitle">Every box marked &#128190; is a checkpoint to the JSONB memory file</div>
+    <div class="v-flow">
+      <div class="phase-box green" style="border-color:var(--green);width:100%;max-width:600px"><div class="icon">&#128229;</div><div class="info"><div class="title">Event arrives: rx/new_rx</div><div class="sub">Handler creates saga row in DB with initial context, spawns orchestrator session</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box purple" style="width:100%;max-width:600px"><div class="icon">&#127919;</div><div class="info"><div class="title">Session 1: Read saga &rarr; Plan DAG</div><div class="sub">Claude reads empty saga, builds initial 8-node DAG, checkpoints &#128190;. Decides: start at intake.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue" style="width:100%;max-width:600px"><div class="icon">&#128218;</div><div class="info"><div class="title">Invoke intake-agent &#128190;</div><div class="sub">Checkpoint before + after. Expert returns: { patient_id: null, needs_human: true, candidates: [...] }</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box red" style="width:100%;max-width:600px"><div class="icon">&#128721;</div><div class="info"><div class="title">Pause: awaiting_human &#128190;</div><div class="sub">Checkpoint: status=awaiting_human, pending_question saved, resume_trigger=rx/intake_resolved. Session 1 ENDS.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box yellow" style="width:100%;max-width:600px"><div class="icon">&#9200;</div><div class="info"><div class="title">Wait (minutes / hours / days)</div><div class="sub">Zero sessions running. Saga row sits in DB. No LLM cost, no compute cost.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box green" style="border-color:var(--green);width:100%;max-width:600px"><div class="icon">&#128172;</div><div class="info"><div class="title">Operator responds &rarr; trigger fires</div><div class="sub">Event handler writes human_response to saga, spawns Session 2 with saga_id.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box purple" style="width:100%;max-width:600px"><div class="icon">&#127919;</div><div class="info"><div class="title">Session 2: Resume from intake</div><div class="sub">Claude reads saga. Sees: "I was awaiting human input for intake." Reads human_decision. Re-invokes intake-agent with enriched input.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue" style="width:100%;max-width:600px"><div class="icon">&#128218;</div><div class="info"><div class="title">Advance through phases &#128190; &#128190; &#128190;</div><div class="sub">data_entry &rarr; clinical &rarr; billing. Each expert invocation brackets with checkpoints. Context accumulates in memory file.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box yellow" style="width:100%;max-width:600px"><div class="icon">&#129300;</div><div class="info"><div class="title">Billing rejected &rarr; Claude adapts DAG</div><div class="sub">Rejection classifier says PA required. Claude inserts pa_lifecycle node + edges, checkpoints &#128190; modified DAG, spawns sub-saga.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box red" style="width:100%;max-width:600px"><div class="icon">&#128721;</div><div class="info"><div class="title">Pause: awaiting_sub_saga &#128190;</div><div class="sub">Checkpoint: status=paused, resume_trigger=pa/completed for this saga_id. Session 2 ENDS.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box yellow" style="width:100%;max-width:600px"><div class="icon">&#128197;</div><div class="info"><div class="title">Days later: PA sub-saga completes</div><div class="sub">PA orchestrator (separate saga) finishes, fires pa/completed. Trigger handler wakes parent saga.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box purple" style="width:100%;max-width:600px"><div class="icon">&#127919;</div><div class="info"><div class="title">Session 3: Re-bill with PA</div><div class="sub">Claude reads saga (now has pa_number in context). Loops back to billing node &mdash; re-invokes billing-agent with PA on file.</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box blue" style="width:100%;max-width:600px"><div class="icon">&#128138;</div><div class="info"><div class="title">Claim paid &rarr; DUR &rarr; Fulfillment &rarr; PV2 &rarr; Shipping</div><div class="sub">Each phase: invoke expert, checkpoint, advance node. HITL pauses handled the same way (end session, resume on event).</div></div></div>
+      <div class="v-arrow"></div>
+      <div class="phase-box green" style="border-color:var(--green);width:100%;max-width:600px"><div class="icon">&check;</div><div class="info"><div class="title">Complete &#128190;</div><div class="sub">Final checkpoint: status=completed. Saga row kept forever for audit. Full decision log preserved.</div></div></div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <h3>What Lives Where</h3>
+    <div class="subtitle">The JSONB file is the thread, Claude sessions are short</div>
+
+    <div class="callout good" style="margin-top:0"><b>JSONB Memory File owns:</b>
+      <br>&bull; Current DAG (nodes, edges, statuses)
+      <br>&bull; Accumulated context from all completed phases
+      <br>&bull; Decision log (natural language audit trail)
+      <br>&bull; Expert result cache (idempotency)
+      <br>&bull; Pending human input (question + context)
+      <br>&bull; Resume triggers (which events wake this saga)
+      <br>&bull; Version counter (optimistic locking)
+    </div>
+
+    <div class="callout info"><b>Claude Session owns (ephemeral):</b>
+      <br>&bull; Reading the saga and understanding current state
+      <br>&bull; Making the next decision
+      <br>&bull; Calling domain experts
+      <br>&bull; Modifying the DAG if needed
+      <br>&bull; Writing checkpoints
+      <br>&bull; Each session lives for seconds to minutes
+    </div>
+
+    <div class="callout warn"><b>External handlers own:</b>
+      <br>&bull; Event routing (which events wake which sagas)
+      <br>&bull; Saga discovery (find sagas with matching resume_triggers)
+      <br>&bull; Session spawning (start a new Claude session with saga_id)
+      <br>&bull; Optional cron sweeper (wake stalled sagas, retry failed)
+    </div>
+
+    <h4 style="margin-top:24px;color:var(--accent2)">Session boundary pattern</h4>
+    <div style="font-size:12px;line-height:1.8">
+      A session does the minimum work possible then ends:
+      <br>
+      1. Read saga &rarr; understand state<br>
+      2. Execute 1-3 phases (until HITL, sub-saga, or done)<br>
+      3. Checkpoint final state<br>
+      4. Register resume_trigger if pausing<br>
+      5. Session ends &mdash; release all resources<br>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:6px">
+      Why end the session even without HITL? Cost control. If Claude's done for now, don't keep the session alive. Next decision = new session + read saga. Cache keeps previous expert results.
+    </div>
+
+    <h4 style="margin-top:20px;color:var(--accent2)">DAG modification example</h4>
+    <div style="font-size:12px;line-height:1.8">
+      During clinical phase, expert returns: "REMS enrollment required, patient not enrolled."
+      <br><br>
+      Claude responds by:
+      <br>
+      1. Appending rems_enrollment node to DAG<br>
+      2. Rerouting edges: clinical &rarr; rems_enrollment &rarr; billing<br>
+      3. Checkpointing modified DAG with version++<br>
+      4. Decision log: "REMS required, inserted rems_enrollment node before billing"<br>
+      5. Advances to rems_enrollment (new node)
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:6px">
+      Original 8-node DAG becomes 9-node DAG. Persists. Next session sees the modified graph as truth.
+    </div>
+  </div>
+</div>
+
+<div class="section-title">The Saga Memory File<span class="line"></span></div>
+<p class="desc">Every active workflow has a JSONB file (or Postgres JSONB row) that captures everything needed to resume. This is the "state machine on disk."</p>
+
+<div style="background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);padding:20px;margin:16px 0">
+  <div style="font-family:monospace;font-size:12px;line-height:1.6">
+    <div style="color:var(--text3)">// rx-saga-abc123.json</div>
+    <div>{</div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"saga_id"</span>: <span style="color:var(--green)">"rx-abc123"</span>,</div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"saga_type"</span>: <span style="color:var(--green)">"newrx_flow"</span>,</div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"status"</span>: <span style="color:var(--green)">"running"</span>,  <span style="color:var(--text3)">// running | paused | awaiting_human | completed | failed</span></div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"current_node"</span>: <span style="color:var(--green)">"dur_review"</span>,</div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"version"</span>: <span style="color:var(--yellow)">7</span>,  <span style="color:var(--text3)">// incremented on every checkpoint</span></div>
+    <div></div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"dag"</span>: {</div>
+    <div style="padding-left:40px"><span style="color:var(--purple)">"nodes"</span>: {</div>
+    <div style="padding-left:60px"><span style="color:var(--accent)">"intake"</span>: { status: <span style="color:var(--green)">"completed"</span>, result: {...}, completed_at: <span style="color:var(--green)">"..."</span> },</div>
+    <div style="padding-left:60px"><span style="color:var(--accent)">"data_entry"</span>: { status: <span style="color:var(--green)">"completed"</span>, result: {...} },</div>
+    <div style="padding-left:60px"><span style="color:var(--accent)">"clinical"</span>: { status: <span style="color:var(--green)">"completed"</span>, result: {...} },</div>
+    <div style="padding-left:60px"><span style="color:var(--accent)">"billing"</span>: { status: <span style="color:var(--green)">"completed"</span>, result: { paid: true, ... } },</div>
+    <div style="padding-left:60px"><span style="color:var(--accent)">"dur_review"</span>: { status: <span style="color:var(--yellow)">"in_progress"</span>, started_at: <span style="color:var(--green)">"..."</span> },</div>
+    <div style="padding-left:60px"><span style="color:var(--accent)">"fulfillment"</span>: { status: <span style="color:var(--text3)">"pending"</span> },</div>
+    <div style="padding-left:60px"><span style="color:var(--accent)">"pv2"</span>: { status: <span style="color:var(--text3)">"pending"</span> },</div>
+    <div style="padding-left:60px"><span style="color:var(--accent)">"shipping"</span>: { status: <span style="color:var(--text3)">"pending"</span> }</div>
+    <div style="padding-left:40px">},</div>
+    <div style="padding-left:40px"><span style="color:var(--purple)">"edges"</span>: [</div>
+    <div style="padding-left:60px">{ from: <span style="color:var(--green)">"billing"</span>, to: <span style="color:var(--green)">"dur_review"</span>, condition: <span style="color:var(--green)">"paid"</span>, taken: <span style="color:var(--yellow)">true</span> },</div>
+    <div style="padding-left:60px">{ from: <span style="color:var(--green)">"billing"</span>, to: <span style="color:var(--green)">"classify_rejection"</span>, condition: <span style="color:var(--green)">"rejected"</span>, taken: <span style="color:var(--yellow)">false</span> }</div>
+    <div style="padding-left:40px">]</div>
+    <div style="padding-left:20px">},</div>
+    <div></div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"context"</span>: {  <span style="color:var(--text3)">// accumulated fields from all completed nodes</span></div>
+    <div style="padding-left:40px">patient_id: <span style="color:var(--green)">"pt_8832"</span>, prescriber_id: <span style="color:var(--green)">"pr_2201"</span>, ndc: <span style="color:var(--green)">"00069-0150-01"</span>,</div>
+    <div style="padding-left:40px">rx_id: <span style="color:var(--green)">"rx_5541"</span>, paid_amount: <span style="color:var(--yellow)">450.00</span>, copay: <span style="color:var(--yellow)">25.00</span>, ...</div>
+    <div style="padding-left:20px">},</div>
+    <div></div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"decision_log"</span>: [  <span style="color:var(--text3)">// natural language audit trail</span></div>
+    <div style="padding-left:40px">{ turn: <span style="color:var(--yellow)">1</span>, decision: <span style="color:var(--green)">"patient matched with 0.95 confidence"</span>, at: <span style="color:var(--green)">"..."</span> },</div>
+    <div style="padding-left:40px">{ turn: <span style="color:var(--yellow)">4</span>, decision: <span style="color:var(--green)">"claim paid, proceeding to DUR"</span>, at: <span style="color:var(--green)">"..."</span> },</div>
+    <div style="padding-left:40px">{ turn: <span style="color:var(--yellow)">5</span>, decision: <span style="color:var(--green)">"REMS required, added rems_verification node to DAG"</span>, at: <span style="color:var(--green)">"..."</span> }</div>
+    <div style="padding-left:20px">],</div>
+    <div></div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"pending_human_input"</span>: <span style="color:var(--red)">null</span>,  <span style="color:var(--text3)">// or { question, options, asked_at }</span></div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"expert_cache"</span>: { ... },  <span style="color:var(--text3)">// memoized results (deterministic replay)</span></div>
+    <div style="padding-left:20px"><span style="color:var(--purple)">"resume_triggers"</span>: [ ... ]  <span style="color:var(--text3)">// events that will wake this saga</span></div>
+    <div>}</div>
+  </div>
+</div>
+
+<div class="section-title">Checkpoint Flow<span class="line"></span></div>
+<p class="desc">Every state change writes to the memory file atomically. The version number increments on each write. Claude never advances the DAG without first checkpointing.</p>
+
+<div class="v-flow" style="max-width:900px">
+  <div class="phase-box purple" style="width:100%;max-width:700px"><div class="icon">&#127919;</div><div class="info"><div class="title">Claude reads memory file</div><div class="sub">Loads DAG, context, decision log, expert cache. Understands: "I'm at dur_review, billing was paid, here's what's been decided."</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box yellow" style="width:100%;max-width:700px"><div class="icon">&#129300;</div><div class="info"><div class="title">Claude decides next action</div><div class="sub">Based on DAG edges from current_node, evaluates conditions, picks next node. Can also modify DAG (add/skip nodes) if context warrants.</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box blue" style="width:100%;max-width:700px"><div class="icon">&#128190;</div><div class="info"><div class="title">Checkpoint: "about to invoke dur-agent"</div><div class="sub">Writes to memory: current_node.status = "in_progress", decision_log gets new entry. Version++.</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box blue" style="width:100%;max-width:700px"><div class="icon">&#128218;</div><div class="info"><div class="title">Invoke domain expert</div><div class="sub">invoke_expert("dur-agent", input_slice). Expert runs, returns structured result.</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box blue" style="width:100%;max-width:700px"><div class="icon">&#128190;</div><div class="info"><div class="title">Checkpoint: result received</div><div class="sub">Writes to memory: current_node.status = "completed", result cached, context merged. Version++.</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box yellow" style="width:100%;max-width:700px"><div class="icon">&#129300;</div><div class="info"><div class="title">Claude reads result &amp; updates DAG</div><div class="sub">"DUR found a critical DDI. Need to add prescriber_outreach node before fulfillment." Modifies DAG, checkpoints.</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box green" style="width:100%;max-width:700px"><div class="icon">&#8634;</div><div class="info"><div class="title">Loop: advance to next node</div><div class="sub">OR: if needs_human, pause saga and register resume trigger. OR: if complete, close saga.</div></div></div>
+</div>
+
+<div class="section-title">Crash Recovery<span class="line"></span></div>
+<p class="desc">If Claude's session dies at any point, a new session can resume. The memory file is the single source of truth.</p>
+
+<div class="side-by-side">
+  <div class="side-panel">
+    <h3>&#128165; Crash scenario</h3>
+    <div class="subtitle">Session dies mid-flow</div>
+    <div style="font-size:12px;line-height:1.8">
+      1. Session checkpoints "about to invoke billing-agent"<br>
+      2. Invokes billing-agent, gets paid response<br>
+      3. <span style="color:var(--red);font-weight:600">&#128165; Session crashes before checkpointing result</span><br>
+      4. Memory file still shows: billing = in_progress<br>
+      5. Expert cache is empty (result wasn't saved)<br>
+      6. But the billing result IS in the Claude session history (lost)
+    </div>
+    <div class="callout warn" style="margin-top:12px;font-size:11px"><b>Mitigation:</b> Checkpoint BEFORE AND AFTER every expert invocation. Use expert_cache keyed by input hash &mdash; if the same input is seen again, reuse the cached result.</div>
+  </div>
+
+  <div class="side-panel">
+    <h3>&#128260; Recovery flow</h3>
+    <div class="subtitle">New session picks up</div>
+    <div style="font-size:12px;line-height:1.8">
+      1. Monitor detects saga is running but session is dead<br>
+      2. Starts new orchestrator session with saga_id<br>
+      3. New session reads memory file<br>
+      4. Sees: current_node=billing, status=in_progress<br>
+      5. Checks expert_cache for billing input hash<br>
+      6. <span style="color:var(--green);font-weight:600">Cache miss &rarr; re-invoke billing-agent</span> (idempotent)<br>
+      7. Checkpoints result this time<br>
+      8. Continues to next node
+    </div>
+    <div class="callout good" style="margin-top:12px;font-size:11px"><b>Key property:</b> Domain experts must be idempotent. Submitting the same claim twice should not double-bill &mdash; use the claim's request_id to dedupe server-side.</div>
+  </div>
+</div>
+
+<div class="section-title">Dynamic DAG Modification<span class="line"></span></div>
+<p class="desc">This is where Claude's flexibility pays off. The DAG is not static &mdash; Claude can add, remove, or reorder nodes based on what it discovers. All modifications are checkpointed.</p>
+
+<div class="side-by-side">
+  <div class="side-panel">
+    <h3>Before DUR</h3>
+    <div class="subtitle">Standard 8-node DAG</div>
+    <div style="font-size:12px;font-family:monospace;line-height:2">
+      intake &rarr; data_entry &rarr; clinical &rarr; billing<br>
+      &rarr; dur_review &rarr; fulfillment &rarr; pv2 &rarr; shipping
+    </div>
+  </div>
+  <div class="side-panel">
+    <h3>After DUR finds critical DDI</h3>
+    <div class="subtitle">Claude inserted 2 new nodes</div>
+    <div style="font-size:12px;font-family:monospace;line-height:2">
+      intake &rarr; data_entry &rarr; clinical &rarr; billing<br>
+      &rarr; dur_review <span style="color:var(--purple);font-weight:700">&rarr; prescriber_outreach</span><br>
+      <span style="color:var(--purple);font-weight:700">&rarr; dur_reconfirm</span> &rarr; fulfillment &rarr; pv2 &rarr; shipping
+    </div>
+    <div class="callout info" style="margin-top:12px;font-size:11px"><b>Decision log entry:</b> "Critical drug-drug interaction (contraindicated) detected with patient's active warfarin. Inserting prescriber_outreach node to request clarification, then dur_reconfirm to re-validate before proceeding to fulfillment."</div>
+  </div>
+</div>
+
+<div class="section-title">Multi-Day Waits Without Sessions<span class="line"></span></div>
+
+<div class="side-by-side">
+  <div class="side-panel">
+    <h3>&#128268; Saga enters paused state</h3>
+    <div style="font-size:12px;line-height:1.8">
+      1. Expert returns <code>{ needs_human: true, question: "..." }</code><br>
+      2. Claude checkpoints: <code>status = "awaiting_human"</code><br>
+      3. Writes pending_human_input to memory<br>
+      4. Adds resume_trigger: <code>{ event: "human_response", saga_id }</code><br>
+      5. Claude session ends (no cost)<br>
+      6. Saga row in DB now shows: paused, awaiting_human
+    </div>
+  </div>
+  <div class="side-panel">
+    <h3>&#9200; When trigger fires</h3>
+    <div style="font-size:12px;line-height:1.8">
+      1. Operator responds OR PA fax arrives (days later)<br>
+      2. Event handler finds matching resume_trigger<br>
+      3. Updates memory file with human_response<br>
+      4. Starts new Claude session with saga_id<br>
+      5. Claude reads memory: "I was waiting for human input, here's the response"<br>
+      6. Continues from where it left off<br>
+      7. Checkpoints new state, invokes next expert
+    </div>
+  </div>
+</div>
+
+<div class="callout info" style="margin-top:16px"><b>Why this works without Inngest:</b> The memory file IS the durable state. External event handlers (Postgres LISTEN/NOTIFY, a cron sweeper, webhook handlers) wake up paused sagas by spawning new Claude sessions. No long-running process needed &mdash; just trigger &rarr; spawn &rarr; resume.</div>
+
+<div class="section-title">Tools Claude Has in This Pattern<span class="line"></span></div>
+
+<div class="experts-grid" style="grid-template-columns:repeat(3,1fr)">
+  <div class="expert-card" style="border-top-color:var(--purple)">
+    <div class="name">&#128190; Memory Tools</div>
+    <div class="role">State persistence</div>
+    <ul>
+      <li>read_saga(saga_id)</li>
+      <li>checkpoint_saga(saga_id, state)</li>
+      <li>append_decision(saga_id, entry)</li>
+      <li>update_dag(saga_id, dag_ops)</li>
+    </ul>
+  </div>
+  <div class="expert-card" style="border-top-color:var(--accent)">
+    <div class="name">&#128218; Expert Tools</div>
+    <div class="role">Domain invocation</div>
+    <ul>
+      <li>invoke_expert(id, input)</li>
+      <li>list_available_experts()</li>
+      <li>get_expert_schema(id)</li>
+    </ul>
+  </div>
+  <div class="expert-card" style="border-top-color:var(--yellow)">
+    <div class="name">&#128200; Saga Tools</div>
+    <div class="role">Lifecycle management</div>
+    <ul>
+      <li>pause_saga(trigger_event)</li>
+      <li>complete_saga(result)</li>
+      <li>fail_saga(reason)</li>
+      <li>spawn_sub_saga(type, input)</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- TAB 5: COMPARISON                                       -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-5">
+
+<div class="section-title">Side-by-Side Comparison<span class="line"></span></div>
+
+<table class="compare">
+  <thead><tr><th style="width:160px">Aspect</th><th>Option A: Inngest</th><th>Option B: Claude Only</th><th>Option C: Claude + DAG Memory</th></tr></thead>
+  <tbody>
+    <tr><td><b>Phase graph lives in</b></td><td>Python code (static)</td><td>Claude's system prompt (static)</td><td class="good">Mutable JSONB file (dynamic)</td></tr>
+    <tr><td><b>State persistence</b></td><td class="good">Inngest memoizes every step</td><td class="bad">Session history only</td><td class="good">Checkpointed to JSONB on every decision</td></tr>
+    <tr><td><b>Multi-day waits</b></td><td class="good">Native wait_for_event()</td><td class="bad">Serialize + external trigger needed</td><td class="good">Pause saga + register resume_trigger</td></tr>
+    <tr><td><b>Crash recovery</b></td><td class="good">Automatic via memoization</td><td class="bad">None built-in</td><td class="good">New session reads last checkpoint, expert_cache avoids re-running</td></tr>
+    <tr><td><b>Where Claude is used</b></td><td>Inside experts only</td><td>Orchestrator + experts</td><td>Orchestrator + experts + DAG planning</td></tr>
+    <tr><td><b>Reasoning scope</b></td><td>Narrow per expert</td><td class="good">Full picture</td><td class="good">Full picture + decision history</td></tr>
+    <tr><td><b>DAG modification mid-flow</b></td><td class="bad">Not supported &mdash; redeploy code</td><td>Only in current session (lost on restart)</td><td class="good">Native &mdash; Claude modifies DAG, checkpoints, persists</td></tr>
+    <tr><td><b>Auditability</b></td><td class="good">Structured step I/O</td><td>Transcript only</td><td class="good">Decision log in JSONB + DAG history</td></tr>
+    <tr><td><b>Non-determinism</b></td><td class="bad">Low (deterministic flow)</td><td class="good">High (but fragile)</td><td class="good">High with durability (best of both)</td></tr>
+    <tr><td><b>Infrastructure</b></td><td>Inngest + Postgres</td><td class="good">Just Claude SDK</td><td>Claude SDK + Postgres JSONB (no Inngest)</td></tr>
+    <tr><td><b>Testability</b></td><td class="good">Step-level unit tests</td><td class="bad">Full session replay</td><td class="good">Replay saga from any checkpoint</td></tr>
+    <tr><td><b>Concurrency</b></td><td class="good">Inngest handles natively</td><td>Each Rx = one session</td><td>Saga row-level locks in Postgres</td></tr>
+  </tbody>
+</table>
+
+<div class="section-title">Recommendation<span class="line"></span></div>
+
+<div class="harness-grid" style="grid-template-columns:repeat(3,1fr)">
+  <div class="h-card gating" style="background:var(--surface);border-color:var(--border-strong)">
+    <h4 style="color:var(--accent2)">Option A &mdash; Inngest</h4>
+    <p><b>Best for:</b></p>
+    <div style="font-size:12px;line-height:1.8">
+      &bull; High-volume production<br>
+      &bull; Well-defined rigid workflows<br>
+      &bull; Strong regulatory audit needs<br>
+      &bull; Teams with existing Inngest infra
+    </div>
+    <p style="margin-top:10px"><b>Trade-off:</b></p>
+    <div style="font-size:11px;color:var(--text2)">Rigid. Phase graph in code requires redeploys to change. Not adaptive to edge cases.</div>
+  </div>
+  <div class="h-card" style="background:var(--surface);border-color:var(--border-strong)">
+    <h4 style="color:var(--accent2)">Option B &mdash; Pure Claude</h4>
+    <p><b>Best for:</b></p>
+    <div style="font-size:12px;line-height:1.8">
+      &bull; Early prototyping<br>
+      &bull; Undefined workflows<br>
+      &bull; Short-running tasks only<br>
+      &bull; Exploratory automation
+    </div>
+    <p style="margin-top:10px"><b>Trade-off:</b></p>
+    <div style="font-size:11px;color:var(--text2)">Fragile. No durability. Can't survive session death or multi-day waits. Not production-ready.</div>
+  </div>
+  <div class="h-card" style="background:var(--green-bg);border-color:var(--green-border)">
+    <h4 style="color:var(--green)">&#11088; Option C &mdash; Claude + DAG Memory</h4>
+    <p><b>Best for:</b></p>
+    <div style="font-size:12px;line-height:1.8">
+      &bull; Adaptive workflows<br>
+      &bull; Non-linear paths (DAG modifications)<br>
+      &bull; Durability without Inngest overhead<br>
+      &bull; Teams that want Claude's flexibility with production reliability
+    </div>
+    <p style="margin-top:10px"><b>Trade-off:</b></p>
+    <div style="font-size:11px;color:var(--text2)">Requires discipline: idempotent experts, atomic checkpoints, careful memory file schema versioning.</div>
+  </div>
+</div>
+
+<div class="section-title">HITL: How Domain Experts Get Human Input<span class="line"></span></div>
+<p class="desc">When a domain expert needs operator input, it does NOT ask directly. The orchestrator is the only agent that interacts with humans. This keeps HITL consistent and auditable.</p>
+
+<div class="callout bad"><b>Anti-pattern:</b> Letting domain experts ask users directly. This breaks encapsulation, duplicates HITL logic across experts, and makes the operator experience inconsistent (different experts phrasing questions differently).</div>
+
+<div class="v-flow" style="max-width:900px">
+  <div class="phase-box blue" style="width:100%;max-width:700px"><div class="icon">&#128218;</div><div class="info"><div class="title">1. Expert invoked with partial context</div><div class="sub">Orchestrator calls invoke_expert("intake-agent", { ncpdp_message, parsed_fields })</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box yellow" style="width:100%;max-width:700px"><div class="icon">&#129300;</div><div class="info"><div class="title">2. Expert hits ambiguity</div><div class="sub">Intake agent finds 2 patient matches. Can't decide. Does NOT call AskUserQuestion. Instead returns structured output.</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box purple" style="width:100%;max-width:700px"><div class="icon">&#128229;</div><div class="info"><div class="title">3. Expert returns needs_human flag</div><div class="sub">{ patient_id: null, needs_human: true, human_questions: [{ question, options: [{label, desc}] }], partial_state: {...} }</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box yellow" style="width:100%;max-width:700px"><div class="icon">&#127919;</div><div class="info"><div class="title">4. Orchestrator receives request</div><div class="sub">Sees needs_human=true. Decides: escalate to operator, skip, or override based on confidence / policy.</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box red" style="width:100%;max-width:700px"><div class="icon">&#128100;</div><div class="info"><div class="title">5. Orchestrator calls AskUserQuestion</div><div class="sub">ONLY the orchestrator holds this tool. Formats the question. In Option C: checkpoints saga as "awaiting_human", ends session.</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box green" style="width:100%;max-width:700px"><div class="icon">&#128172;</div><div class="info"><div class="title">6. Operator responds</div><div class="sub">Answer stored. Saga wakes up (Option A: step.wait_for_event resumes / Option C: new session triggered).</div></div></div>
+  <div class="v-arrow"></div>
+  <div class="phase-box blue" style="width:100%;max-width:700px"><div class="icon">&#128259;</div><div class="info"><div class="title">7. Orchestrator re-invokes the expert</div><div class="sub">invoke_expert("intake-agent", { ...original_input, human_decision: "selected Patient A" }). Expert continues.</div></div></div>
+</div>
+
+<div class="side-by-side" style="margin-top:20px">
+  <div class="callout good" style="flex-direction:column">
+    <b>Why this pattern works:</b>
+    <div style="margin-top:8px;font-size:12px;line-height:1.7">
+      &bull; <b>Single HITL surface</b> &mdash; operators see one consistent question format<br>
+      &bull; <b>Audit trail</b> &mdash; every question + answer logged in decision_log<br>
+      &bull; <b>Checkpointable</b> &mdash; saga pauses at the orchestrator level, not inside an expert<br>
+      &bull; <b>Retry-safe</b> &mdash; re-invoking the expert with the same human_decision is idempotent<br>
+      &bull; <b>Policy-enforceable</b> &mdash; orchestrator can apply org rules (auto-escalate to supervisor, default to "create new" if inactivity)
+    </div>
+  </div>
+  <div class="callout info" style="flex-direction:column">
+    <b>Expert output contract for HITL:</b>
+    <div style="margin-top:8px;font-family:monospace;font-size:11px;line-height:1.6">
+      {<br>
+      &nbsp;&nbsp;needs_human: <span style="color:var(--yellow)">true</span>,<br>
+      &nbsp;&nbsp;human_questions: [{<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;question: <span style="color:var(--green)">"..."</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;options: [{label, description}],<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;input_field: <span style="color:var(--green)">"human_decision"</span><br>
+      &nbsp;&nbsp;}],<br>
+      &nbsp;&nbsp;partial_state: { candidates: [...] },<br>
+      &nbsp;&nbsp;resume_hint: <span style="color:var(--green)">"re-invoke with human_decision"</span><br>
+      }
+    </div>
+  </div>
+</div>
+
+<div class="callout warn"><b>Edge case: in-session HITL for Option B.</b> If the orchestrator is a live Claude session (Option B), it can call AskUserQuestion synchronously and wait for the response in-conversation. But this only works for sub-second operator responses. For anything longer, switch to Option A or C &mdash; session ends, resume trigger registered.</div>
+
+<div class="callout warn" style="margin-top:16px"><b>Hybrid approach:</b> Start with Option B to prototype the Rx flow decomposition. Once the phase graph stabilizes, migrate to Option C (Claude + DAG memory) for adaptive production workloads. Fall back to Option A (Inngest) only when you need the operational maturity of a dedicated workflow engine. The <code>invoke_expert()</code> function is identical across all three options &mdash; only the caller and state persistence changes.</div>
+
+</div>
+
+<div class="footer">CareLink Agent Orchestration Architecture &middot; April 2026 &middot; Confidential</div>
+
+<script>
+function showTab(n){
+  document.querySelectorAll('.tab-content').forEach((t,i)=>{
+    t.classList.toggle('active',i===n);
+  });
+  document.querySelectorAll('.top-tab').forEach((t,i)=>{
+    t.classList.toggle('active',i===n);
+  });
+}
+</script>
+</body>
+</html>
