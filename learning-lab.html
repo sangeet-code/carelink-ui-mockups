@@ -1,0 +1,2812 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>First-Principles Lab — rx-flow migration</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #131a22;
+    --panel-2: #1a232d;
+    --ink: #e6ecf2;
+    --ink-2: #a9b6c2;
+    --mute: #6b7a88;
+    --line: #243140;
+    --line-2: #2f3e50;
+    --accent: #f2a65a;
+    --ok: #6cc17b;
+    --warn: #e07a7a;
+    --info: #7fb4e4;
+    --purp: #b48cd6;
+    --code: #0e141b;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 var(--sans); }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px dashed rgba(242,166,90,.4); }
+  code, kbd { font-family: var(--mono); font-size: .9em; background: var(--code); border: 1px solid var(--line); padding: 1px 6px; border-radius: 4px; color: #d6cba0; }
+  pre { margin: 0; padding: 14px 16px; font: 12.5px/1.55 var(--mono); background: var(--code); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; color: #d6cba0; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 32px 0; }
+  mark { background: rgba(242,166,90,.15); color: var(--ink); padding: 0 3px; border-radius: 2px; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+
+  header.hero { padding: 48px 0 22px; border-bottom: 1px solid var(--line); }
+  .kicker { color: var(--accent); font-family: var(--mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; margin-bottom: 12px; }
+  h1 { font-size: 28px; margin: 0 0 10px; letter-spacing: -0.015em; font-weight: 600; }
+  .lede { color: var(--ink-2); max-width: 760px; font-size: 16px; margin: 10px 0 0; }
+  .meta { color: var(--mute); font-size: 13px; margin-top: 14px; }
+
+  /* Tab nav — pills, horizontal, wrap-friendly */
+  nav.tabs {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(11,15,20,.92); backdrop-filter: saturate(1.2) blur(8px);
+    border-bottom: 1px solid var(--line);
+    margin-top: 22px;
+  }
+  nav.tabs .inner { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
+  nav.tabs button {
+    display: inline-flex; align-items: baseline; gap: 8px;
+    background: transparent; border: 1px solid var(--line); color: var(--ink-2);
+    font: 13px/1 var(--sans); padding: 8px 13px; border-radius: 999px; cursor: pointer;
+    transition: all .12s ease;
+  }
+  nav.tabs button:hover { color: var(--ink); border-color: var(--line-2); }
+  nav.tabs button.active { background: #241705; border-color: var(--accent); color: var(--accent); }
+  nav.tabs button .n { font: 11px/1 var(--mono); color: var(--mute); letter-spacing: .08em; }
+  nav.tabs button.active .n { color: var(--accent); }
+
+  main { padding: 36px 0 120px; }
+  section.module { display: none; }
+  section.module.active { display: block; animation: fade .18s ease-out; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .eyebrow { color: var(--accent); font-family: var(--mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; margin-bottom: 10px; }
+  h2 { font-size: 26px; margin: 0 0 12px; letter-spacing: -0.015em; font-weight: 600; }
+  h3 { font-size: 17px; margin: 30px 0 10px; font-weight: 600; }
+  h4 { font-size: 12px; font-family: var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--mute); margin: 20px 0 8px; font-weight: 500; }
+  p { color: var(--ink-2); margin: 10px 0; }
+  ul, ol { color: var(--ink-2); padding-left: 22px; }
+  li { margin: 6px 0; }
+
+  .tldr { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); padding: 14px 18px; border-radius: 6px; margin: 18px 0 22px; }
+  .tldr strong { color: var(--ink); }
+
+  .glyphs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 14px; }
+  .chip { font: 11px/1 var(--mono); padding: 5px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--ink-2); letter-spacing: .03em; }
+  .chip.accent { border-color: rgba(242,166,90,.35); color: var(--accent); }
+
+  .grid { display: grid; gap: 14px; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 820px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  .card h4 { margin-top: 0; }
+  .card .tag { font: 10px/1 var(--mono); color: var(--mute); letter-spacing: .1em; text-transform: uppercase; }
+  .card.info { border-left: 3px solid var(--info); }
+  .card.purp { border-left: 3px solid var(--purp); }
+
+  .case { margin: 8px 0; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  .case .co { font: 10px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+  .case .title { color: var(--ink); margin: 4px 0 6px; font-weight: 500; font-size: 14px; }
+  .case .body { color: var(--ink-2); font-size: 13.5px; }
+  .case.win { border-left: 3px solid var(--ok); }
+  .case.win .co { color: var(--ok); }
+  .case.loss { border-left: 3px solid var(--warn); }
+  .case.loss .co { color: var(--warn); }
+
+  svg.diagram { width: 100%; height: auto; display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 16px 0; }
+  svg text { font-family: var(--mono); font-size: 11px; fill: var(--ink-2); }
+  svg text.ttl { fill: var(--ink); font-size: 12.5px; font-weight: 600; font-family: var(--sans); }
+  svg text.lbl { fill: var(--mute); font-size: 10.5px; }
+  svg .node { fill: var(--panel-2); stroke: var(--line-2); stroke-width: 1; cursor: pointer; transition: all .15s; }
+  svg .node:hover { fill: #1e2934; stroke: var(--accent); }
+
+  details.deep { margin: 10px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 0 14px; }
+  details.deep > summary { cursor: pointer; padding: 12px 4px; color: var(--ink); font-weight: 500; list-style: none; }
+  details.deep > summary::-webkit-details-marker { display: none; }
+  details.deep > summary::before { content: "▸ "; color: var(--accent); font-family: var(--mono); }
+  details.deep[open] > summary::before { content: "▾ "; }
+  details.deep > div { padding: 0 4px 14px; color: var(--ink-2); }
+
+  .pr { display: grid; grid-template-columns: 150px 1fr; gap: 14px; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .pr:last-child { border-bottom: 0; }
+  .pr .k { font: 11px/1.5 var(--mono); color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+  .pr .v { color: var(--ink-2); }
+
+  .quiz { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--info); border-radius: 8px; padding: 16px 18px; margin: 22px 0; }
+  .quiz h4 { margin-top: 0; color: var(--info); }
+  .quiz textarea { width: 100%; min-height: 70px; background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 10px; color: var(--ink); font: 13px/1.5 var(--mono); resize: vertical; }
+  .quiz textarea:focus { outline: 1px solid var(--accent); }
+  .quiz .hint { font-size: 12px; color: var(--mute); margin-top: 6px; }
+
+  .toggle-row { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin: 14px 0 10px; }
+  .toggle-row button { background: var(--panel); color: var(--ink-2); border: 0; padding: 7px 13px; font: 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; border-right: 1px solid var(--line); }
+  .toggle-row button:last-child { border-right: 0; }
+  .toggle-row button.on { background: var(--accent); color: #1a1206; }
+  .pane { display: none; }
+  .pane.on { display: block; }
+
+  table.matrix { width: 100%; border-collapse: collapse; font-size: 14px; margin: 10px 0; }
+  table.matrix th, table.matrix td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.matrix th { color: var(--mute); font: 500 11px/1.5 var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+  table.matrix td.ok { color: var(--ok); }
+  table.matrix td.bad { color: var(--warn); }
+
+  .arrow { color: var(--accent); font-family: var(--mono); }
+  footer { color: var(--mute); font-size: 12.5px; padding: 26px 0; border-top: 1px solid var(--line); }
+  footer .mono { font-family: var(--mono); }
+
+  /* Progress trail under the tabs */
+  .trail { color: var(--mute); font: 11px/1.2 var(--mono); letter-spacing: .08em; margin: 12px 0 0; text-transform: uppercase; }
+  .trail span { color: var(--ink-2); }
+
+  /* Watch block — further-learning video links */
+  .watch { list-style: none; padding: 0; margin: 12px 0 20px; display: grid; gap: 10px; }
+  .watch li { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--info); border-radius: 6px; padding: 12px 14px; }
+  .watch .spk { color: var(--ink); font-weight: 500; }
+  .watch .tt { color: var(--ink-2); }
+  .watch .ctx { color: var(--mute); font: 10.5px/1 var(--mono); margin-left: 6px; letter-spacing: .05em; }
+  .watch .go { display: inline-block; margin-left: 8px; color: var(--info); font: 10.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .1em; border-bottom: 0; padding: 2px 6px; border: 1px solid rgba(127,180,228,.3); border-radius: 3px; }
+  .watch .go:hover { color: var(--accent); border-color: var(--accent); }
+  .watch .why { color: var(--ink-2); font-size: 13px; margin: 6px 0 0; }
+
+  /* Storyboard — 3-frame visual stepper */
+  .storyboard { margin: 18px 0 22px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+  .storyboard .stage { position: relative; padding: 18px; min-height: 300px; }
+  .storyboard .frame { display: none; }
+  .storyboard .frame.active { display: block; animation: fade .22s ease-out; }
+  .storyboard .frame svg { width: 100%; height: auto; max-height: 280px; display: block; background: transparent; border: 0; padding: 0; margin: 0 0 12px; }
+  .storyboard .frame .cap { font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+  .storyboard .frame .cap strong { color: var(--ink); }
+  .storyboard .frame .cap em { color: var(--accent); font-style: normal; }
+  .storyboard .controls { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--panel-2); border-top: 1px solid var(--line); gap: 10px; }
+  .storyboard .controls button.nav { background: transparent; border: 1px solid var(--line); color: var(--ink-2); padding: 6px 13px; font: 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; border-radius: 4px; cursor: pointer; transition: all .12s; }
+  .storyboard .controls button.nav:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+  .storyboard .controls button.nav:disabled { opacity: .3; cursor: not-allowed; }
+  .storyboard .dots { display: flex; gap: 7px; align-items: center; }
+  .storyboard .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); cursor: pointer; transition: background .15s; border: 0; padding: 0; }
+  .storyboard .dot.active { background: var(--accent); }
+  .storyboard .counter { font: 10.5px/1 var(--mono); color: var(--mute); letter-spacing: .08em; margin-right: 4px; }
+
+  /* SVG helpers for storyboards */
+  svg .sb-good { stroke: var(--ok); }
+  svg .sb-bad { stroke: var(--warn); }
+  svg .sb-info { stroke: var(--info); }
+  svg .sb-purp { stroke: var(--purp); }
+  svg .sb-acc { stroke: var(--accent); }
+  svg text.sb-good { fill: var(--ok); stroke: none; }
+  svg text.sb-bad { fill: var(--warn); stroke: none; }
+  svg text.sb-info { fill: var(--info); stroke: none; }
+  svg text.sb-purp { fill: var(--purp); stroke: none; }
+  svg text.sb-acc { fill: var(--accent); stroke: none; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">First-Principles Lab · rx-flow migration</div>
+  <h1>The patterns behind the prompt — and where they break.</h1>
+  <p class="lede">
+    The rx-flow migration isn't about Claude. It's six software patterns you already know from distributed systems, rediscovered in a new medium. This lab pulls them out, traces their lineage, studies their failure modes, and gives you drills for other projects.
+  </p>
+  <p class="meta">Read linearly, or skip around. Every module includes wins, scars, and a drill you can run tomorrow.</p>
+</header>
+
+<nav class="tabs">
+  <div class="inner" id="tabs">
+    <button data-target="m0" class="active"><span class="n">00</span>Landscape</button>
+    <button data-target="mP"><span class="n">P</span>Primer</button>
+    <button data-target="m1"><span class="n">01</span>Decomposition</button>
+    <button data-target="m2"><span class="n">02</span>Contracts</button>
+    <button data-target="m3"><span class="n">03</span>Orchestration</button>
+    <button data-target="m4"><span class="n">04</span>Capabilities</button>
+    <button data-target="m5"><span class="n">05</span>Falsification</button>
+    <button data-target="m6"><span class="n">06</span>Strangler</button>
+    <button data-target="m7"><span class="n">07</span>Synthesis</button>
+    <button data-target="m9"><span class="n">09</span>Cross-domain</button>
+    <button data-target="m10"><span class="n">10</span>Traceability</button>
+    <button data-target="m11"><span class="n">11</span>Explore · exploit</button>
+    <button data-target="m8"><span class="n">08</span>Apply</button>
+  </div>
+</nav>
+
+<main>
+
+<!-- ======================================================== -->
+<!-- M0 LANDSCAPE                                             -->
+<!-- ======================================================== -->
+<section class="module active" id="m0">
+  <div class="eyebrow">00 · Orientation</div>
+  <h2>The landscape of what you've been doing</h2>
+
+  <div class="tldr">
+    <strong>Thesis:</strong> you're doing distributed-systems engineering where the workers happen to be language models. Every hard problem you've hit — scope, coordination, typing, failure handling, rollout — the field already has answers for. This lab connects the dots.
+  </div>
+
+  <p>The migration swaps one 500-line Claude prompt for an orchestrator + 8 scoped experts with typed I/O, preserving Inngest via a bridge. That's a classic god-class split. The six modules below each lift one decision out of it and generalize.</p>
+
+  <svg class="diagram" viewBox="0 0 900 380" role="img" aria-label="Pattern landscape">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="#f2a65a"/>
+      </marker>
+    </defs>
+
+    <!-- frame -->
+    <line x1="50" y1="330" x2="860" y2="330" stroke="#2f3e50" stroke-width="1"/>
+    <line x1="50" y1="30"  x2="50"  y2="330" stroke="#2f3e50" stroke-width="1"/>
+    <text x="860" y="352" text-anchor="end" class="lbl">blast radius / coordination cost →</text>
+    <text x="40"  y="30"  text-anchor="end" class="lbl" transform="rotate(-90 40 30)">structural ambition →</text>
+
+    <!-- nodes laid out on a gentle diagonal, then strangler high-right -->
+    <!-- 01 Decomposition: bottom-left -->
+    <g data-goto="m1">
+      <rect x="90"  y="260" width="170" height="52" rx="8" class="node"/>
+      <text x="175" y="282" text-anchor="middle" class="ttl">01 · Decomposition</text>
+      <text x="175" y="300" text-anchor="middle" class="lbl">split the god object</text>
+    </g>
+    <!-- 02 Contracts -->
+    <g data-goto="m2">
+      <rect x="300" y="210" width="170" height="52" rx="8" class="node"/>
+      <text x="385" y="232" text-anchor="middle" class="ttl">02 · Contracts</text>
+      <text x="385" y="250" text-anchor="middle" class="lbl">make boundaries real</text>
+    </g>
+    <!-- 03 Orchestration -->
+    <g data-goto="m3">
+      <rect x="510" y="160" width="180" height="52" rx="8" class="node"/>
+      <text x="600" y="182" text-anchor="middle" class="ttl">03 · Orchestration</text>
+      <text x="600" y="200" text-anchor="middle" class="lbl">who decides next</text>
+    </g>
+
+    <!-- 04 Capabilities — overlay axis (quality not progression) -->
+    <g data-goto="m4">
+      <rect x="90"  y="100" width="170" height="52" rx="8" class="node"/>
+      <text x="175" y="122" text-anchor="middle" class="ttl">04 · Capabilities</text>
+      <text x="175" y="140" text-anchor="middle" class="lbl">default deny</text>
+    </g>
+    <!-- 05 Falsification -->
+    <g data-goto="m5">
+      <rect x="300" y="100" width="170" height="52" rx="8" class="node"/>
+      <text x="385" y="122" text-anchor="middle" class="ttl">05 · Falsification</text>
+      <text x="385" y="140" text-anchor="middle" class="lbl">evidence-gated ship</text>
+    </g>
+    <!-- 06 Strangler — upper right, how you move between any of the above -->
+    <g data-goto="m6">
+      <rect x="510" y="50"  width="230" height="60" rx="8" class="node"/>
+      <text x="625" y="74"  text-anchor="middle" class="ttl">06 · Strangler &amp; bridge</text>
+      <text x="625" y="94"  text-anchor="middle" class="lbl">migrate without a rewrite</text>
+    </g>
+
+    <!-- Progression arrows along diagonal -->
+    <path d="M260,286 L300,252" stroke="#f2a65a" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+    <path d="M470,236 L510,202" stroke="#f2a65a" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+    <!-- Quality overlays (dashed) -->
+    <path d="M175,152 L175,260" stroke="#7fb4e4" stroke-width="1" stroke-dasharray="3,3" fill="none" marker-end="url(#arr)"/>
+    <path d="M385,152 L385,210" stroke="#7fb4e4" stroke-width="1" stroke-dasharray="3,3" fill="none" marker-end="url(#arr)"/>
+
+    <!-- Strangler points inward (purple) -->
+    <path d="M510,108 L465,130" stroke="#b48cd6" stroke-width="1" stroke-dasharray="3,3" fill="none" marker-end="url(#arr)"/>
+
+    <!-- legend -->
+    <g transform="translate(50,360)">
+      <line x1="0" y1="0" x2="24" y2="0" stroke="#f2a65a" stroke-width="1.5"/>
+      <text x="30" y="4" class="lbl">progression</text>
+      <line x1="120" y1="0" x2="144" y2="0" stroke="#7fb4e4" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="150" y="4" class="lbl">quality overlay</text>
+      <line x1="260" y1="0" x2="284" y2="0" stroke="#b48cd6" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="290" y="4" class="lbl">migration strategy for all of the above</text>
+    </g>
+  </svg>
+
+  <p class="meta">Click any node to jump in. Lower-left = cheap; upper-right = buys more but costs more to run well.</p>
+
+  <h3>CareLink decisions &rarr; modules</h3>
+  <table class="matrix">
+    <thead><tr><th>Decision</th><th>Module</th><th>Canonical pattern</th></tr></thead>
+    <tbody>
+      <tr><td>500-line prompt → 8 experts</td><td>01</td><td>Bounded contexts · Conway · SRP at system scale</td></tr>
+      <tr><td>Pydantic I/O per expert</td><td>02</td><td>Design-by-contract · ports &amp; adapters · DTOs</td></tr>
+      <tr><td>Orchestrator session calls <code>invoke_expert</code></td><td>03</td><td>Orchestration vs choreography · workflow engines</td></tr>
+      <tr><td>Subtractive <code>tools=</code>, per-expert allowlists</td><td>04</td><td>POLA · capability-based security · default deny</td></tr>
+      <tr><td>14-day clean-trace gate before deletion</td><td>05</td><td>Canary · Scientist · evidence-based rollout</td></tr>
+      <tr><td>Inngest sacred; bridge via <code>rx/submit_claim.done</code></td><td>06</td><td>Strangler fig · anti-corruption layer</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grid grid-3" style="margin-top: 22px;">
+    <div class="card"><h4>Principle, not jargon</h4><p>Each module starts from the <em>force</em> — information hiding, Conway's law, POLA. The named pattern comes second.</p></div>
+    <div class="card"><h4>Wins and scars</h4><p>Every pattern has stories where it cost someone a weekend. Learn the shape of the failure, not just the success.</p></div>
+    <div class="card"><h4>Transferable</h4><p>Each module ends with a drill you can run on a codebase that has nothing to do with pharmacy or LLMs.</p></div>
+  </div>
+
+  <h3>Watch — Orient yourself</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Gregor Hohpe</span> — <span class="tt">The Architect Elevator</span> <span class="ctx">GOTO · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Gregor+Hohpe+Architect+Elevator+GOTO" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The best one-talk framing of why "pattern" and "organizational pressure" are the same substance — decisions ride an elevator between the server room and the C-suite.</p>
+    </li>
+    <li>
+      <span class="spk">John Ousterhout</span> — <span class="tt">A Philosophy of Software Design</span> <span class="ctx">Google Talks · ~1h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=John+Ousterhout+Philosophy+Software+Design+Google" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Sets up the mental model for the whole lab: complexity is the enemy, and every pattern here is complexity control at a different scale.</p>
+    </li>
+  </ul>
+</section>
+
+<!-- ======================================================== -->
+<!-- MP PRIMER — basic principles defined plainly             -->
+<!-- ======================================================== -->
+<section class="module" id="mP">
+  <div class="eyebrow">P · Primer</div>
+  <h2>Twelve primitives you'll lean on</h2>
+
+  <div class="tldr">
+    <strong>Purpose:</strong> the rest of this lab assumes you can reach for terms like <em>cohesion</em>, <em>idempotency</em>, and <em>invariant</em> without flinching. Here they are in one breath each, with an example and a pointer to where they come up. Skim and come back.
+  </div>
+
+  <h3>The twelve</h3>
+  <div class="grid grid-3">
+
+    <div class="card">
+      <h4>01 · Cohesion</h4>
+      <p>Things that change together should live together. A module about <em>one</em> concern.</p>
+      <p class="meta"><strong>Ex:</strong> a <code>File</code> class that opens/reads/closes — cohesive. Same class that also sends email — not.</p>
+      <p class="meta">→ Module 01 (Decomposition)</p>
+    </div>
+
+    <div class="card">
+      <h4>02 · Coupling</h4>
+      <p>How much one thing has to know about another to work. Looser = cheaper to change.</p>
+      <p class="meta"><strong>Ex:</strong> typed function signatures = loose. Shared mutable globals = tight.</p>
+      <p class="meta">→ Module 02 (Contracts)</p>
+    </div>
+
+    <div class="card">
+      <h4>03 · Encapsulation</h4>
+      <p>Hide internals behind an interface. Caller knows <em>what</em>; implementer owns <em>how</em>.</p>
+      <p class="meta"><strong>Ex:</strong> <code>db.save(order)</code> — caller never sees the SQL.</p>
+      <p class="meta">→ Module 02, 04</p>
+    </div>
+
+    <div class="card">
+      <h4>04 · Information hiding</h4>
+      <p>Parnas, 1972. Hide design <em>decisions</em>, not just data. Stronger than encapsulation.</p>
+      <p class="meta"><strong>Ex:</strong> swap Redis for Postgres behind a <code>Storage</code> interface — callers never noticed.</p>
+      <p class="meta">→ Module 01, 06</p>
+    </div>
+
+    <div class="card">
+      <h4>05 · Invariant</h4>
+      <p>Something always true during operation. The thing you're protecting.</p>
+      <p class="meta"><strong>Ex:</strong> "every order has a positive total." "Every expert output parses as its schema."</p>
+      <p class="meta">→ Module 02, 05</p>
+    </div>
+
+    <div class="card">
+      <h4>06 · Idempotency</h4>
+      <p>Doing the thing twice has the same effect as doing it once. Essential for safe retries.</p>
+      <p class="meta"><strong>Ex:</strong> "mark as read" ✓. "Charge $10" ✗ (use an idempotency key).</p>
+      <p class="meta">→ Module 03 (retries)</p>
+    </div>
+
+    <div class="card">
+      <h4>07 · Pure function</h4>
+      <p>Same input → same output, no side effects. Easy to test, compose, cache.</p>
+      <p class="meta"><strong>Ex:</strong> <code>add(a,b)</code> pure. <code>send_email(to)</code> not.</p>
+      <p class="meta">→ Module 02</p>
+    </div>
+
+    <div class="card">
+      <h4>08 · Determinism</h4>
+      <p>Same conditions → same result. Deterministic code is cheap to reason about.</p>
+      <p class="meta"><strong>Ex:</strong> SQL query deterministic. LLM at temp=0 close. LLM at temp&gt;0 not.</p>
+      <p class="meta">→ Module 05 (you can only falsify what's repeatable)</p>
+    </div>
+
+    <div class="card">
+      <h4>09 · Orthogonality</h4>
+      <p>Two concerns don't interfere. Changing one doesn't force a change in the other.</p>
+      <p class="meta"><strong>Ex:</strong> adding auth shouldn't change how routing works. Telemetry shouldn't change what a function computes.</p>
+      <p class="meta">→ All modules</p>
+    </div>
+
+    <div class="card">
+      <h4>10 · Abstraction layer</h4>
+      <p>Hides the layer below while exposing something simpler. Good ones don't leak; bad ones do.</p>
+      <p class="meta"><strong>Ex:</strong> HTTP over TCP over IP. Orchestrator over experts.</p>
+      <p class="meta">→ Module 01, 03</p>
+    </div>
+
+    <div class="card">
+      <h4>11 · Separation of concerns</h4>
+      <p>Different reasons to change live in different places. Cousin of SRP.</p>
+      <p class="meta"><strong>Ex:</strong> CSS (how it looks) vs JS (how it behaves) vs HTML (what it is).</p>
+      <p class="meta">→ Module 01</p>
+    </div>
+
+    <div class="card">
+      <h4>12 · Cost of change</h4>
+      <p>The real performance metric of architecture. How long from idea to shipped?</p>
+      <p class="meta"><strong>Ex:</strong> microservices faster at 100 engineers, <em>slower</em> at 5. The same architecture has different cost-of-change at different scales.</p>
+      <p class="meta">→ Module 01, 06</p>
+    </div>
+
+  </div>
+
+  <h3>How these compose into the six modules</h3>
+  <p>Each of the patterns in 01–06 is a way to turn a primitive into an <em>enforceable</em> shape at system scale. Cohesion becomes a bounded context. Coupling becomes a typed contract. Information hiding becomes a capability-scoped tool. Invariants become release gates. When a pattern feels arbitrary, it's because you've lost the primitive it was protecting — walk back and name the force.</p>
+
+  <h3>The two words to internalize</h3>
+  <div class="grid grid-2">
+    <div class="card info">
+      <h4>High cohesion within</h4>
+      <p>Each module / class / prompt is about <em>one</em> thing. Methods inside refer to each other. There's a single sentence that describes the module's purpose without "and."</p>
+      <p class="meta">Read it as: <em>"does this thing have a single job?"</em></p>
+    </div>
+    <div class="card purp">
+      <h4>Loose coupling between</h4>
+      <p>Modules talk through narrow, explicit interfaces. Changing one doesn't force a cascade. The less each side needs to know about the other, the better.</p>
+      <p class="meta">Read it as: <em>"can I change this without touching its neighbors?"</em></p>
+    </div>
+  </div>
+  <p style="margin-top: 14px;">If you remember only two phrases from this primer, make it those. Most architectural arguments are either about raising cohesion or lowering coupling — often both at once.</p>
+
+  <h3>Watch — The primitives themselves</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Rich Hickey</span> — <span class="tt">Simple Made Easy</span> <span class="ctx">Strange Loop 2011 · ~1h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Rich+Hickey+Simple+Made+Easy+Strange+Loop" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The single most-cited talk on separating <em>simple</em> (one role, one concept) from <em>easy</em> (familiar, near-at-hand). Rewires how you see cohesion and coupling.</p>
+    </li>
+    <li>
+      <span class="spk">Sandi Metz</span> — <span class="tt">All the Little Things</span> <span class="ctx">RailsConf 2014 · ~35min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Sandi+Metz+All+the+Little+Things+RailsConf" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Live refactor that demonstrates cohesion, coupling, separation of concerns, and "the squint test" — the primer's concepts applied to a real smelly class.</p>
+    </li>
+    <li>
+      <span class="spk">Kevlin Henney</span> — <span class="tt">Seven Ineffective Coding Habits</span> <span class="ctx">NDC · ~1h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Kevlin+Henney+Seven+Ineffective+Coding+Habits+NDC" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">A brutal walk through primitives violated in practice. Watch this AFTER a PR review and the review voice in your head sharpens immediately.</p>
+    </li>
+  </ul>
+
+  <div class="quiz">
+    <h4>Drill — name the primitive</h4>
+    <p>Pick the last PR review you gave. Identify one comment you made that was really a complaint about a primitive from this list. (e.g. "this function does too many things" = cohesion.) Naming the primitive makes the comment actionable instead of stylistic.</p>
+    <textarea placeholder="PR comment · primitive it was really about..."></textarea>
+    <div class="hint">The senior review voice is often just this list, applied out loud.</div>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M1 DECOMPOSITION                                         -->
+<!-- ======================================================== -->
+<section class="module" id="m1">
+  <div class="eyebrow">01 · Decomposition</div>
+  <h2>Monolith → bounded contexts</h2>
+  <div class="glyphs">
+    <span class="chip accent">SRP at system scale</span>
+    <span class="chip accent">Conway's law</span>
+    <span class="chip accent">DDD bounded contexts</span>
+    <span class="chip accent">Information hiding</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> a single unit serving many domains accretes all their vocabularies and edge cases, and changes whenever any of them changes. Its change rate approaches the sum of all embedded domains; review quality drops toward zero.
+  </div>
+
+  <h3>CareLink instance</h3>
+  <p><code>newrx-agent</code> is ~500 lines doing 8 jobs in one context window: patient matching, NCPDP mapping, clinical checks, claim payload, rejection classification, DUR, fulfillment, shipping. Each has its own vocab and rate of change. It became a god class the moment a second domain moved in.</p>
+
+  <svg class="diagram" viewBox="0 0 900 250">
+    <!-- before -->
+    <text x="50" y="26" class="ttl">Before — one prompt, eight jobs</text>
+    <rect x="50" y="42" width="340" height="180" rx="10" fill="#131a22" stroke="#e07a7a"/>
+    <text x="220" y="70" text-anchor="middle" class="ttl" fill="#e07a7a">newrx-agent</text>
+    <text x="220" y="88" text-anchor="middle" class="lbl">500 lines · 8 domains · 1 context</text>
+    <text x="70" y="118" class="lbl">• patient matching</text>
+    <text x="70" y="138" class="lbl">• prescriber &amp; drug</text>
+    <text x="70" y="158" class="lbl">• NCPDP mapping</text>
+    <text x="70" y="178" class="lbl">• clinical checklist</text>
+    <text x="230" y="118" class="lbl">• claim payload</text>
+    <text x="230" y="138" class="lbl">• rejection classifier</text>
+    <text x="230" y="158" class="lbl">• DUR screening</text>
+    <text x="230" y="178" class="lbl">• fulfillment + shipping</text>
+    <text x="220" y="206" text-anchor="middle" class="lbl" fill="#e07a7a">change rate = Σ(domains)</text>
+
+    <path d="M400,130 L470,130" stroke="#f2a65a" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+
+    <!-- after -->
+    <text x="490" y="26" class="ttl">After — 8 experts, each a bounded context</text>
+    <g>
+      <rect x="490" y="42"  width="95" height="38" rx="6" fill="#131a22" stroke="#6cc17b"/><text x="537" y="65" text-anchor="middle" class="ttl">intake</text>
+      <rect x="595" y="42"  width="95" height="38" rx="6" fill="#131a22" stroke="#6cc17b"/><text x="642" y="65" text-anchor="middle" class="ttl">data-entry</text>
+      <rect x="700" y="42"  width="95" height="38" rx="6" fill="#131a22" stroke="#6cc17b"/><text x="747" y="65" text-anchor="middle" class="ttl">clinical</text>
+      <rect x="490" y="92"  width="95" height="38" rx="6" fill="#131a22" stroke="#6cc17b"/><text x="537" y="115" text-anchor="middle" class="ttl">billing</text>
+      <rect x="595" y="92"  width="95" height="38" rx="6" fill="#131a22" stroke="#6cc17b"/><text x="642" y="115" text-anchor="middle" class="ttl">rejection</text>
+      <rect x="700" y="92"  width="95" height="38" rx="6" fill="#131a22" stroke="#6cc17b"/><text x="747" y="115" text-anchor="middle" class="ttl">DUR</text>
+      <rect x="490" y="142" width="95" height="38" rx="6" fill="#131a22" stroke="#6cc17b"/><text x="537" y="165" text-anchor="middle" class="ttl">fulfillment</text>
+      <rect x="595" y="142" width="95" height="38" rx="6" fill="#131a22" stroke="#6cc17b"/><text x="642" y="165" text-anchor="middle" class="ttl">shipping</text>
+      <rect x="700" y="142" width="95" height="38" rx="6" fill="#131a22" stroke="#f2a65a"/><text x="747" y="165" text-anchor="middle" class="ttl" fill="#f2a65a">orchestrator</text>
+    </g>
+    <text x="642" y="210" text-anchor="middle" class="lbl" fill="#6cc17b">each changes at its own rate; vocab stays local</text>
+  </svg>
+
+  <h3>Canonical mapping</h3>
+  <div class="pr"><div class="k">DDD</div><div class="v"><strong>Bounded context:</strong> a place where one model is authoritative. "Patient" can mean different things in intake vs. billing — healthy, not a bug.</div></div>
+  <div class="pr"><div class="k">SOLID</div><div class="v"><strong>SRP at system scale.</strong> A reason to change ↔ a bounded context.</div></div>
+  <div class="pr"><div class="k">Parnas 1972</div><div class="v"><strong>Information hiding.</strong> NCPDP field mapping shouldn't leak into the shipping prompt.</div></div>
+  <div class="pr"><div class="k">Conway</div><div class="v">Systems mirror the org that built them. Bounded contexts make team topology intentional rather than incidental.</div></div>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · Amazon, 2002</div>
+      <div class="title">API mandate + two-pizza teams</div>
+      <div class="body">Bezos forced services to expose themselves via contracts. Enabled AWS — but the real win was teams changing at different rates without meetings.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Stripe API</div>
+      <div class="title">Charge, Customer, Subscription — each its own context</div>
+      <div class="body">Clean decomposition doubles as UX: the API is learnable one object at a time.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Prime Video, 2023</div>
+      <div class="title">Microservices → monolith, 90% cost cut</div>
+      <div class="body">Step Functions + Lambdas cost more in orchestration than the work. Refolded into one service. <em>Decomposition is justified by team topology or deployability, not by default.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Segment, 2018</div>
+      <div class="title">140+ repos to ship one customer feature</div>
+      <div class="body">Split ran ahead of team structure. Returned to modular monolith.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Distributed monoliths</div>
+      <div class="title">Boundaries drawn at the wrong seam</div>
+      <div class="body">Services that share a DB, deploy together, can't test independently. You paid the tax; got none of the isolation.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Cargo-cult microservices, ~2015</div>
+      <div class="title">5-person teams running 30 services</div>
+      <div class="body">"Netflix does it." Without SRE, tracing, platform — the abstraction costs more than the complexity it buys out of.</div>
+    </div>
+  </div>
+
+  <h3>The decomposition test — use before splitting</h3>
+  <ol>
+    <li><strong>Do the domains have distinct vocabularies?</strong> If "patient" means the same thing to both halves, you may not have a boundary.</li>
+    <li><strong>Do they change at different rates?</strong> If they always change together, they're one domain wearing two hats.</li>
+    <li><strong>Can you write the contract without mentioning the other side's internals?</strong> If not, your seam isn't real.</li>
+    <li><strong>Is there a team (or budget) to own it?</strong> Conway's law doesn't negotiate.</li>
+  </ol>
+
+  <h3>Growth path</h3>
+  <p>Monolith <span class="arrow">→</span> modular monolith <span class="arrow">→</span> bounded contexts with contracts <span class="arrow">→</span> independently deployable services <span class="arrow">→</span> platform + product teams. Walk forward when the current rung concretely hurts, not further.</p>
+
+  <details class="deep">
+    <summary>Deep dive — why 8 experts, not 3 or 30?</summary>
+    <div>
+      <p>The migration chose 8 because those are the coarse phases with distinct vocab: intake uses patient/prescriber, billing uses NCPDP, shipping uses carton/carrier. Below 8 you'd have domains colliding; above 8 you'd split single-phase logic that shares invariants.</p>
+      <p>Generalization: <strong>count distinct vocabularies</strong>, not steps. A 30-step workflow may have 4 vocabularies.</p>
+    </div>
+  </details>
+
+  <h3>Watch — Decomposition in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Sam Newman</span> — <span class="tt">Principles of Microservices</span> <span class="ctx">NDC · ~1h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Sam+Newman+Principles+of+Microservices+NDC" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The "when NOT to split" framing is the load-bearing part. Pairs directly with Prime Video's re-monolith story.</p>
+    </li>
+    <li>
+      <span class="spk">Eric Evans</span> — <span class="tt">DDD: The Essential Parts</span> <span class="ctx">DDDEurope · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Eric+Evans+DDD+Essential+Parts+Europe" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Bounded contexts from the man who named them. Watch for the vocabulary argument — "patient" means different things in different contexts and that's the <em>point</em>.</p>
+    </li>
+    <li>
+      <span class="spk">Stefan Tilkov</span> — <span class="tt">Microservices: Why They Fail</span> <span class="ctx">GOTO · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Stefan+Tilkov+Microservices+fail+GOTO" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The distributed-monolith anti-pattern visualized. Useful as a checklist against your own "are we really decomposed?" question.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Decomposition, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 240" role="img" aria-label="Frame 1: god object accreting domains">
+          <rect x="240" y="40" width="280" height="160" rx="12" fill="#131a22" class="sb-bad" stroke-width="2"/>
+          <text x="380" y="68" text-anchor="middle" class="ttl sb-bad">newrx-agent · 500 lines</text>
+          <text x="260" y="100" class="lbl">• intake</text>
+          <text x="260" y="120" class="lbl">• data-entry</text>
+          <text x="260" y="140" class="lbl">• clinical</text>
+          <text x="260" y="160" class="lbl">• billing</text>
+          <text x="400" y="100" class="lbl">• rejection</text>
+          <text x="400" y="120" class="lbl">• DUR</text>
+          <text x="400" y="140" class="lbl">• fulfillment</text>
+          <text x="400" y="160" class="lbl">• shipping</text>
+          <text x="380" y="190" text-anchor="middle" class="lbl sb-bad">8 vocabularies · 1 change-closure</text>
+          <text x="380" y="222" text-anchor="middle" class="lbl">review quality ≈ 1/n_domains</text>
+        </svg>
+        <div class="cap"><strong>1 · The god object.</strong> Eight concerns share one context. Each incoming requirement touches the whole thing, because the whole thing is on-screen every time. <em>Change rate = Σ(all embedded domains).</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 240" role="img" aria-label="Frame 2: ripple effect from one change">
+          <rect x="240" y="40" width="280" height="160" rx="12" fill="#131a22" class="sb-bad" stroke-width="2"/>
+          <text x="380" y="68" text-anchor="middle" class="ttl sb-bad">edit: "add REMS check"</text>
+          <rect x="254" y="84" width="252" height="16" rx="3" fill="rgba(224,122,122,.18)"/>
+          <rect x="254" y="104" width="252" height="16" rx="3" fill="rgba(224,122,122,.18)"/>
+          <rect x="254" y="124" width="252" height="16" rx="3" fill="rgba(224,122,122,.18)"/>
+          <rect x="254" y="144" width="252" height="16" rx="3" fill="rgba(224,122,122,.18)"/>
+          <text x="260" y="96" class="lbl">clinical re-read required</text>
+          <text x="260" y="116" class="lbl">billing payload re-checked</text>
+          <text x="260" y="136" class="lbl">shipping label re-verified</text>
+          <text x="260" y="156" class="lbl">DUR severity re-tuned</text>
+          <text x="380" y="190" text-anchor="middle" class="lbl sb-bad">one concern moved → full re-review</text>
+          <text x="380" y="222" text-anchor="middle" class="lbl">blast radius = entire prompt</text>
+        </svg>
+        <div class="cap"><strong>2 · The ripple.</strong> A single domain addition forces re-reading every other domain, because they all share a context window and a set of vocabulary that may collide. <em>This is the moment reviewers stop reviewing.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 240" role="img" aria-label="Frame 3: split into 8 bounded experts">
+          <g>
+            <rect x="40"  y="50" width="110" height="46" rx="7" fill="#131a22" class="sb-good"/><text x="95"  y="77" text-anchor="middle" class="ttl">intake</text>
+            <rect x="170" y="50" width="110" height="46" rx="7" fill="#131a22" class="sb-good"/><text x="225" y="77" text-anchor="middle" class="ttl">data-entry</text>
+            <rect x="300" y="50" width="110" height="46" rx="7" fill="#131a22" class="sb-good"/><text x="355" y="77" text-anchor="middle" class="ttl">clinical</text>
+            <rect x="430" y="50" width="110" height="46" rx="7" fill="#131a22" class="sb-good"/><text x="485" y="77" text-anchor="middle" class="ttl">billing</text>
+            <rect x="40"  y="108" width="110" height="46" rx="7" fill="#131a22" class="sb-good"/><text x="95"  y="135" text-anchor="middle" class="ttl">rejection</text>
+            <rect x="170" y="108" width="110" height="46" rx="7" fill="#131a22" class="sb-bad" stroke-width="2"/><text x="225" y="135" text-anchor="middle" class="ttl sb-bad">DUR ✎ edit</text>
+            <rect x="300" y="108" width="110" height="46" rx="7" fill="#131a22" class="sb-good"/><text x="355" y="135" text-anchor="middle" class="ttl">fulfillment</text>
+            <rect x="430" y="108" width="110" height="46" rx="7" fill="#131a22" class="sb-good"/><text x="485" y="135" text-anchor="middle" class="ttl">shipping</text>
+            <rect x="580" y="78" width="150" height="48" rx="7" fill="#131a22" class="sb-acc" stroke-width="2"/><text x="655" y="108" text-anchor="middle" class="ttl sb-acc">orchestrator</text>
+          </g>
+          <text x="380" y="188" text-anchor="middle" class="lbl sb-good">DUR changes · seven others untouched</text>
+          <text x="380" y="214" text-anchor="middle" class="lbl">change-closure shrinks to its vocabulary</text>
+        </svg>
+        <div class="cap"><strong>3 · Bounded contexts.</strong> Split by <em>vocabulary</em>, not by step count. Now a DUR severity tweak is a DUR-only review; shipping labels never enter the diff. The orchestrator routes — it doesn't re-implement. <em>Change rate per file = rate of that one domain, not the sum.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — find the god object</h4>
+    <p>Pick a service you know. List its top 10 methods. Group by "which team would most naturally own this?" Uneven or fuzzy groups = decomposition candidate. Or — proof the current seam is right.</p>
+    <textarea placeholder="service · 10 methods · owner per method..."></textarea>
+    <div class="hint">The exercise is about people before code. That's intentional.</div>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M2 CONTRACTS                                             -->
+<!-- ======================================================== -->
+<section class="module" id="m2">
+  <div class="eyebrow">02 · Boundaries</div>
+  <h2>Typed contracts at boundaries</h2>
+  <div class="glyphs">
+    <span class="chip accent">Design-by-contract</span>
+    <span class="chip accent">Ports &amp; adapters</span>
+    <span class="chip accent">DTOs</span>
+    <span class="chip accent">Schema-as-docs</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> decomposition pays off only if the seam is <em>real</em>. A real seam is one you can't silently violate. Types make invariants enforceable at the boundary instead of trusting that two authors agreed in Slack.
+  </div>
+
+  <h3>CareLink instance</h3>
+  <p>Each expert declares <code>input_schema</code> / <code>output_schema</code> (dotted paths) in YAML frontmatter. <code>BaseStepOutput</code> already exists at <code>carelink/prescriptions/step_schemas/base.py</code>; the migration extends it. The orchestrator calls <code>invoke_expert(name, input)</code>; validation runs at the boundary. Schema failure → bounded retry, not silent drift.</p>
+
+  <svg class="diagram" viewBox="0 0 900 180">
+    <rect x="40"  y="60" width="160" height="60" rx="8" fill="#131a22" stroke="#7fb4e4"/>
+    <text x="120" y="84"  text-anchor="middle" class="ttl">Orchestrator</text>
+    <text x="120" y="102" text-anchor="middle" class="lbl">knows intent</text>
+
+    <rect x="330" y="30" width="220" height="120" rx="8" fill="#131a22" stroke="#f2a65a"/>
+    <text x="440" y="60"  text-anchor="middle" class="ttl">Expert boundary</text>
+    <text x="440" y="80"  text-anchor="middle" class="lbl">input_schema → validate</text>
+    <text x="440" y="100" text-anchor="middle" class="lbl">run prompt</text>
+    <text x="440" y="120" text-anchor="middle" class="lbl">output_schema → validate</text>
+    <text x="440" y="140" text-anchor="middle" class="lbl">retry ≤ N on mismatch</text>
+
+    <rect x="680" y="60" width="180" height="60" rx="8" fill="#131a22" stroke="#6cc17b"/>
+    <text x="770" y="84"  text-anchor="middle" class="ttl">Expert impl</text>
+    <text x="770" y="102" text-anchor="middle" class="lbl">free to change shape-agnostically</text>
+
+    <path d="M200,90 L330,90" stroke="#f2a65a" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+    <path d="M550,90 L680,90" stroke="#f2a65a" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+    <text x="265" y="82"  text-anchor="middle" class="lbl">typed input</text>
+    <text x="615" y="82"  text-anchor="middle" class="lbl">typed output</text>
+  </svg>
+
+  <h3>What "typed" actually buys you</h3>
+  <ol>
+    <li><strong>Locality of failure.</strong> Error at the boundary, where you still have context — not three calls deeper.</li>
+    <li><strong>Parallel change.</strong> Expert internals can change freely as long as the schema holds.</li>
+    <li><strong>Machine-verifiable docs.</strong> The schema is the documentation. It can't drift.</li>
+    <li><strong>Retry affordance.</strong> Schema mismatch is a well-defined event. Prose mismatch is a judgment call.</li>
+  </ol>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · Protobuf at Google</div>
+      <div class="title">Tens of thousands of services, cross-team</div>
+      <div class="body">Forward/backward-compatible schemas + generated clients in every language. Cross-team changes cheap enough that teams actually make them.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · TypeScript in the JS ecosystem</div>
+      <div class="title">Types at every module boundary</div>
+      <div class="body">Ecosystem productivity gain driven almost entirely by boundary types — knowing what a function takes matters more than interior soundness.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Wide types that don't constrain</div>
+      <div class="title"><code>Dict[str, Any]</code>, "JSON blob" fields</div>
+      <div class="body">Boundary exists on paper; in practice consumers must know internal shape. Ceremony without safety.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · OpenAPI specs that lie</div>
+      <div class="title">Spec and server drift apart</div>
+      <div class="body">Hand-maintained specs rot. If it isn't generated from code or enforced by tests, it's a wish, not a contract.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Thrift/Protobuf fatigue in small orgs</div>
+      <div class="title">4 PRs across 3 repos per field change</div>
+      <div class="body">Schema tax is fixed; benefit scales with team count. Under 3 teams you're paying for coordination you don't have.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Over-typed internals</div>
+      <div class="title">Types forced all the way down</div>
+      <div class="body">Types belong at boundaries. Forcing them into leaf logic slows the refactor loop you need for getting logic right. Many enterprise Java codebases died here.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Contract escape via hallucination (LLM)</div>
+      <div class="title">When the tool doesn't exist, the model invents a URL</div>
+      <div class="body">Expert allowlisted <code>fdb-drug-details</code> (a command that didn't exist). Restish errored. The LLM, undeterred, fell through to guessing <code>GET /fdb/drugs/search</code> at the shell. Two separate hallucinated paths shipped to prod before logs surfaced them. The registry-level gate (Module 04) didn't help — it validated the allowlist but not the <em>resolution</em>. <em>A typed contract has to hold at <strong>call time</strong>, not just at registration time; a model that runs out of legal options produces plausible-looking garbage instead of erroring.</em></div>
+    </div>
+  </div>
+
+  <h3>A subtle twist: LLMs as typed functions</h3>
+  <p>The expert is a language model. It can emit anything. Typing the output turns the LLM into "returns <code>ExpertOutput</code>" or "failed, retry." That's the difference between a prose assistant and a <em>composable primitive</em>.</p>
+
+  <h3>Growth path</h3>
+  <p>String dict <span class="arrow">→</span> typed DTO <span class="arrow">→</span> generated stubs <span class="arrow">→</span> schema registry + versioning <span class="arrow">→</span> contract tests in CI.</p>
+
+  <details class="deep">
+    <summary>Deep dive — schema-first vs code-first</summary>
+    <div>
+      <p><strong>Schema-first</strong> (gRPC, GraphQL SDL): schema is truth. Good for many consumers, many languages, external APIs. Bad for exploratory work — schema changes become ceremony.</p>
+      <p><strong>Code-first</strong> (Pydantic): types live next to code. Good for internal services and evolving shape. Bad when consumers are outside your repo.</p>
+      <p>rx-flow is correctly code-first. If experts ever go external, generate a schema doc <em>from</em> Pydantic — not the reverse.</p>
+    </div>
+  </details>
+
+  <h3>Watch — Contracts in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Scott Wlaschin</span> — <span class="tt">Domain Modeling Made Functional</span> <span class="ctx">NDC 2017 · ~55min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Scott+Wlaschin+Domain+Modeling+Made+Functional+NDC" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Types as compressed documentation. Watch the "illegal states unrepresentable" moment — it's the whole module in one diff.</p>
+    </li>
+    <li>
+      <span class="spk">Rich Hickey</span> — <span class="tt">Maybe Not</span> <span class="ctx">Clojure Conj 2018 · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Rich+Hickey+Maybe+Not+Clojure+Conj" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The counter-argument — types at boundaries, not interior. Pair with Wlaschin to see both sides of the code-first vs. schema-first trade.</p>
+    </li>
+    <li>
+      <span class="spk">Pat Helland</span> — <span class="tt">Data on the Outside vs. Data on the Inside</span> <span class="ctx">various · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Pat+Helland+Data+Outside+Inside" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Why the shape of data at a boundary is categorically different from shape inside a service. The conceptual spine of DTOs.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Contracts, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 240" role="img" aria-label="Frame 1: untyped call crashes deep in callee">
+          <rect x="40" y="90" width="130" height="50" rx="7" fill="#131a22" class="sb-info"/>
+          <text x="105" y="117" text-anchor="middle" class="ttl">caller</text>
+          <text x="105" y="160" text-anchor="middle" class="lbl">sends {...}</text>
+
+          <path d="M170,115 L260,115" class="sb-info" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <text x="215" y="108" text-anchor="middle" class="lbl">dict[str, Any]</text>
+
+          <rect x="260" y="50" width="460" height="130" rx="7" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="490" y="75" text-anchor="middle" class="ttl sb-bad">callee interior</text>
+          <rect x="280" y="90" width="140" height="30" rx="4" fill="rgba(224,122,122,.08)"/>
+          <text x="350" y="110" text-anchor="middle" class="lbl">validate? no</text>
+          <rect x="430" y="90" width="140" height="30" rx="4" fill="rgba(224,122,122,.08)"/>
+          <text x="500" y="110" text-anchor="middle" class="lbl">derefs field.x.y</text>
+          <rect x="580" y="90" width="125" height="30" rx="4" fill="rgba(224,122,122,.25)"/>
+          <text x="642" y="110" text-anchor="middle" class="lbl sb-bad">KeyError 3 lvl deep</text>
+          <text x="490" y="150" text-anchor="middle" class="lbl sb-bad">stack trace names wrong layer</text>
+        </svg>
+        <div class="cap"><strong>1 · Untyped seam.</strong> Caller ships a dict; callee walks into it and crashes three function calls deep. The stack trace blames the leaf, not the seam. <em>"Works locally, explodes in prod" lives here.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 240" role="img" aria-label="Frame 2: typed boundary rejects at the edge">
+          <rect x="40" y="90" width="130" height="50" rx="7" fill="#131a22" class="sb-info"/>
+          <text x="105" y="117" text-anchor="middle" class="ttl">caller</text>
+          <text x="105" y="160" text-anchor="middle" class="lbl">sends wrong shape</text>
+
+          <path d="M170,115 L260,115" class="sb-acc" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <text x="215" y="108" text-anchor="middle" class="lbl">typed DTO</text>
+
+          <rect x="260" y="50" width="160" height="130" rx="7" fill="#131a22" class="sb-acc" stroke-width="2"/>
+          <text x="340" y="78" text-anchor="middle" class="ttl sb-acc">boundary</text>
+          <text x="340" y="100" text-anchor="middle" class="lbl">validate input</text>
+          <rect x="278" y="115" width="124" height="50" rx="4" fill="rgba(242,166,90,.1)"/>
+          <text x="340" y="138" text-anchor="middle" class="lbl sb-acc">✗ reject</text>
+          <text x="340" y="155" text-anchor="middle" class="lbl">at the edge</text>
+
+          <rect x="460" y="90" width="200" height="50" rx="7" fill="#131a22" class="sb-good" opacity="0.6"/>
+          <text x="560" y="117" text-anchor="middle" class="ttl">callee interior</text>
+          <text x="560" y="160" text-anchor="middle" class="lbl sb-good">never sees bad input</text>
+        </svg>
+        <div class="cap"><strong>2 · Typed boundary.</strong> Same bad call, different outcome. The DTO is validated at the seam; the interior is free to change shape-agnostically. <em>Locality of failure — error is reported where context still exists.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 240" role="img" aria-label="Frame 3: LLM contract escape via hallucination">
+          <rect x="40" y="90" width="130" height="50" rx="7" fill="#131a22" class="sb-info"/>
+          <text x="105" y="114" text-anchor="middle" class="ttl">LLM expert</text>
+          <text x="105" y="132" text-anchor="middle" class="lbl sb-info">allowlist has</text>
+          <text x="105" y="154" text-anchor="middle" class="lbl sb-bad">fdb-drug-details</text>
+          <text x="105" y="172" text-anchor="middle" class="lbl">(not a real cmd)</text>
+
+          <path d="M170,115 L250,115" class="sb-bad" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+          <rect x="250" y="78" width="200" height="78" rx="7" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="350" y="102" text-anchor="middle" class="ttl sb-bad">"tool not found"</text>
+          <text x="350" y="124" text-anchor="middle" class="lbl">registry static check</text>
+          <text x="350" y="142" text-anchor="middle" class="lbl sb-bad">no runtime gate</text>
+
+          <path d="M450,117 L530,117" class="sb-bad" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arr)"/>
+          <text x="488" y="108" text-anchor="middle" class="lbl sb-bad">hallucinates</text>
+
+          <rect x="530" y="90" width="200" height="50" rx="7" fill="#131a22" class="sb-bad"/>
+          <text x="630" y="114" text-anchor="middle" class="ttl sb-bad">GET /fdb/drugs/search</text>
+          <text x="630" y="132" text-anchor="middle" class="lbl">plausible garbage</text>
+
+          <text x="380" y="210" text-anchor="middle" class="lbl sb-acc">contracts must hold at CALL time, not only at registration time</text>
+        </svg>
+        <div class="cap"><strong>3 · The LLM-specific trap.</strong> A typo in an allowlist passes static validation. At call time restish errors; the model, undeterred, invents a plausible URL. <em>The new failure mode: a contract that's checked in a test but not wired to the shell gate lets the model escape by inventing.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — strengthen one boundary</h4>
+    <p>Pick one function whose output is <code>dict</code> or <code>Any</code>. Draft its actual shape as a type. Walk the callers — fields the function never promises? Fields nobody uses? Both are bug signals.</p>
+    <textarea placeholder="function · drafted type · caller drift..."></textarea>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M3 ORCHESTRATION                                         -->
+<!-- ======================================================== -->
+<section class="module" id="m3">
+  <div class="eyebrow">03 · Coordination</div>
+  <h2>Orchestration vs choreography</h2>
+  <div class="glyphs">
+    <span class="chip accent">Mediator</span>
+    <span class="chip accent">Saga</span>
+    <span class="chip accent">Workflow engines</span>
+    <span class="chip accent">Event choreography</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> once you have many workers, something decides what runs next. That decision can live in one place (orchestration) or emerge from events (choreography). The common mistake is picking by habit instead of by workload.
+  </div>
+
+  <h3>CareLink choice</h3>
+  <p>Option B: one orchestrator session calls experts via <code>invoke_expert</code>. Option C (saga / DAG memory across sessions) was <em>deferred</em>, not rejected. At migration stage, traceability and one-place-to-debug beat the parallelism choreography would buy. Option C becomes earnable after workflows show they need it.</p>
+
+  <svg class="diagram" viewBox="0 0 900 260">
+    <!-- orchestration -->
+    <text x="50" y="26" class="ttl">Orchestration — central conductor</text>
+    <circle cx="210" cy="140" r="32" fill="#131a22" stroke="#f2a65a" stroke-width="2"/>
+    <text x="210" y="144" text-anchor="middle" class="ttl">O</text>
+    <rect x="70" y="70"  width="80" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="110" y="94" text-anchor="middle" class="lbl">A</text>
+    <rect x="70" y="170" width="80" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="110" y="194" text-anchor="middle" class="lbl">B</text>
+    <rect x="270" y="70"  width="80" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="310" y="94" text-anchor="middle" class="lbl">C</text>
+    <rect x="270" y="170" width="80" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="310" y="194" text-anchor="middle" class="lbl">D</text>
+    <path d="M150,90  L180,125" stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <path d="M150,190 L180,155" stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <path d="M240,125 L270,90"  stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <path d="M240,155 L270,190" stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <text x="210" y="240" text-anchor="middle" class="lbl">one place to look when X goes wrong</text>
+
+    <!-- choreography -->
+    <text x="490" y="26" class="ttl">Choreography — events flow</text>
+    <rect x="490" y="70"  width="80" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="530" y="94" text-anchor="middle" class="lbl">A</text>
+    <rect x="610" y="70"  width="80" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="650" y="94" text-anchor="middle" class="lbl">B</text>
+    <rect x="730" y="70"  width="80" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="770" y="94" text-anchor="middle" class="lbl">C</text>
+    <rect x="490" y="170" width="80" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="530" y="194" text-anchor="middle" class="lbl">D</text>
+    <rect x="610" y="170" width="80" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="650" y="194" text-anchor="middle" class="lbl">E</text>
+    <rect x="730" y="170" width="80" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="770" y="194" text-anchor="middle" class="lbl">F</text>
+    <path d="M570,90  L610,90"  stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <path d="M690,90  L730,90"  stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <path d="M650,110 L530,170" stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <path d="M770,110 L650,170" stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <path d="M570,190 L610,190" stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <path d="M690,190 L730,190" stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <text x="650" y="240" text-anchor="middle" class="lbl">naturally parallel; no central knower</text>
+  </svg>
+
+  <h3>Tradeoff matrix</h3>
+  <table class="matrix">
+    <thead><tr><th>Axis</th><th>Orchestration</th><th>Choreography</th></tr></thead>
+    <tbody>
+      <tr><td>Debuggability</td><td class="ok">High — one place to look</td><td class="bad">Low — "where did the order go?"</td></tr>
+      <tr><td>Compensation</td><td class="ok">Explicit in the saga</td><td class="bad">Distributed rollback is notoriously hard</td></tr>
+      <tr><td>Coupling</td><td class="bad">Every flow touches orchestrator</td><td class="ok">Services know only events they care about</td></tr>
+      <tr><td>Parallelism</td><td class="bad">Bounded by orchestrator</td><td class="ok">Naturally parallel</td></tr>
+      <tr><td>Evolution</td><td class="bad">Every change hits orchestrator</td><td class="ok">Add/remove subscriber independently</td></tr>
+      <tr><td>Failure mode</td><td>Orchestrator becomes god object</td><td>Event spaghetti — no one understands flow</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Where orchestration succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · Temporal / Cadence (Uber)</div>
+      <div class="title">Durable workflow code that looks like normal code</div>
+      <div class="body">Uber built Cadence because event choreography made cross-service flows unobservable. Temporal now runs mission-critical workflows for the same reason.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · AWS Step Functions</div>
+      <div class="title">Visual state machines for linear-ish flows</div>
+      <div class="body">When the flow is genuinely state-machine shaped, centralizing it buys visibility, retries, and timeouts for free.</div>
+    </div>
+  </div>
+
+  <h3>Where orchestration fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Orchestrator as god object</div>
+      <div class="title">Every new flow = one more branch in one file</div>
+      <div class="body">rx-flow guards against this: orchestrator knows <em>which</em> expert to call, not <em>how</em> each one works.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Deep orchestrator nesting</div>
+      <div class="title">Orchestrator calls orchestrator calls orchestrator</div>
+      <div class="body">Context splits across sessions/traces; you can't reason end-to-end. Keep orchestrators shallow.</div>
+    </div>
+  </div>
+
+  <h3>Where choreography fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Event spaghetti at scale</div>
+      <div class="title">"40 services subscribed to OrderCreated"</div>
+      <div class="body">Removing a subscriber is safe. Understanding what happens is impossible. Teams back-fill orchestration layers later.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Distributed compensation</div>
+      <div class="title">Partial failures in unrecoverable states</div>
+      <div class="body">Saga compensation requires every participant to implement its reverse — forever. Hardest soft-skill problem in distributed systems.</div>
+    </div>
+  </div>
+
+  <h3>Growth path</h3>
+  <p>Cron + shell <span class="arrow">→</span> queue + workers <span class="arrow">→</span> single orchestrator (good default) <span class="arrow">→</span> saga/workflow engine <span class="arrow">→</span> hybrid (event bus + orchestrated islands) <span class="arrow">→</span> event sourcing.</p>
+
+  <details class="deep">
+    <summary>Deep dive — why the orchestrator is a session, not code</summary>
+    <div>
+      <p>Conventional orchestrator = deterministic code. rx-flow's orchestrator = a Claude session with <code>invoke_expert</code>. Why? <em>Routing itself is a judgment</em>: which expert handles which rejection code is fuzzy pattern-matching, not a switch statement. Hard-coding the routing freezes today's taxonomy.</p>
+      <p>Failure mode: orchestrator hallucinates routing. Mitigations: typed outputs, bounded retries, the falsification gate (Module 05). The design is explicitly prepared to <em>demote</em> routing to code if the gate fails.</p>
+    </div>
+  </details>
+
+  <h3>Watch — Orchestration in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Martin Fowler &amp; James Lewis</span> — <span class="tt">The Many Meanings of Event-Driven Architecture</span> <span class="ctx">GOTO 2017 · ~50min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Martin+Fowler+Many+Meanings+Event+Driven+Architecture+GOTO" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Unpacks "event-driven" into four distinct patterns, which is the real answer to orchestration-vs-choreography — you're usually combining them.</p>
+    </li>
+    <li>
+      <span class="spk">Caitie McCaffrey</span> — <span class="tt">Building Scalable Stateful Services</span> <span class="ctx">Strange Loop 2015 · ~40min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Caitie+McCaffrey+Scalable+Stateful+Services+Strange+Loop" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The grown-up version of "who decides next." When coordination outgrows a single orchestrator, where do you put state? Goes where theory won't.</p>
+    </li>
+    <li>
+      <span class="spk">Maxim Fateev</span> — <span class="tt">Temporal / Cadence: Building Reliable Distributed Systems</span> <span class="ctx">various · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Maxim+Fateev+Temporal+Cadence+Workflow" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The story behind Uber's Cadence — why event choreography at scale made engineers reach for orchestration-as-infrastructure.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Orchestration, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: orchestrator, step C fails, orchestrator knows what to do">
+          <circle cx="380" cy="130" r="38" fill="#131a22" class="sb-acc" stroke-width="2"/>
+          <text x="380" y="128" text-anchor="middle" class="ttl sb-acc">O</text>
+          <text x="380" y="144" text-anchor="middle" class="lbl">orchestrator</text>
+
+          <rect x="120" y="50"  width="100" height="40" rx="6" fill="#131a22" class="sb-good"/><text x="170" y="74" text-anchor="middle" class="ttl">A ✓</text>
+          <rect x="120" y="170" width="100" height="40" rx="6" fill="#131a22" class="sb-good"/><text x="170" y="194" text-anchor="middle" class="ttl">B ✓</text>
+          <rect x="540" y="50"  width="100" height="40" rx="6" fill="#131a22" class="sb-bad" stroke-width="2"/><text x="590" y="74" text-anchor="middle" class="ttl sb-bad">C ✗</text>
+          <rect x="540" y="170" width="100" height="40" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="590" y="194" text-anchor="middle" class="lbl">D · waiting</text>
+
+          <path d="M220,68  L348,112" class="sb-good" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+          <path d="M220,192 L348,148" class="sb-good" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+          <path d="M412,112 L540,68"  class="sb-bad"  stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <path d="M412,148 L540,192" stroke="#6b7a88" stroke-width="1" stroke-dasharray="3,3" fill="none"/>
+
+          <text x="380" y="238" text-anchor="middle" class="lbl sb-acc">C failed · orchestrator compensates A, B · skips D · one trace, one decision-maker</text>
+        </svg>
+        <div class="cap"><strong>1 · Orchestrated failure.</strong> A single conductor holds the whole flow in one place. When C fails, compensation is explicit and immediate. <em>One place to look when anything goes wrong — for better and worse.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: choreography, step B fails, subscribers do not know">
+          <rect x="60"  y="100" width="100" height="44" rx="6" fill="#131a22" class="sb-good"/><text x="110" y="126" text-anchor="middle" class="ttl">A ✓</text>
+          <rect x="200" y="100" width="100" height="44" rx="6" fill="#131a22" class="sb-bad" stroke-width="2"/><text x="250" y="126" text-anchor="middle" class="ttl sb-bad">B ✗</text>
+          <rect x="340" y="100" width="100" height="44" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="390" y="126" text-anchor="middle" class="lbl">C · ran</text>
+          <rect x="480" y="100" width="100" height="44" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="530" y="126" text-anchor="middle" class="lbl">D · ran</text>
+          <rect x="620" y="100" width="100" height="44" rx="6" fill="#131a22" stroke="#2f3e50"/><text x="670" y="126" text-anchor="middle" class="lbl">E · queued</text>
+
+          <path d="M160,122 L200,122" class="sb-good" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+          <path d="M300,122 L340,122" stroke="#6b7a88" stroke-width="1" stroke-dasharray="3,3" fill="none" marker-end="url(#arr)"/>
+          <path d="M440,122 L480,122" stroke="#6b7a88" stroke-width="1" stroke-dasharray="3,3" fill="none" marker-end="url(#arr)"/>
+          <path d="M580,122 L620,122" stroke="#6b7a88" stroke-width="1" stroke-dasharray="3,3" fill="none" marker-end="url(#arr)"/>
+
+          <text x="250" y="170" text-anchor="middle" class="lbl sb-bad">B failed — but C, D fired on A's event</text>
+          <text x="390" y="200" text-anchor="middle" class="lbl">no central knower · no one reversed C, D</text>
+          <text x="390" y="224" text-anchor="middle" class="lbl sb-bad">"where did the order go?" — distributed rollback</text>
+        </svg>
+        <div class="cap"><strong>2 · Choreographed failure.</strong> No conductor. B fails but C and D already fired on A's event — and nothing coordinates reverse. <em>Saga compensation means every subscriber owns its own rollback, forever. Brilliant or brutal, depending on team headcount.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: hybrid — orchestrator for transactional, choreography for fan-out">
+          <circle cx="180" cy="110" r="32" fill="#131a22" class="sb-acc" stroke-width="2"/>
+          <text x="180" y="108" text-anchor="middle" class="ttl sb-acc">O</text>
+          <text x="180" y="124" text-anchor="middle" class="lbl">orch.</text>
+
+          <rect x="80"  y="60"  width="60" height="30" rx="4" fill="#131a22" class="sb-good"/><text x="110" y="80" text-anchor="middle" class="lbl">intake</text>
+          <rect x="80"  y="150" width="60" height="30" rx="4" fill="#131a22" class="sb-good"/><text x="110" y="170" text-anchor="middle" class="lbl">billing</text>
+          <rect x="220" y="60"  width="60" height="30" rx="4" fill="#131a22" class="sb-good"/><text x="250" y="80" text-anchor="middle" class="lbl">DUR</text>
+          <rect x="220" y="150" width="60" height="30" rx="4" fill="#131a22" class="sb-good"/><text x="250" y="170" text-anchor="middle" class="lbl">fulfill</text>
+
+          <path d="M140,75  L160,98"  stroke="#6b7a88" stroke-width="1" fill="none" marker-end="url(#arr)"/>
+          <path d="M140,165 L160,128" stroke="#6b7a88" stroke-width="1" fill="none" marker-end="url(#arr)"/>
+          <path d="M200,98  L220,75"  stroke="#6b7a88" stroke-width="1" fill="none" marker-end="url(#arr)"/>
+          <path d="M200,128 L220,165" stroke="#6b7a88" stroke-width="1" fill="none" marker-end="url(#arr)"/>
+
+          <text x="180" y="212" text-anchor="middle" class="ttl sb-acc">synchronous, one-trace</text>
+
+          <line x1="340" y1="40" x2="340" y2="220" stroke="#2f3e50" stroke-dasharray="4,4"/>
+
+          <path d="M180,78  Q430,30 600,70" class="sb-purp" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <text x="420" y="52" text-anchor="middle" class="lbl sb-purp">event: rx.submitted</text>
+
+          <rect x="400" y="100" width="110" height="30" rx="4" fill="#131a22" class="sb-purp"/><text x="455" y="120" text-anchor="middle" class="lbl sb-purp">audit</text>
+          <rect x="530" y="100" width="110" height="30" rx="4" fill="#131a22" class="sb-purp"/><text x="585" y="120" text-anchor="middle" class="lbl sb-purp">analytics</text>
+          <rect x="665" y="100" width="80"  height="30" rx="4" fill="#131a22" class="sb-purp"/><text x="705" y="120" text-anchor="middle" class="lbl sb-purp">notify</text>
+
+          <rect x="400" y="150" width="110" height="30" rx="4" fill="#131a22" class="sb-purp"/><text x="455" y="170" text-anchor="middle" class="lbl sb-purp">cache warm</text>
+          <rect x="530" y="150" width="110" height="30" rx="4" fill="#131a22" class="sb-purp"/><text x="585" y="170" text-anchor="middle" class="lbl sb-purp">ML retrain</text>
+
+          <text x="565" y="212" text-anchor="middle" class="ttl sb-purp">fan-out · each independent</text>
+        </svg>
+        <div class="cap"><strong>3 · The hybrid (rx-flow shape).</strong> Orchestrate the <em>transactional</em> spine (what must succeed-or-revert together). Choreograph the <em>fan-out</em> (what each subscriber does on its own). <em>Almost every real system lands here — the mistake is choosing one globally.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — locate the orchestration</h4>
+    <p>Pick a critical flow. Trace it. Who decides what runs next? If it's one component — is that component turning into a god object? If it's emergent — can you write the sequence in one sentence?</p>
+    <textarea placeholder="flow · who decides · one-sentence sequence..."></textarea>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M4 CAPABILITIES                                          -->
+<!-- ======================================================== -->
+<section class="module" id="m4">
+  <div class="eyebrow">04 · Safety</div>
+  <h2>Capability scoping &amp; least privilege</h2>
+  <div class="glyphs">
+    <span class="chip accent">POLA</span>
+    <span class="chip accent">Capability security</span>
+    <span class="chip accent">Default deny</span>
+    <span class="chip accent">Blast radius</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> any actor with more authority than its job needs is a latent incident. The question isn't "can it do this?" — it's "what's the smallest set of things it can do?" Addition is easy; subtraction is the invariant.
+  </div>
+
+  <h3>CareLink instance</h3>
+  <p>Each expert declares <code>allowed_tools</code> and <code>allowed_restish_commands</code>. Today's <code>_build_options(tools=)</code> at <code>service.py:508</code> is additive-only (<code>list(set(base_tools) | set(tools))</code>), silently widening every expert. PR 0.1 makes it subtractive — opt down from a baseline, not up. <code>Bash(prefix:*)</code> is already natively supported; the per-expert enforcement is a one-line comprehension.</p>
+
+  <div class="toggle-row" data-pair="tools">
+    <button class="on" data-pane="bad">Additive (broken)</button>
+    <button data-pane="good">Subtractive (fixed)</button>
+  </div>
+  <div class="pane on" data-pane="bad">
+<pre>def _build_options(tools=None, ...):
+    base_tools = ["Read", "Grep", "Bash", "WebFetch", "Write", "Edit", ...]
+    # today — union; "tools=[...]" only *adds*
+    return AgentOptions(tools=list(set(base_tools) | set(tools or [])))
+
+# calling with tools=["Read"] still yields every base tool.
+# intent "restrict to Read" silently becomes "add Read to everything".</pre>
+  </div>
+  <div class="pane" data-pane="good">
+<pre>def _build_options(tools=None, ...):
+    base_tools = ["Read", "Grep", "Bash", "WebFetch", "Write", "Edit", ...]
+    # intersection if tools provided, else default
+    allowed = [t for t in base_tools if t in tools] if tools is not None else base_tools
+    return AgentOptions(tools=allowed)
+
+# tools=["Read"] yields exactly ["Read"]. caller opts *down*.</pre>
+  </div>
+
+  <p class="meta">The shape matters more than the code. Additive defaults drift toward "everyone has everything" — adding is a PR, subtracting is a negotiation.</p>
+
+  <h3>Canonical mapping</h3>
+  <div class="pr"><div class="k">Saltzer 1975</div><div class="v"><strong>Principle of least authority.</strong> Every component should operate with the least privilege necessary.</div></div>
+  <div class="pr"><div class="k">Capability</div><div class="v">Authority is an unforgeable reference you <em>hold</em>, not an identity matched against an ACL.</div></div>
+  <div class="pr"><div class="k">Unix</div><div class="v"><code>chmod</code> / <code>setuid</code> / <code>chroot</code> — oldest POLA in wide deployment, warts and all.</div></div>
+  <div class="pr"><div class="k">Web</div><div class="v">CSP, same-origin, CORS — layered POLA retrofitted onto a trusting substrate. Retrofitting is always harder than starting with it.</div></div>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · AWS IAM (used well)</div>
+      <div class="title">Resource-scoped roles; no <code>*</code> actions</div>
+      <div class="body">Every compromised key in history would have done less damage with tight scoping. The model is right; the inconvenience makes people wildcard.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Container capabilities / seccomp</div>
+      <div class="title">Drop privileges at the kernel boundary</div>
+      <div class="body">A container that can't <code>execve</code> or <code>ptrace</code> turns a 0-day into a log line.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Java's SecurityManager</div>
+      <div class="title">Deprecated in JDK 17</div>
+      <div class="body">Theoretically perfect. Almost nobody configured it right. <em>POLA APIs have to be usable, not just sound.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · "Tighten later"</div>
+      <div class="title">Production <code>*:*</code> roles that outlive the deadline</div>
+      <div class="body">Default-permissive + "we'll fix it" ≈ "we'll never." The only ratchet is default-deny.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Over-scoping blocks incident response</div>
+      <div class="title">Oncall can't <code>logs:GetLogEvents</code></div>
+      <div class="body">POLA without break-glass is its own incident. Build auditable elevation paths — not no elevation paths.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Capability tokens leaking</div>
+      <div class="title">Unforgeable, shareable, accidentally shared</div>
+      <div class="body">Capabilities that survive the session become bearer tokens. Lifetime matters as much as scope.</div>
+    </div>
+  </div>
+
+  <p style="margin-top: 18px;"><mark>Design APIs so the "normal" path shrinks authority. Widening should be a conscious act.</mark></p>
+
+  <h3>Growth path</h3>
+  <p>Root everywhere <span class="arrow">→</span> RBAC <span class="arrow">→</span> ABAC / policy-as-code <span class="arrow">→</span> capability tokens with lifetimes <span class="arrow">→</span> zero trust.</p>
+
+  <details class="deep">
+    <summary>Deep dive — <code>UserQuestionGate</code> as accidental POLA</summary>
+    <div>
+      <p>The existing <code>UserQuestionGate</code> has a single <code>_pending</code> slot. Experts calling <code>AskUserQuestion</code> would clobber it. The design enforces "only orchestrator talks to human" by accident of the primitive.</p>
+      <p><strong>Lesson:</strong> the safest capability design is often a primitive that can't be misused — not an explicit policy. When policy can be encoded in shape, it can't drift.</p>
+    </div>
+  </details>
+
+  <h3>Watch — Capabilities in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Mark S. Miller</span> — <span class="tt">Bringing Object-orientation to Security Programming</span> <span class="ctx">Google TechTalks · ~1h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Mark+Miller+object+capability+security+programming" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The formal case for capabilities as unforgeable references, not identity-plus-ACL. Hard to unsee after one viewing.</p>
+    </li>
+    <li>
+      <span class="spk">Sam Roberts / Node.js team</span> — <span class="tt">Why Deno has Permissions</span> <span class="ctx">various · ~30min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Deno+permissions+capabilities+default+deny" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">POLA retrofitted into a widely-used runtime. Deno's <code>--allow-net</code> flags are the simplest live demo of "additive on purpose vs. ambient by default."</p>
+    </li>
+    <li>
+      <span class="spk">Ian Coldwater</span> — <span class="tt">Hello From the Other Side: Attacker's view of Containers</span> <span class="ctx">various · ~35min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Ian+Coldwater+container+attacker+capabilities" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Watch a compromised container's blast radius shrink as capabilities drop. The "why" behind seccomp and dropped Linux capabilities, made visceral.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Capabilities, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: ambient authority, one compromise reaches everything">
+          <rect x="40" y="90" width="160" height="64" rx="7" fill="#131a22" class="sb-bad" stroke-width="2"/>
+          <text x="120" y="114" text-anchor="middle" class="ttl sb-bad">intake expert</text>
+          <text x="120" y="134" text-anchor="middle" class="lbl">compromised</text>
+
+          <rect x="260" y="30"  width="140" height="42" rx="6" fill="#131a22" class="sb-bad"/><text x="330" y="56" text-anchor="middle" class="lbl sb-bad">✓ list-patients</text>
+          <rect x="260" y="82"  width="140" height="42" rx="6" fill="#131a22" class="sb-bad"/><text x="330" y="108" text-anchor="middle" class="lbl sb-bad">✓ create-patient</text>
+          <rect x="260" y="134" width="140" height="42" rx="6" fill="#131a22" class="sb-bad"/><text x="330" y="160" text-anchor="middle" class="lbl sb-bad">✓ submit-claim</text>
+          <rect x="260" y="186" width="140" height="42" rx="6" fill="#131a22" class="sb-bad"/><text x="330" y="212" text-anchor="middle" class="lbl sb-bad">✓ reverse-claim</text>
+          <rect x="430" y="30"  width="140" height="42" rx="6" fill="#131a22" class="sb-bad"/><text x="500" y="56" text-anchor="middle" class="lbl sb-bad">✓ update-prescription</text>
+          <rect x="430" y="82"  width="140" height="42" rx="6" fill="#131a22" class="sb-bad"/><text x="500" y="108" text-anchor="middle" class="lbl sb-bad">✓ delete-patient</text>
+          <rect x="430" y="134" width="140" height="42" rx="6" fill="#131a22" class="sb-bad"/><text x="500" y="160" text-anchor="middle" class="lbl sb-bad">✓ send-sms</text>
+          <rect x="430" y="186" width="140" height="42" rx="6" fill="#131a22" class="sb-bad"/><text x="500" y="212" text-anchor="middle" class="lbl sb-bad">✓ bulk-export</text>
+
+          <rect x="600" y="90" width="130" height="64" rx="7" fill="#131a22" class="sb-bad"/>
+          <text x="665" y="120" text-anchor="middle" class="ttl sb-bad">everything</text>
+          <text x="665" y="138" text-anchor="middle" class="lbl">one gate, all of it</text>
+
+          <path d="M200,122 L260,122" class="sb-bad" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <path d="M570,122 L600,122" class="sb-bad" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+        </svg>
+        <div class="cap"><strong>1 · Ambient authority.</strong> Every tool is reachable by default. A compromised expert — or a misfiring prompt — can touch anything on the allowed list. <em>Blast radius = the union of all authorities the process ever needed.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: default-deny, only scoped tools pass">
+          <rect x="40" y="90" width="160" height="64" rx="7" fill="#131a22" class="sb-good" stroke-width="2"/>
+          <text x="120" y="114" text-anchor="middle" class="ttl">intake expert</text>
+          <text x="120" y="134" text-anchor="middle" class="lbl sb-good">scoped capability set</text>
+
+          <rect x="260" y="30"  width="140" height="42" rx="6" fill="#131a22" class="sb-good"/><text x="330" y="56" text-anchor="middle" class="lbl sb-good">✓ list-patients</text>
+          <rect x="260" y="82"  width="140" height="42" rx="6" fill="#131a22" class="sb-good"/><text x="330" y="108" text-anchor="middle" class="lbl sb-good">✓ create-patient</text>
+
+          <rect x="260" y="134" width="140" height="42" rx="6" fill="#131a22" stroke="#2f3e50" opacity="0.5"/><text x="330" y="160" text-anchor="middle" class="lbl sb-bad">✗ submit-claim</text>
+          <rect x="260" y="186" width="140" height="42" rx="6" fill="#131a22" stroke="#2f3e50" opacity="0.5"/><text x="330" y="212" text-anchor="middle" class="lbl sb-bad">✗ reverse-claim</text>
+          <rect x="430" y="30"  width="140" height="42" rx="6" fill="#131a22" stroke="#2f3e50" opacity="0.5"/><text x="500" y="56" text-anchor="middle" class="lbl sb-bad">✗ update-prescription</text>
+          <rect x="430" y="82"  width="140" height="42" rx="6" fill="#131a22" stroke="#2f3e50" opacity="0.5"/><text x="500" y="108" text-anchor="middle" class="lbl sb-bad">✗ delete-patient</text>
+          <rect x="430" y="134" width="140" height="42" rx="6" fill="#131a22" stroke="#2f3e50" opacity="0.5"/><text x="500" y="160" text-anchor="middle" class="lbl sb-bad">✗ send-sms</text>
+          <rect x="430" y="186" width="140" height="42" rx="6" fill="#131a22" stroke="#2f3e50" opacity="0.5"/><text x="500" y="212" text-anchor="middle" class="lbl sb-bad">✗ bulk-export</text>
+
+          <text x="380" y="256" text-anchor="middle" class="lbl sb-good">subtractive: opt down from baseline, not up into it</text>
+        </svg>
+        <div class="cap"><strong>2 · Default deny.</strong> The intake expert gets only what intake needs. Compromise narrows — an exploit of this expert can't reverse a claim or delete a patient. <em>Subtractive defaults are a ratchet; additive defaults are a leak.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: additive drift">
+          <text x="380" y="30" text-anchor="middle" class="ttl sb-bad">"just add one more for this edge case"</text>
+
+          <rect x="40"  y="60" width="200" height="38" rx="5" fill="#131a22" class="sb-good"/><text x="140" y="83" text-anchor="middle" class="lbl sb-good">intake scope · day 1</text>
+          <text x="260" y="82" class="lbl">2 tools</text>
+
+          <rect x="40"  y="106" width="230" height="38" rx="5" fill="#131a22" stroke="#e0a66a"/><text x="155" y="129" text-anchor="middle" class="lbl" fill="#e0a66a">+ submit-claim (just for retry)</text>
+          <text x="290" y="128" class="lbl">3 tools · week 2</text>
+
+          <rect x="40"  y="152" width="280" height="38" rx="5" fill="#131a22" stroke="#e0a66a"/><text x="180" y="175" text-anchor="middle" class="lbl" fill="#e0a66a">+ update-prescription (edge case)</text>
+          <text x="340" y="174" class="lbl">4 tools · week 5</text>
+
+          <rect x="40"  y="198" width="380" height="38" rx="5" fill="#131a22" class="sb-bad" stroke-width="1.5"/><text x="230" y="221" text-anchor="middle" class="lbl sb-bad">+ reverse-claim, + send-sms, + bulk-export…</text>
+          <text x="440" y="220" class="lbl sb-bad">8 tools · month 3 → baseline</text>
+
+          <text x="380" y="256" text-anchor="middle" class="lbl sb-acc">every addition was a PR · no removal was ever a PR</text>
+        </svg>
+        <div class="cap"><strong>3 · Additive drift.</strong> Each expansion is well-meaning; none are ever reversed. Within months the "scoped" set equals the "everything" set, and default-deny has decayed back to ambient. <em>The only honest ratchet is a scheduled subtraction — "remove one this week, forever."</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — subtract authority</h4>
+    <p>Pick one IAM role / API token. List statements. Remove one you believe is unused. Ship to staging. If nothing breaks, ship to prod. Do this weekly, forever.</p>
+    <textarea placeholder="role · statements · candidate for removal..."></textarea>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M5 FALSIFICATION                                         -->
+<!-- ======================================================== -->
+<section class="module" id="m5">
+  <div class="eyebrow">05 · Release engineering</div>
+  <h2>Falsification as release gate</h2>
+  <div class="glyphs">
+    <span class="chip accent">Canary</span>
+    <span class="chip accent">Dual-write &amp; diff</span>
+    <span class="chip accent">Scientist gem</span>
+    <span class="chip accent">Popper</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> author confidence is a prediction; production evidence is the result. A good release gate is a falsifiable hypothesis, not a vibe. "Ship when X days of traces are clean" is science; "ship when it feels ready" is not.
+  </div>
+
+  <h3>CareLink instance</h3>
+  <p>Phase 6 <strong>deletes the monolith</strong> — a one-way door. It gates on "14 consecutive days of clean production orchestrator traces." Regression → halt and roll back. The burden is on the new system to <em>fail</em>; if it doesn't, we proceed.</p>
+
+  <svg class="diagram" viewBox="0 0 900 220">
+    <line x1="50" y1="120" x2="860" y2="120" stroke="#2f3e50" stroke-width="2"/>
+    <g>
+      <circle cx="110" cy="120" r="6" fill="#f2a65a"/><text x="110" y="100" text-anchor="middle" class="lbl">dark-shipped</text>
+      <circle cx="230" cy="120" r="6" fill="#f2a65a"/><text x="230" y="100" text-anchor="middle" class="lbl">1% canary</text>
+      <circle cx="370" cy="120" r="6" fill="#f2a65a"/><text x="370" y="100" text-anchor="middle" class="lbl">10% + diff vs monolith</text>
+      <circle cx="530" cy="120" r="6" fill="#f2a65a"/><text x="530" y="100" text-anchor="middle" class="lbl">50%</text>
+      <circle cx="670" cy="120" r="6" fill="#f2a65a"/><text x="670" y="100" text-anchor="middle" class="lbl">100%</text>
+      <circle cx="810" cy="120" r="8" fill="#6cc17b"/><text x="810" y="100" text-anchor="middle" class="lbl">delete monolith</text>
+    </g>
+    <rect x="660" y="140" width="190" height="60" rx="6" fill="#131a22" stroke="#6cc17b"/>
+    <text x="755" y="162" text-anchor="middle" class="ttl">14-day clean-trace gate</text>
+    <text x="755" y="180" text-anchor="middle" class="lbl">falsify-or-ship</text>
+    <text x="755" y="194" text-anchor="middle" class="lbl">regression → halt, rollback</text>
+  </svg>
+
+  <h3>Canonical mapping</h3>
+  <div class="pr"><div class="k">Popper</div><div class="v"><strong>Falsifiability.</strong> Confidence comes from surviving attempts to break it. Releases gained confidence by <em>surviving traffic</em>.</div></div>
+  <div class="pr"><div class="k">GitHub Scientist</div><div class="v">Dual-run old &amp; new, return old, log diffs. Divergences fixed at leisure. Famous use: GitHub's permissions rewrite.</div></div>
+  <div class="pr"><div class="k">Canary</div><div class="v">Gradual rollout with automated rollback on metric regression.</div></div>
+  <div class="pr"><div class="k">Chaos</div><div class="v">Actively try to break your system in production under control. Netflix's Chaos Monkey.</div></div>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · GitHub Scientist, 2016</div>
+      <div class="title">Rewriting permissions without an outage</div>
+      <div class="body">Old served users; new ran parallel; diffs logged. Fixed at leisure. When diffs → 0, flipped the switch. <em>The gate is only as good as the comparison function.</em></div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Google SRE's error budget</div>
+      <div class="title">Numeric gate baked into the org</div>
+      <div class="body">Under budget → ship faster. Over → slow down. The gate is the dev/SRE agreement — the math is easy.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Knight Capital, 2012</div>
+      <div class="title">$440M lost in 45 minutes</div>
+      <div class="body">Old feature flag repurposed; deploy missed one of eight servers. No gate, no canary, no diff. <em>The gate you didn't build cost the company.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Healthcare.gov, 2013</div>
+      <div class="title">Scale-tested in a room, launched to a nation</div>
+      <div class="body">No canary, no staged rollout. The gate was a press release.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Fake observability</div>
+      <div class="title">"We have metrics" ≠ "metrics would catch the bug"</div>
+      <div class="body">A gate on success count can pass while new path silently corrupts data. <em>Decide the regression signal before shipping.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Schema-locked migrations</div>
+      <div class="title">Rollback impossible because DB changed</div>
+      <div class="body">A gate without a real back door is one-way by accident. Migrations without a dual-write window remove your option.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · The gate that only logged</div>
+      <div class="title">Validator exists, validator speaks, nothing blocks</div>
+      <div class="body">Two flavors, observed in one session. (1) The startup registry validator <em>raised</em> on bad expert commands — but the lifespan wrapped it in <code>except Exception: logger.warning(...)</code> and the server came up broken. (2) The test that was supposed to catch exactly this <em>supplied</em> the fake command names to the validator's "known" set, so the gate passed because the fixture taught it the bug was real. Fixtures are config, not decoration. <em>A gate that logs instead of fails is a comment; a gate fed the answer key is theater. Decide at design time whether a signal halts or narrates — the default should be halt.</em></div>
+    </div>
+  </div>
+
+  <h3>The hypothesis-before-deploy drill</h3>
+  <ol>
+    <li><strong>What are we claiming?</strong> A falsifiable predicate: "orchestrator completes happy-path newRx &lt; 90s, &lt; 0.1% prose-instead-of-JSON retries." Not "it works."</li>
+    <li><strong>What would disprove it?</strong> Define signal &amp; threshold in advance — or you'll rationalize whatever you see.</li>
+    <li><strong>What's the rollback?</strong> Cheap flag, redeploy, or expensive migration? Cost of rollback = cost of being wrong.</li>
+    <li><strong>How long?</strong> Short windows catch quick bugs; long windows catch slow drift. 14 days covers two weekly prescribing cycles.</li>
+  </ol>
+
+  <h3>Growth path</h3>
+  <p>Ship on vibes <span class="arrow">→</span> staging <span class="arrow">→</span> feature flags <span class="arrow">→</span> manual canary <span class="arrow">→</span> automated metric-based canary <span class="arrow">→</span> experiments-as-infrastructure <span class="arrow">→</span> continuous production verification.</p>
+
+  <details class="deep">
+    <summary>Deep dive — why "clean traces" not "same answer as monolith"</summary>
+    <div>
+      <p>Scientist-style byte-equal diff would fail for reasons that don't matter — the old prompt is non-deterministic. "Clean traces" is a weaker gate <em>on purpose</em>: acceptable time, retry rates, no stuck states, no schema-output failures. It doesn't claim "same decision."</p>
+      <p><strong>General lesson:</strong> choose the strongest gate whose comparison function you can implement. Weakening is honest; using a strong-sounding gate you can't compute is dangerous.</p>
+    </div>
+  </details>
+
+  <h3>Watch — Falsification in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Nora Jones</span> — <span class="tt">Chaos Engineering: The Path to Reliability</span> <span class="ctx">QCon · ~40min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Nora+Jones+Chaos+Engineering+QCon" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The discipline of trying to break your system in production. The falsification gate's aggressive cousin — pair with the Scientist gem for a full picture.</p>
+    </li>
+    <li>
+      <span class="spk">Charity Majors</span> — <span class="tt">Observability: A 5-Year Retrospective</span> <span class="ctx">various · ~35min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Charity+Majors+Observability+5+year+retrospective" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Why "we have metrics" is not the same as "metrics would catch the bug." Directly names the "fake gate" failure mode from this module's loss cases.</p>
+    </li>
+    <li>
+      <span class="spk">Jez Humble</span> — <span class="tt">Continuous Delivery</span> <span class="ctx">GOTO · ~50min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Jez+Humble+Continuous+Delivery+GOTO" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">How deployment discipline turned into a falsifiable release process at the org level. Sets the stage for canary-as-default.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Falsification, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: ship on vibes, silent incident later">
+          <rect x="40"  y="80" width="130" height="50" rx="7" fill="#131a22" class="sb-info"/>
+          <text x="105" y="104" text-anchor="middle" class="ttl">deploy</text>
+          <text x="105" y="124" text-anchor="middle" class="lbl">"feels ready"</text>
+
+          <path d="M170,105 L600,105" stroke="#6b7a88" stroke-width="1" fill="none"/>
+          <circle cx="240" cy="105" r="5" fill="#6cc17b"/><text x="240" y="92" text-anchor="middle" class="lbl">day 0</text>
+          <circle cx="360" cy="105" r="5" fill="#6cc17b"/><text x="360" y="92" text-anchor="middle" class="lbl">day 2 · quiet</text>
+          <circle cx="480" cy="105" r="5" fill="#6cc17b"/><text x="480" y="92" text-anchor="middle" class="lbl">day 4 · still fine</text>
+          <circle cx="600" cy="105" r="9" fill="#e07a7a"/><text x="600" y="92" text-anchor="middle" class="lbl sb-bad">day 7 · 🔥</text>
+
+          <rect x="40" y="170" width="680" height="60" rx="7" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="380" y="194" text-anchor="middle" class="ttl sb-bad">the bug was there on day 0</text>
+          <text x="380" y="214" text-anchor="middle" class="lbl">nothing was watching the signal that would have surfaced it</text>
+        </svg>
+        <div class="cap"><strong>1 · Ship on vibes.</strong> Author confidence is a prediction. Without a pre-registered signal, you confuse "no one yelled" with "it works." The incident discovers itself — usually when it's most expensive. <em>Knight Capital shipped this way and lost $440M in 45 minutes.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: canary with pre-registered signal">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-acc">pre-registered: "disproven if retry-rate &gt; 2% in 24h"</text>
+
+          <rect x="40" y="50" width="680" height="80" rx="7" fill="#131a22" stroke="#2f3e50"/>
+          <text x="70" y="74" class="lbl">traffic:</text>
+          <rect x="70" y="86" width="40"  height="28" rx="3" fill="#6cc17b"/><text x="90"  y="104" text-anchor="middle" class="lbl">1%</text>
+          <rect x="120" y="86" width="90"  height="28" rx="3" fill="#6cc17b" opacity="0.7"/><text x="165" y="104" text-anchor="middle" class="lbl">10%</text>
+          <rect x="220" y="86" width="180" height="28" rx="3" fill="#6cc17b" opacity="0.5"/><text x="310" y="104" text-anchor="middle" class="lbl">50%</text>
+          <rect x="410" y="86" width="300" height="28" rx="3" fill="#6cc17b" opacity="0.3"/><text x="560" y="104" text-anchor="middle" class="lbl">100%</text>
+
+          <text x="70" y="156" class="lbl">signal (retry rate):</text>
+          <polyline points="70,210 160,208 260,206 360,205 470,204 580,203 690,203" class="sb-good" stroke-width="2" fill="none"/>
+          <line x1="70" y1="200" x2="710" y2="200" stroke="#2f3e50" stroke-dasharray="3,3"/>
+          <text x="714" y="204" class="lbl sb-acc">T</text>
+
+          <text x="380" y="242" text-anchor="middle" class="lbl sb-good">signal below threshold across every step · ramp proceeds</text>
+        </svg>
+        <div class="cap"><strong>2 · Pre-registered canary.</strong> Signal and threshold named <em>before</em> the deploy. Each traffic step is a bet; the metric either stays below T or rollback fires automatically. <em>"Disproven if M crosses T in window W" turns a deploy into an experiment.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: the gate that only logged">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-bad">the gate existed · the gate spoke · nothing blocked</text>
+
+          <rect x="40" y="60" width="200" height="170" rx="7" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="140" y="84" text-anchor="middle" class="ttl sb-bad">startup validation</text>
+          <text x="60" y="110" class="lbl">raises RegistryError</text>
+          <text x="60" y="128" class="lbl sb-bad">→ except Exception:</text>
+          <text x="60" y="146" class="lbl sb-bad">→ logger.warning(...)</text>
+          <text x="60" y="164" class="lbl">server comes up</text>
+          <text x="60" y="184" class="lbl sb-bad">broken · with a log line</text>
+
+          <rect x="280" y="60" width="200" height="170" rx="7" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="380" y="84" text-anchor="middle" class="ttl sb-bad">test fixture</text>
+          <text x="300" y="110" class="lbl">Gate 5 tests pass</text>
+          <text x="300" y="128" class="lbl sb-bad">because fixture</text>
+          <text x="300" y="146" class="lbl sb-bad">SUPPLIED the bug</text>
+          <text x="300" y="164" class="lbl">as "known command"</text>
+          <text x="300" y="184" class="lbl sb-bad">gate fed the answer key</text>
+
+          <rect x="520" y="60" width="200" height="170" rx="7" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="620" y="84" text-anchor="middle" class="ttl sb-good">fix</text>
+          <text x="540" y="110" class="lbl">catch the narrow type</text>
+          <text x="540" y="128" class="lbl sb-good">RAISE, not warn</text>
+          <text x="540" y="148" class="lbl">fixtures carry</text>
+          <text x="540" y="166" class="lbl sb-good">the truth, not the bug</text>
+          <text x="540" y="194" class="lbl sb-acc">logs narrate · gates block</text>
+        </svg>
+        <div class="cap"><strong>3 · The gate that only logged.</strong> Two flavors observed in one session: (a) production startup swallowed the validation exception as a warning; (b) the test fixture <em>supplied</em> the fake names as "known" so the gate passed with the bug. <em>A gate that logs instead of blocks is a comment. A gate fed the answer key is theater.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — pre-register a disproof</h4>
+    <p>Before your next deploy, write: <em>"this deploy is disproven if metric M crosses threshold T in window W."</em> Paste in PR description. Set the alert. After the window, mark: passed / failed / "didn't actually monitor." Option three is the most educational.</p>
+    <textarea placeholder="deploy · signal · threshold · window · rollback..."></textarea>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M6 STRANGLER                                             -->
+<!-- ======================================================== -->
+<section class="module" id="m6">
+  <div class="eyebrow">06 · Migration</div>
+  <h2>Strangler fig &amp; anti-corruption bridge</h2>
+  <div class="glyphs">
+    <span class="chip accent">Strangler fig (Fowler)</span>
+    <span class="chip accent">Anti-corruption layer</span>
+    <span class="chip accent">Adapter</span>
+    <span class="chip accent">Branch by abstraction</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> rewrites fail because the new system must be production-ready before it can learn anything from production. Strangler fig routes real traffic through new components while old keeps the business running. The bridge is the temporary boundary that lets both coexist.
+  </div>
+
+  <h3>CareLink instance</h3>
+  <p>Inngest is sacred — untouched. Phase 5 adds one mirror event (<code>rx/submit_claim.done</code>, ~2 lines at <code>submit_claim.py:216</code>) and a <code>dispatch_and_wait()</code> bridge. The monolith keeps running while the orchestrator is dark-shipped and canaried. At Phase 6 the monolith is deleted.</p>
+
+  <svg class="diagram" viewBox="0 0 900 230">
+    <text x="50" y="26" class="ttl">Phase 1–5 — both paths coexist</text>
+    <rect x="50" y="50" width="170" height="140" rx="8" fill="#131a22" stroke="#e07a7a"/>
+    <text x="135" y="78" text-anchor="middle" class="ttl" fill="#e07a7a">monolith</text>
+    <text x="135" y="98" text-anchor="middle" class="lbl">X% of traffic</text>
+    <text x="135" y="150" text-anchor="middle" class="lbl">Inngest: untouched</text>
+
+    <rect x="270" y="50" width="110" height="50" rx="8" fill="#131a22" stroke="#f2a65a"/>
+    <text x="325" y="78" text-anchor="middle" class="ttl">bridge</text>
+    <text x="325" y="92" text-anchor="middle" class="lbl">dispatch_and_wait</text>
+
+    <rect x="430" y="50" width="170" height="140" rx="8" fill="#131a22" stroke="#6cc17b"/>
+    <text x="515" y="78" text-anchor="middle" class="ttl" fill="#6cc17b">orchestrator</text>
+    <text x="515" y="98" text-anchor="middle" class="lbl">(1 − X)% of traffic</text>
+    <text x="515" y="150" text-anchor="middle" class="lbl">reuses Inngest via bridge</text>
+
+    <rect x="650" y="50" width="200" height="140" rx="8" fill="#131a22" stroke="#7fb4e4"/>
+    <text x="750" y="78" text-anchor="middle" class="ttl" fill="#7fb4e4">Inngest pipeline</text>
+    <text x="750" y="98" text-anchor="middle" class="lbl">(sacred — NEVER touched)</text>
+    <text x="750" y="128" text-anchor="middle" class="lbl">rx/submit_claim.done</text>
+    <text x="750" y="144" text-anchor="middle" class="lbl">+2 lines only</text>
+
+    <path d="M220,120 L270,78"  stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <path d="M380,78  L430,120" stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <path d="M600,120 L650,120" stroke="#6b7a88" fill="none" marker-end="url(#arr)"/>
+    <text x="450" y="215" text-anchor="middle" class="lbl" fill="#f2a65a">both paths reach the same pipeline; observable side-by-side</text>
+  </svg>
+
+  <h3>The two halves</h3>
+  <div class="grid grid-2">
+    <div class="card info">
+      <h4>Strangler fig (Fowler, 2004)</h4>
+      <p>Named after the <em>Ficus</em> that grows around a host tree until it replaces the trunk. New wraps old; old dies last, not first.</p>
+      <p><span class="tag">KEY MOVE</span> route traffic, not code.</p>
+    </div>
+    <div class="card purp">
+      <h4>Anti-corruption layer (Evans, 2003)</h4>
+      <p>A translation layer between contexts. Keeps the vocabulary and invariants of one side from leaking into the other.</p>
+      <p><span class="tag">KEY MOVE</span> translate at the edge.</p>
+    </div>
+  </div>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · Stripe migrations</div>
+      <div class="title">Dual-writing, per-integration cutover</div>
+      <div class="body">Rebuilt major subsystems without a "migration weekend." Every cutover is a dial; every rollback a flip. Strangler fig is their <em>default</em>.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · GOV.UK identity</div>
+      <div class="title">Verify → One Login, service-by-service</div>
+      <div class="body">Old system kept running for existing integrations; new adopted incrementally. The "rip and replace" alternative would have been fatal.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Netscape rewrite, 1998–2001</div>
+      <div class="title">"We'll rewrite Navigator from scratch"</div>
+      <div class="body">Spolsky's "things you should never do." Two-year rewrite, IE ate the market. Strangler fig exists because rewrites don't.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Parallel-systems-forever</div>
+      <div class="title">5-year programs that never cut over</div>
+      <div class="body">When the bridge is comfortable enough, "temporary" becomes architectural. Set a cutover deadline or land here.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Bridge-as-god-object</div>
+      <div class="title">ACL grows every edge case for both sides</div>
+      <div class="body">Starts innocuous; collects every mismatch. <em>Fix:</em> every ACL rule gets a scheduled removal — absorbed by one side.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · The deletion that never happens</div>
+      <div class="title">"Phase 6" that never ships</div>
+      <div class="body">Migrations without a delete day aren't migrations — they're tech debt with extra steps.</div>
+    </div>
+  </div>
+
+  <h3>Growth path</h3>
+  <p>Big-bang rewrite (don't) <span class="arrow">→</span> branch by abstraction <span class="arrow">→</span> strangler fig with traffic-split router <span class="arrow">→</span> parallel systems with diff (Scientist) <span class="arrow">→</span> cutover + deletion.</p>
+
+  <details class="deep">
+    <summary>Deep dive — "sacred zones" as anti-corruption by convention</summary>
+    <div>
+      <p>rx-flow's "<em>NEVER touch Inngest rx_flows</em>" is an ACL declared by cultural convention, not a physical layer. Works when:</p>
+      <ul>
+        <li>The boundary is narrow (one directory).</li>
+        <li>The exception is named and small ("exactly 2 lines at <code>submit_claim.py:216</code>").</li>
+        <li>The team enforces it unambiguously in review.</li>
+      </ul>
+      <p>When any fails, replace convention with a physical layer: separate package, CI check, types-only export surface.</p>
+    </div>
+  </details>
+
+  <h3>Watch — Strangler in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Sam Newman</span> — <span class="tt">Monolith to Microservices: Patterns for Migration</span> <span class="ctx">GOTO · ~1h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Sam+Newman+Monolith+to+Microservices+GOTO" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The companion book talk. Contains the canonical strangler fig walkthroughs plus the honest "when to NOT decompose" framing.</p>
+    </li>
+    <li>
+      <span class="spk">Shopify engineering</span> — <span class="tt">Deconstructing the Monolith</span> <span class="ctx">ShipIt! / various · ~40min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Shopify+Deconstructing+the+Monolith+modular" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">A migration that chose "modular monolith" as the destination, not microservices. The most honest Prime-Video-shaped happy path.</p>
+    </li>
+    <li>
+      <span class="spk">Rebecca Parsons</span> — <span class="tt">Evolutionary Architecture</span> <span class="ctx">GOTO · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Rebecca+Parsons+Evolutionary+Architecture+GOTO" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Treats the migration itself as an architectural concern with fitness functions. The strangler-fig pattern's natural habitat.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Strangler, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: big-bang rewrite">
+          <rect x="40" y="60" width="180" height="150" rx="8" fill="#131a22" class="sb-bad" stroke-width="2"/>
+          <text x="130" y="88" text-anchor="middle" class="ttl sb-bad">legacy (running)</text>
+          <text x="130" y="114" text-anchor="middle" class="lbl">100% traffic</text>
+          <text x="130" y="134" text-anchor="middle" class="lbl">ships patches</text>
+          <text x="130" y="154" text-anchor="middle" class="lbl">accumulates features</text>
+          <text x="130" y="182" text-anchor="middle" class="lbl sb-bad">(still growing)</text>
+
+          <rect x="300" y="60" width="180" height="150" rx="8" fill="#131a22" stroke="#e07a7a" stroke-dasharray="5,4" stroke-width="2"/>
+          <text x="390" y="88" text-anchor="middle" class="ttl" fill="#e07a7a">rewrite (year 1)</text>
+          <text x="390" y="114" text-anchor="middle" class="lbl">not production-ready</text>
+          <text x="390" y="134" text-anchor="middle" class="lbl">no live traffic</text>
+          <text x="390" y="154" text-anchor="middle" class="lbl sb-bad">missing features · moving target</text>
+          <text x="390" y="182" text-anchor="middle" class="lbl">always 6 months away</text>
+
+          <rect x="560" y="60" width="180" height="150" rx="8" fill="#131a22" stroke="#e07a7a" stroke-dasharray="5,4"/>
+          <text x="650" y="88" text-anchor="middle" class="ttl" fill="#e07a7a">year 3 outcome</text>
+          <text x="650" y="114" text-anchor="middle" class="lbl sb-bad">market moved</text>
+          <text x="650" y="134" text-anchor="middle" class="lbl sb-bad">rewrite canceled</text>
+          <text x="650" y="154" text-anchor="middle" class="lbl">legacy still running</text>
+          <text x="650" y="182" text-anchor="middle" class="lbl">tech debt +3 years</text>
+
+          <path d="M220,135 L300,135" stroke="#e07a7a" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arr)"/>
+          <path d="M480,135 L560,135" stroke="#e07a7a" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arr)"/>
+        </svg>
+        <div class="cap"><strong>1 · Big-bang rewrite.</strong> The new system has to be production-ready before it can learn anything from production. The old keeps accreting features while the new chases the moving target. <em>Spolsky named this "things you should never do" — Netscape and many others since.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: strangler fig with traffic dial">
+          <rect x="40" y="60" width="160" height="130" rx="8" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="120" y="88" text-anchor="middle" class="ttl sb-bad">monolith</text>
+          <text x="120" y="120" text-anchor="middle" class="ttl" fill="#e07a7a" style="font-size: 22px;">90%</text>
+          <text x="120" y="140" text-anchor="middle" class="lbl">current baseline</text>
+          <text x="120" y="172" text-anchor="middle" class="lbl">untouched</text>
+
+          <rect x="240" y="80" width="100" height="90" rx="8" fill="#131a22" class="sb-acc" stroke-width="2"/>
+          <text x="290" y="108" text-anchor="middle" class="ttl sb-acc">router</text>
+          <text x="290" y="128" text-anchor="middle" class="lbl">dial: 10% →</text>
+          <text x="290" y="152" text-anchor="middle" class="lbl">flag-flip rollback</text>
+
+          <rect x="380" y="60" width="160" height="130" rx="8" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="460" y="88" text-anchor="middle" class="ttl sb-good">orchestrator (new)</text>
+          <text x="460" y="120" text-anchor="middle" class="ttl sb-good" style="font-size: 22px;">10%</text>
+          <text x="460" y="140" text-anchor="middle" class="lbl">canary traffic</text>
+          <text x="460" y="172" text-anchor="middle" class="lbl sb-good">learning in prod</text>
+
+          <rect x="580" y="60" width="160" height="130" rx="8" fill="#131a22" class="sb-info" stroke-width="1.5"/>
+          <text x="660" y="88" text-anchor="middle" class="ttl sb-info">Inngest (sacred)</text>
+          <text x="660" y="120" text-anchor="middle" class="lbl">both paths reach it</text>
+          <text x="660" y="140" text-anchor="middle" class="lbl sb-info">rx/submit_claim.done</text>
+          <text x="660" y="160" text-anchor="middle" class="lbl">+2 lines — no more</text>
+
+          <path d="M200,128 L240,128" stroke="#6b7a88" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <path d="M340,108 L380,108" stroke="#6b7a88" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <path d="M540,128 L580,128" stroke="#6b7a88" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <path d="M340,148 L380,148" stroke="#6b7a88" stroke-width="0.5" fill="none"/>
+
+          <text x="380" y="230" text-anchor="middle" class="lbl sb-acc">traffic ratio is a dial · rollback is a flag-flip · both systems serve real users</text>
+        </svg>
+        <div class="cap"><strong>2 · Strangler with anti-corruption bridge.</strong> Old keeps running; new takes a slice; the bridge lets both hit the same Inngest pipeline. The traffic ratio is a dial, not a commit. <em>Every cutover is reversible because both paths are alive.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: deletion criterion — bridge dies, not lives forever">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-acc">deletion criterion: measurable, pre-committed</text>
+
+          <rect x="40"  y="60"  width="680" height="30" rx="4" fill="#131a22" stroke="#2f3e50"/>
+          <text x="60" y="80" class="lbl">traffic on monolith</text>
+          <rect x="320" y="64" width="4" height="22" fill="#e07a7a"/>
+          <text x="330" y="80" class="lbl sb-bad">currently 0.3%</text>
+
+          <rect x="40"  y="100" width="680" height="30" rx="4" fill="#131a22" stroke="#2f3e50"/>
+          <text x="60" y="120" class="lbl">orchestrator trace cleanliness · rolling 14d</text>
+          <rect x="320" y="104" width="4" height="22" fill="#6cc17b"/>
+          <text x="330" y="120" class="lbl sb-good">14 / 14 clean</text>
+
+          <rect x="40"  y="140" width="680" height="30" rx="4" fill="#131a22" stroke="#2f3e50"/>
+          <text x="60" y="160" class="lbl">parity diff vs. monolith</text>
+          <rect x="320" y="144" width="4" height="22" fill="#6cc17b"/>
+          <text x="330" y="160" class="lbl sb-good">0 diffs / 1240 samples</text>
+
+          <rect x="40"  y="180" width="680" height="44" rx="6" fill="#131a22" class="sb-good" stroke-width="2"/>
+          <text x="380" y="204" text-anchor="middle" class="ttl sb-good">all criteria met · monolith deleted in PR #6</text>
+          <text x="380" y="218" text-anchor="middle" class="lbl">the bridge also goes — absorbed by orchestrator</text>
+
+          <text x="380" y="250" text-anchor="middle" class="lbl sb-acc">without a deletion criterion, "temporary" becomes architecture</text>
+        </svg>
+        <div class="cap"><strong>3 · The deletion day.</strong> Migrations without a delete day aren't migrations — they're tech debt with extra steps. Phase 6 runs only when the criteria were written first and the signals now match them. <em>Write the delete-day predicate in PR #1, or the bridge lives forever.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — write a deletion criterion</h4>
+    <p>Pick legacy everyone says "we'll replace." Write the conditions under which it's deleted — not "we decide to," but measurable state: traffic = 0%, callers migrated, parity diff = 0%. If unwritable, nobody can delete it. That's the actual blocker.</p>
+    <textarea placeholder="legacy · measurable deletion criteria..."></textarea>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M7 SYNTHESIS                                             -->
+<!-- ======================================================== -->
+<section class="module" id="m7">
+  <div class="eyebrow">07 · Synthesis</div>
+  <h2>How the patterns compose</h2>
+
+  <div class="tldr">
+    <strong>Claim:</strong> these six aren't a menu — they're a stack. Decomposition creates boundaries. Contracts make them real. Orchestration chooses how coordination flows across them. Capability scoping limits what crossing them can do. Falsification keeps the stack honest against reality. Strangler is how you change any of the first five without a rewrite.
+  </div>
+
+  <h3>Dependency graph</h3>
+  <svg class="diagram" viewBox="0 0 900 300">
+    <rect x="50"  y="150" width="150" height="58" rx="8" fill="#131a22" stroke="#f2a65a"/>
+    <text x="125" y="176" text-anchor="middle" class="ttl">01 · Contexts</text>
+    <text x="125" y="194" text-anchor="middle" class="lbl">identify seams</text>
+
+    <rect x="240" y="150" width="150" height="58" rx="8" fill="#131a22" stroke="#f2a65a"/>
+    <text x="315" y="176" text-anchor="middle" class="ttl">02 · Contracts</text>
+    <text x="315" y="194" text-anchor="middle" class="lbl">make enforceable</text>
+
+    <rect x="430" y="150" width="170" height="58" rx="8" fill="#131a22" stroke="#f2a65a"/>
+    <text x="515" y="176" text-anchor="middle" class="ttl">03 · Orchestration</text>
+    <text x="515" y="194" text-anchor="middle" class="lbl">who calls next</text>
+
+    <rect x="155" y="50"  width="150" height="58" rx="8" fill="#131a22" stroke="#7fb4e4"/>
+    <text x="230" y="76"  text-anchor="middle" class="ttl">04 · Capabilities</text>
+    <text x="230" y="94"  text-anchor="middle" class="lbl">limit what each does</text>
+
+    <rect x="345" y="50"  width="150" height="58" rx="8" fill="#131a22" stroke="#7fb4e4"/>
+    <text x="420" y="76"  text-anchor="middle" class="ttl">05 · Falsification</text>
+    <text x="420" y="94"  text-anchor="middle" class="lbl">ship on evidence</text>
+
+    <rect x="640" y="150" width="200" height="58" rx="8" fill="#131a22" stroke="#b48cd6"/>
+    <text x="740" y="176" text-anchor="middle" class="ttl">06 · Strangler</text>
+    <text x="740" y="194" text-anchor="middle" class="lbl">migrate any of the above</text>
+
+    <path d="M200,179 L240,179" stroke="#f2a65a" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+    <path d="M390,179 L430,179" stroke="#f2a65a" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+    <path d="M230,108 L230,150" stroke="#7fb4e4" stroke-width="1" stroke-dasharray="3,3" fill="none" marker-end="url(#arr)"/>
+    <path d="M420,108 L515,150" stroke="#7fb4e4" stroke-width="1" stroke-dasharray="3,3" fill="none" marker-end="url(#arr)"/>
+    <path d="M600,179 L640,179" stroke="#b48cd6" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+    <text x="125" y="260" class="lbl">solid = prerequisites</text>
+    <text x="420" y="260" class="lbl" fill="#7fb4e4">dashed = quality overlays</text>
+    <text x="740" y="260" class="lbl" fill="#b48cd6">strangler = how you change anything</text>
+  </svg>
+
+  <h3>Failure archetypes — read by stack position</h3>
+  <table class="matrix">
+    <thead><tr><th>Symptom</th><th>Likely missing</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Change in one area breaks five others</td><td>01 · wrong boundaries</td><td>Trace change rates; redraw by vocab</td></tr>
+      <tr><td>"Works locally, explodes in prod"</td><td>02 · boundary not enforceable</td><td>Type it; validate <em>at</em>, not <em>past</em> it</td></tr>
+      <tr><td>Nobody can tell you where a transaction is</td><td>03 · unclear coordination</td><td>Add orchestrator or add tracing</td></tr>
+      <tr><td>One compromised component → whole blast</td><td>04 · over-authorized</td><td>Default deny; scope by role</td></tr>
+      <tr><td>Deploys regularly cause incidents</td><td>05 · no falsification gate</td><td>Pre-register disproof; canary</td></tr>
+      <tr><td>Stuck in multi-year rewrite</td><td>06 · no strangler</td><td>Route through interface; cutover deadline</td></tr>
+    </tbody>
+  </table>
+
+  <h3>The meta-pattern</h3>
+  <p><mark>Make invariants enforceable, then walk them forward.</mark> Boundaries become types. Routing becomes a scoped tool. "Safe to ship" becomes a predicate. "Don't touch legacy" becomes an exact 2-line edit. Whenever you catch yourself relying on a human to remember, look for the shape that would remember for you.</p>
+
+  <h3>What's genuinely new here (LLMs)</h3>
+  <ul>
+    <li><strong>The worker is non-deterministic.</strong> Every pattern above works <em>better</em> with typed contracts — LLMs make them mandatory.</li>
+    <li><strong>The prompt is code.</strong> Versioned, reviewed, typed at I/O, tested, release-gated.</li>
+    <li><strong>Routing can be reasoning.</strong> Doesn't have to be a switch statement — but can drift, so gates matter more.</li>
+    <li><strong>Tool scoping is authority design.</strong> What an LLM can call is what it can do. POLA is a correctness primitive, not a security afterthought.</li>
+    <li><strong>Hallucination is the default escape hatch.</strong> When the model can't do a thing cleanly it produces something plausible-looking instead of erroring. An undefined restish command doesn't raise — it becomes a guessed URL. Contracts have to hold at <em>call time</em> with real fallback behavior, not only at <em>registration time</em> as static validation. (See Module 02.)</li>
+    <li><strong>The LLM retries without memory.</strong> Each turn starts fresh; the model will call <code>create_product(ndc=X)</code> as if new whether X exists or not. Write paths consumed by LLMs must be idempotent by natural key at the storage layer (DB <code>ON CONFLICT</code>, upsert semantics) — "the caller checks first" is a convention, not a guarantee, and the caller has no memory to keep it.</li>
+  </ul>
+
+  <p>Everything else is software engineering you already know, rediscovered in a new substrate. That's the good news.</p>
+
+  <h3>Watch — Synthesis</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">John Ousterhout</span> — <span class="tt">A Philosophy of Software Design</span> <span class="ctx">Google Talks · ~1h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=John+Ousterhout+Philosophy+Software+Design+Google" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The book-length argument for "complexity is the enemy," distilled. Every pattern in this lab is a particular strategy from Ousterhout's toolkit.</p>
+    </li>
+    <li>
+      <span class="spk">Pat Helland</span> — <span class="tt">Mind Your State for Your State of Mind</span> <span class="ctx">various · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Pat+Helland+Mind+Your+State+State+of+Mind" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">A veteran's view of how the stack above composes — state, time, boundaries, invariants. Watch after you've worked through M1–M6 and the connections click.</p>
+    </li>
+    <li>
+      <span class="spk">Kent Beck</span> — <span class="tt">Tidy First</span> <span class="ctx">various · ~30min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Kent+Beck+Tidy+First+refactoring" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The meta-move: "make the change easy, then make the easy change." Synthesis IS being fluent enough to pick the cheapest pattern for the bar in front of you.</p>
+    </li>
+  </ul>
+</section>
+
+<!-- ======================================================== -->
+<!-- M9 CROSS-DOMAIN — patterns in 3 other systems            -->
+<!-- ======================================================== -->
+<section class="module" id="m9">
+  <div class="eyebrow">09 · Cross-domain</div>
+  <h2>The same six patterns, three different systems</h2>
+
+  <div class="tldr">
+    <strong>Claim:</strong> if the patterns are real, they transfer. Here they are mapped onto three systems that have nothing to do with pharmacy or LLMs — a meeting scheduler, a social feed, and a workflow engine. Notice how the <em>vocabulary</em> shifts but the <em>forces</em> don't.
+  </div>
+
+  <div class="toggle-row" data-pair="domains">
+    <button class="on" data-pane="sched">Meeting scheduler</button>
+    <button data-pane="feed">Social feed</button>
+    <button data-pane="wf">Workflow engine</button>
+  </div>
+
+  <!-- Scheduler -->
+  <div class="pane on" data-pane="sched">
+    <h3>Meeting scheduler (Calendly / Cal.com shape)</h3>
+    <p>A product where invitees pick a slot from a host's availability. Reminders, payments, calendar-sync.</p>
+    <table class="matrix">
+      <thead><tr><th>Pattern</th><th>How it shows up</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>01 · Decomposition</strong></td>
+          <td>Bounded contexts: <em>availability</em> (when I'm free), <em>booking</em> (an invitee claimed a slot), <em>notification</em> (email/SMS reminders), <em>billing</em> (paid events). Each has different vocab ("slot" means one thing to availability, another to billing) and different change rates. Trying to cram them into one "Calendar" service is the god-class mistake.</td>
+        </tr>
+        <tr>
+          <td><strong>02 · Contracts</strong></td>
+          <td><code>TimeSlot</code> carries timezone or the invariant is broken on day one. <code>Booking</code> has typed participants, a state machine (tentative → confirmed → cancelled), and an idempotency key so a double-click doesn't create two bookings. The external calendar adapter (Google / iCloud / CalDAV) is behind a narrow typed port — swap providers without touching business code.</td>
+        </tr>
+        <tr>
+          <td><strong>03 · Orchestration</strong></td>
+          <td>The booking flow is <em>orchestrated</em>: check availability → reserve slot → notify host → charge (if paid) → emit <code>booking.confirmed</code>. Linear; compensation is well-defined (reverse each step on failure). Reminder emails are <em>choreographed</em>: they subscribe to <code>booking.confirmed</code> and fire 24h and 1h before — no central scheduler needed.</td>
+        </tr>
+        <tr>
+          <td><strong>04 · Capabilities</strong></td>
+          <td>The notification service can't modify bookings; the payment service can't read availability calendars; the embed widget on a partner site gets a scoped token that only lets it create bookings under one host. A compromised embed leaks one host's hours, not the whole DB.</td>
+        </tr>
+        <tr>
+          <td><strong>05 · Falsification</strong></td>
+          <td>"Moving default reminder from 24h to 2h drops no-shows by ≥8%." A/B split by booking. Rollback = flag flip. The gate is <em>no-show rate</em>, not "the feature shipped." Guard metric: cancellation rate (make sure you didn't just convert no-shows into cancellations — Goodhart watching).</td>
+        </tr>
+        <tr>
+          <td><strong>06 · Strangler</strong></td>
+          <td>Migrating from Google Calendar API to direct CalDAV. Dark-ship CalDAV for 1% of new users; compare write correctness against Google. Ratchet up. Old path stays until Phase-6-style deletion criteria: zero traffic, parity diff = 0, all callers migrated.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Feed -->
+  <div class="pane" data-pane="feed">
+    <h3>Social media feed (Twitter / Instagram / TikTok shape)</h3>
+    <p>Posts come in; a ranked timeline goes out. Engagement flows back. Ads get interleaved.</p>
+    <table class="matrix">
+      <thead><tr><th>Pattern</th><th>How it shows up</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>01 · Decomposition</strong></td>
+          <td>Bounded contexts: <em>ingestion</em> (post creation + moderation), <em>ranking</em> (scoring candidates), <em>delivery</em> (assembling a timeline on request), <em>interaction</em> (likes, comments, follows), <em>ads</em> (auction + placement). Each lives in a different team at scale. The vocab "post" in ingestion is a content artifact; in ranking it's a feature vector. Same word, different contexts.</td>
+        </tr>
+        <tr>
+          <td><strong>02 · Contracts</strong></td>
+          <td><code>Post</code> schema is versioned and forward/backward compatible — old clients keep working. Ranking inputs are a typed feature record; one contract per model version. Engagement events (<code>Post.liked</code>, <code>Comment.created</code>) are typed and immutable — this is what makes the event fan-out safe.</td>
+        </tr>
+        <tr>
+          <td><strong>03 · Orchestration</strong></td>
+          <td>The timeline-build is <em>orchestrated</em>: fetch candidate pool → compute features → score → blend with ads → personalize → return. One request, one trace. Engagement is <em>choreographed</em>: a like emits an event; subscribers update counters, re-train models, notify the author — all independently.</td>
+        </tr>
+        <tr>
+          <td><strong>04 · Capabilities</strong></td>
+          <td>The ranking service can read posts but not delete them. The ads service can't see private/protected accounts' posts. The notification service can't read DMs. Every data-access path is scoped and logged. A compromised ranking model doesn't have auth to ship a mass-delete.</td>
+        </tr>
+        <tr>
+          <td><strong>05 · Falsification</strong></td>
+          <td>Every ranking change is A/B tested. Guard metrics include <em>well-being</em> signals (time spent, "regrets sending," hide-post rate) — not only engagement. This is where Instagram's chronological→algorithmic migration succeeded and where similar migrations fail: picking one metric (engagement) and ignoring the rest (well-being) turns Goodhart's law into a product disaster.</td>
+        </tr>
+        <tr>
+          <td><strong>06 · Strangler</strong></td>
+          <td>Instagram chronological → algorithmic: dark-ship the algo, slowly raise its weight, keep the chrono path for opt-out. Same shape as rx-flow Phase 5/6: both paths coexist, evidence accumulates, old path dies last. The lesson: the migration <em>is</em> a years-long phased rollout, not a deploy.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Workflow -->
+  <div class="pane" data-pane="wf">
+    <h3>Workflow engine (Airflow / Temporal / Prefect shape)</h3>
+    <p>The meta-example: a system whose whole job is to provide orchestration as a service to other teams.</p>
+    <table class="matrix">
+      <thead><tr><th>Pattern</th><th>How it shows up</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>01 · Decomposition</strong></td>
+          <td>Bounded contexts inside the engine: <em>scheduler</em> (decides what to run when), <em>executor</em> (runs the task), <em>worker registry</em>, <em>observability</em> (state + history), <em>auth</em>. Users' DAGs are themselves an application of decomposition — each task is a bounded unit.</td>
+        </tr>
+        <tr>
+          <td><strong>02 · Contracts</strong></td>
+          <td>Every task is a typed function: declared inputs, declared outputs, idempotency guarantees. The DAG definition is a typed graph. This is the whole point of systems like Temporal: "make the workflow look like a function, and the types enforce the seams."</td>
+        </tr>
+        <tr>
+          <td><strong>03 · Orchestration</strong></td>
+          <td>This <em>is</em> orchestration made explicit as a product. But <em>within</em> tasks, users should prefer purity and idempotency — each task is a small orchestrator over deterministic units. The engine's own interior is choreographed (scheduler and workers talk via a queue).</td>
+        </tr>
+        <tr>
+          <td><strong>04 · Capabilities</strong></td>
+          <td>Workers get only the credentials the specific task requires. No ambient authority. A leaked worker token exposes one pipeline, not the warehouse. Best-in-class engines forbid global state between tasks — the primitive itself is scoped.</td>
+        </tr>
+        <tr>
+          <td><strong>05 · Falsification</strong></td>
+          <td>Engine upgrades gate on SLA violation rate, retry-count distribution, and per-task success rates. Airflow 1 → 2 was a classic case: new scheduler behavior validated by shadow-running against old on a sample of real DAGs before cutover.</td>
+        </tr>
+        <tr>
+          <td><strong>06 · Strangler</strong></td>
+          <td>Airflow → Prefect or Airflow 1 → 2: teams run both engines side-by-side for months. DAG definitions are code, so you can often port incrementally. The deletion criterion: "no DAG runs on old engine for N days." Without that criterion, the dual-system becomes permanent.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What the table is trying to teach</h3>
+  <ul>
+    <li><strong>Same pattern, different vocabulary.</strong> "Bounded context" is the idea; "availability service" vs. "ranking service" vs. "scheduler" is the noun. Don't get distracted by nouns.</li>
+    <li><strong>Orchestration + choreography is usually a hybrid.</strong> One request path orchestrated; event cascades choreographed. Rx-flow does the same thing: orchestrator session + Inngest bridge. The shape is universal.</li>
+    <li><strong>The hard parts rhyme.</strong> Goodhart's law in social feed ranking = prose-not-JSON metric in rx-flow. Distribution shift. Authority creep. Migration fatigue. If you've seen one, you'll recognize the others.</li>
+    <li><strong>The patterns don't tell you which choices to make — they tell you which <em>questions to ask.</em></strong> "Where's the seam?" "What's the contract?" "Who decides what runs next?" "What's the smallest authority that works?" "How will we know it's wrong?" "How will we kill the old thing?" Same six questions, every system you'll ever touch.</li>
+  </ul>
+
+  <h3>Watch — System design across domains</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Gregor Hohpe</span> — <span class="tt">Enterprise Integration Patterns &amp; the Architect Elevator</span> <span class="ctx">various · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Gregor+Hohpe+Enterprise+Integration+Patterns+Elevator" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The same six forces mapped across wildly different domains — messaging, e-commerce, finance. Trains the "ignore nouns, recognize forces" reflex this module wants you to build.</p>
+    </li>
+    <li>
+      <span class="spk">Kelsey Hightower</span> — <span class="tt">Monolith Decomposition — Domain by Domain</span> <span class="ctx">various · ~40min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Kelsey+Hightower+monolith+decomposition+domain" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Working examples in three unrelated domains. Pairs with this module's scheduler / feed / workflow-engine table.</p>
+    </li>
+    <li>
+      <span class="spk">Martin Kleppmann</span> — <span class="tt">Designing Data-Intensive Applications (talks)</span> <span class="ctx">various · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Martin+Kleppmann+Data+Intensive+Applications+talk" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The book summarized from the stage. A concrete catalog of how patterns reappear across storage, messaging, and stream processing substrates.</p>
+    </li>
+  </ul>
+
+  <div class="quiz">
+    <h4>Drill — map your system</h4>
+    <p>Pick a non-trivial system you work on. For each of the six patterns, write one sentence answering the relevant question. If you can't answer one, you've found a weakness — not in the system necessarily, but in your <em>model</em> of it.</p>
+    <textarea placeholder="system · 01 seams · 02 contracts · 03 orchestration · 04 authority · 05 falsification · 06 migration strategy..."></textarea>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M10 TRACEABILITY                                         -->
+<!-- ======================================================== -->
+<section class="module" id="m10">
+  <div class="eyebrow">10 · Observability</div>
+  <h2>Traceability — who invoked who, and was that right?</h2>
+  <div class="glyphs">
+    <span class="chip accent">OpenTelemetry</span>
+    <span class="chip accent">Dapper lineage</span>
+    <span class="chip accent">Event sourcing</span>
+    <span class="chip accent">Observability</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> you can only optimize what you can see. Traceability is the <em>precondition</em> for the falsification gate (Module 05) and the explore/exploit loop (Module 11). Without it, every other pattern above degrades to opinion.
+  </div>
+
+  <h3>The minimal unit — a span</h3>
+  <p>Every call is a <strong>span</strong>. Every related set of spans is a <strong>trace</strong>, tied by a trace ID. Context — the trace ID + parent span ID — propagates across every call, tool invocation, and event publication. When it hits an async boundary (a queue, an Inngest event), you carry the correlation ID so the downstream work joins the tree.</p>
+
+  <svg class="diagram" viewBox="0 0 900 240">
+    <!-- root -->
+    <rect x="50" y="40" width="800" height="28" rx="4" fill="#131a22" stroke="#f2a65a"/>
+    <text x="60" y="58" class="ttl">orchestrator session · trace=abc123 · 2.4s</text>
+
+    <!-- expert 1 -->
+    <rect x="70" y="78" width="230" height="28" rx="4" fill="#131a22" stroke="#6cc17b"/>
+    <text x="80" y="96" class="lbl" fill="#6cc17b">invoke_expert(intake) · 380ms</text>
+
+    <rect x="90" y="112" width="140" height="22" rx="3" fill="#131a22" stroke="#7fb4e4"/>
+    <text x="100" y="127" class="lbl" fill="#7fb4e4">tool: search_patients · 80ms</text>
+
+    <!-- expert 2 -->
+    <rect x="310" y="78" width="200" height="28" rx="4" fill="#131a22" stroke="#6cc17b"/>
+    <text x="320" y="96" class="lbl" fill="#6cc17b">invoke_expert(data-entry) · 290ms</text>
+
+    <!-- expert 3 — with retry -->
+    <rect x="520" y="78" width="270" height="28" rx="4" fill="#131a22" stroke="#e07a7a"/>
+    <text x="530" y="96" class="lbl" fill="#e07a7a">invoke_expert(billing) · 640ms · retry=1</text>
+
+    <rect x="540" y="112" width="120" height="22" rx="3" fill="#131a22" stroke="#b48cd6"/>
+    <text x="550" y="127" class="lbl" fill="#b48cd6">inngest: submit_claim</text>
+
+    <rect x="670" y="112" width="110" height="22" rx="3" fill="#131a22" stroke="#b48cd6"/>
+    <text x="680" y="127" class="lbl" fill="#b48cd6">rx/submit_claim.done</text>
+
+    <!-- outcome label -->
+    <rect x="50" y="160" width="800" height="40" rx="6" fill="#1a232d" stroke="#f2a65a"/>
+    <text x="60" y="180" class="ttl" fill="#f2a65a">outcome label (attached days later)</text>
+    <text x="60" y="195" class="lbl">claim accepted · patient received medication · no manual intervention · → this trace is "good"</text>
+
+    <text x="60" y="225" class="lbl">time →</text>
+  </svg>
+
+  <h3>CareLink instance</h3>
+  <p>Each <code>invoke_expert</code> emits a structured span: parent trace ID, expert ID, input feature hash, output shape, latency, retry count, success/fail. Tool calls become child spans. Inngest events carry the correlation ID so the async pipeline re-joins the tree. Phase 4.2 (parent/child sessions, deferred-optional) is the richer-observability version of the same idea.</p>
+
+  <h3>Four things a trace must carry</h3>
+  <div class="grid grid-2">
+    <div class="card">
+      <h4>Causal structure</h4>
+      <p>Who invoked who. Parent span ID on every child. You should be able to render the trace as a tree.</p>
+    </div>
+    <div class="card">
+      <h4>Attributes, not just names</h4>
+      <p>High-cardinality fields: user ID, case type, input hash, retry count, confidence score. Not just "expert=billing."</p>
+    </div>
+    <div class="card">
+      <h4>Events inside a span</h4>
+      <p>Schema mismatch, retry fired, tool errored, cache hit. The granular story of the span, not just its outcome.</p>
+    </div>
+    <div class="card">
+      <h4>Outcome label (post-hoc)</h4>
+      <p>Tied days or weeks later when the business outcome is known. The trace is <em>metadata</em>; the label is what makes it <em>data</em>.</p>
+    </div>
+  </div>
+
+  <h3>The hardest part: outcome labels</h3>
+  <p>The outcome of a newRx trace isn't visible in the trace itself. It happens later — a claim is approved or rejected, a patient receives medication or doesn't, a pharmacist overrides the DUR flag. You need a correlation ID from the trace to persist on the business record, so you can join back weeks later.</p>
+  <p><mark>Trace without outcome label = ambient noise. Trace with outcome label = labeled training data.</mark></p>
+
+  <h3>Canonical mapping</h3>
+  <div class="pr"><div class="k">Dapper 2010</div><div class="v">Google paper that named the pattern. Every modern tracing system is a descendant.</div></div>
+  <div class="pr"><div class="k">OpenTelemetry</div><div class="v">The current vendor-neutral standard (CNCF). Spans, attributes, events, context propagation — the vocabulary you'll see everywhere.</div></div>
+  <div class="pr"><div class="k">Honeycomb / Observability</div><div class="v">Majors, Fong-Jones — "observability" as distinct from monitoring. High-cardinality fields, ad-hoc queries, exploration over dashboards.</div></div>
+  <div class="pr"><div class="k">Event sourcing</div><div class="v">Fowler. The log is the source of truth. State is a projection. Guarantees full replayability — the ultimate traceability.</div></div>
+  <div class="pr"><div class="k">Lamport</div><div class="v">Causal ordering in distributed systems. The formal basis for "who happened before whom."</div></div>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · Stripe observability</div>
+      <div class="title">Trace a webhook from edge → ledger → settlement</div>
+      <div class="body">A single trace ID follows a payment through dozens of services. When something's wrong, engineers open the trace, not grep a dozen log files.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Honeycomb at Intercom</div>
+      <div class="title">High-cardinality attributes caught a 1-in-a-million bug</div>
+      <div class="body">Aggregated metrics said "fine." Trace exploration by user ID + feature flag + region surfaced an interaction nobody expected. Cardinality saved the day.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Blind sampling</div>
+      <div class="title">"We sample 1%, miss the rare bug"</div>
+      <div class="body">Uniform sampling loses tail events. Use <em>tail-based sampling</em> (keep all errors + sample the rest) or at minimum force-sample on error signals.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Traces without outcomes</div>
+      <div class="title">Beautiful waterfall charts, no idea if the trace was correct</div>
+      <div class="body">Latency is not quality. Without outcome labels, you optimize for speed and miss correctness regressions. Always ask: "where's the ground truth for this trace?"</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · PII in attributes</div>
+      <div class="title">Patient names, SSNs, API keys inline in spans</div>
+      <div class="body">Traces are often in a separate data class from production DBs. Inlining PII breaks that. Hash or redact at emission; keep a separate secure join table if you need to rehydrate.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · "We have logs"</div>
+      <div class="title">Per-process logs, no correlation, no tree</div>
+      <div class="body">Logs say what happened in one place. Traces say who invoked whom across places. Logs ≠ traces. Most teams discover this on their first really bad incident.</div>
+    </div>
+  </div>
+
+  <h3>The three pillars, in one sentence each</h3>
+  <ul>
+    <li><strong>Logs:</strong> what happened, in one place.</li>
+    <li><strong>Metrics:</strong> how often, aggregated.</li>
+    <li><strong>Traces:</strong> who invoked whom, across places.</li>
+  </ul>
+  <p>You need all three. Most AI-heavy systems ship with the first two and discover they need the third at the first serious regression.</p>
+
+  <h3>Why this matters doubly for LLMs</h3>
+  <ul>
+    <li>LLM decisions are opaque from code alone — the routing <em>emerges at runtime</em>, it isn't in a switch statement.</li>
+    <li>Without traces, you cannot tell <em>why</em> the orchestrator chose expert X over Y.</li>
+    <li>Without outcome labels, you cannot tell if that choice was <em>right</em>.</li>
+    <li><mark>Opaque AI = unfalsifiable AI = untrustworthy AI.</mark> Traceability is not a nice-to-have; it's the thing that makes the rest of the lab possible.</li>
+  </ul>
+
+  <h3>Growth path</h3>
+  <p>Scattered print statements <span class="arrow">→</span> structured logs with request IDs <span class="arrow">→</span> metrics + logs + alerting (RED / USE) <span class="arrow">→</span> distributed traces with propagation (OpenTelemetry) <span class="arrow">→</span> high-cardinality observability with outcome labels <span class="arrow">→</span> event sourcing for full replayability.</p>
+
+  <details class="deep">
+    <summary>Deep dive — the "was this decision right?" label</summary>
+    <div>
+      <p>For a rx-flow trace, the label could be:</p>
+      <ul>
+        <li><strong>Automatic:</strong> claim accepted by payer, no retries, no manual correction → label = 1. Rejection, retries, or manual override → label = 0 (with reason code).</li>
+        <li><strong>Human:</strong> a pharmacist marks the session "correct" or flags a specific step as wrong. Adds a high-quality but expensive label.</li>
+        <li><strong>Shadow comparison:</strong> for a subset, run the old monolith on the same input in parallel; compare decisions. Divergences are labeled for review.</li>
+      </ul>
+      <p>All three contribute to the dataset the explore/exploit loop (Module 11) consumes. <strong>The labeling system is the bottleneck</strong> — invest in it early, not late.</p>
+    </div>
+  </details>
+
+  <h3>Watch — Traceability in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Charity Majors</span> — <span class="tt">What Is Observability, Really?</span> <span class="ctx">Strange Loop / various · ~40min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Charity+Majors+What+is+Observability+Really+Strange+Loop" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The definitive "observability is not metrics + logs + traces, it's the ability to ask new questions" talk. Reframes the whole module.</p>
+    </li>
+    <li>
+      <span class="spk">Ben Sigelman</span> — <span class="tt">Distributed Tracing and the Future of Performance</span> <span class="ctx">various · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Ben+Sigelman+Distributed+Tracing+Dapper" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">From a Dapper co-author — why the tree-of-spans abstraction won, and what OpenTelemetry got right vs. previous attempts.</p>
+    </li>
+    <li>
+      <span class="spk">Cindy Sridharan</span> — <span class="tt">Monitoring in the Time of Cloud Native</span> <span class="ctx">various · ~35min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Cindy+Sridharan+Monitoring+Cloud+Native+observability" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The clearest breakdown of the three pillars' roles, and where sampling strategies bite. Directly feeds the "logs ≠ traces" point.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Traceability, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: scattered logs, no correlation">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-bad">four services · four log streams · no correlation</text>
+
+          <rect x="40"  y="60"  width="160" height="180" rx="6" fill="#131a22" stroke="#2f3e50"/>
+          <text x="120" y="82" text-anchor="middle" class="ttl">orchestrator.log</text>
+          <text x="50" y="108" class="lbl">15:04 session created</text>
+          <text x="50" y="128" class="lbl">15:04 invoke intake</text>
+          <text x="50" y="148" class="lbl">15:04 result: ok</text>
+          <text x="50" y="168" class="lbl">...</text>
+
+          <rect x="220" y="60"  width="160" height="180" rx="6" fill="#131a22" stroke="#2f3e50"/>
+          <text x="300" y="82" text-anchor="middle" class="ttl">expert.log</text>
+          <text x="230" y="108" class="lbl">15:04 bash started</text>
+          <text x="230" y="128" class="lbl">15:04 restish called</text>
+          <text x="230" y="148" class="lbl sb-bad">15:04 ERROR 502</text>
+          <text x="230" y="168" class="lbl">...</text>
+
+          <rect x="400" y="60"  width="160" height="180" rx="6" fill="#131a22" stroke="#2f3e50"/>
+          <text x="480" y="82" text-anchor="middle" class="ttl">fdb-adapter.log</text>
+          <text x="410" y="108" class="lbl">15:04 GET /ndcs/...</text>
+          <text x="410" y="128" class="lbl sb-bad">15:04 upstream 500</text>
+          <text x="410" y="148" class="lbl">15:04 retry 1</text>
+          <text x="410" y="168" class="lbl">...</text>
+
+          <rect x="580" y="60"  width="160" height="180" rx="6" fill="#131a22" stroke="#2f3e50"/>
+          <text x="660" y="82" text-anchor="middle" class="ttl">inngest.log</text>
+          <text x="590" y="108" class="lbl">15:04 event fired</text>
+          <text x="590" y="128" class="lbl">15:04 step ran</text>
+          <text x="590" y="148" class="lbl">15:04 next step</text>
+          <text x="590" y="168" class="lbl">...</text>
+
+          <text x="380" y="258" text-anchor="middle" class="lbl sb-bad">"which of these was the same request?" — nobody knows</text>
+        </svg>
+        <div class="cap"><strong>1 · Scattered logs.</strong> Each service narrates its own world. Nothing ties them together. During an incident, engineers grep across four windows and eyeball timestamps. <em>Logs say what happened in one place; traces say who invoked whom across places. They are not the same thing.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: trace tree with propagated correlation ID">
+          <text x="380" y="26" text-anchor="middle" class="ttl sb-acc">one trace · one ID · propagated through every hop</text>
+
+          <rect x="40" y="48" width="680" height="24" rx="3" fill="#131a22" class="sb-acc" stroke-width="1.5"/>
+          <text x="50" y="64" class="lbl">orchestrator · trace=a3f2…  · 2.4s</text>
+
+          <rect x="60" y="80" width="240" height="22" rx="3" fill="#131a22" class="sb-good"/>
+          <text x="70" y="96" class="lbl sb-good">invoke_expert(intake) · 380ms</text>
+
+          <rect x="80" y="108" width="160" height="20" rx="3" fill="#131a22" class="sb-info"/>
+          <text x="90" y="122" class="lbl sb-info">tool: list_patients · 80ms</text>
+
+          <rect x="310" y="80" width="200" height="22" rx="3" fill="#131a22" class="sb-good"/>
+          <text x="320" y="96" class="lbl sb-good">invoke_expert(billing) · 290ms</text>
+
+          <rect x="520" y="80" width="200" height="22" rx="3" fill="#131a22" class="sb-bad"/>
+          <text x="530" y="96" class="lbl sb-bad">invoke_expert(DUR) · 640ms · retry=1</text>
+
+          <rect x="540" y="108" width="100" height="20" rx="3" fill="#131a22" class="sb-purp"/>
+          <text x="550" y="122" class="lbl sb-purp">inngest:submit</text>
+
+          <rect x="650" y="108" width="70" height="20" rx="3" fill="#131a22" class="sb-purp"/>
+          <text x="660" y="122" class="lbl sb-purp">done</text>
+
+          <text x="60" y="162" class="lbl">attributes</text>
+          <text x="60" y="182" class="lbl sb-info">user_id · case_type · input_hash · retry_count · latency_p95</text>
+
+          <text x="60" y="214" class="lbl">events within span</text>
+          <text x="60" y="234" class="lbl sb-info">schema_mismatch · tool_errored · cache_hit · human_answered</text>
+        </svg>
+        <div class="cap"><strong>2 · One trace, one ID.</strong> Every span carries its parent; every hop propagates the correlation ID; tools and Inngest events re-join the tree. You can render it, query it, and reason about it as a unit. <em>Cardinality — user, case type, retry count — is what makes rare bugs visible.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: outcome label attaches days later">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-acc">the trace is metadata · the label is what makes it data</text>
+
+          <rect x="40" y="60" width="500" height="28" rx="4" fill="#131a22" class="sb-info"/>
+          <text x="50" y="78" class="lbl sb-info">trace a3f2… · completed 15:04 · latency 2.4s · retries 1</text>
+
+          <path d="M540,74 Q600,74 640,110" stroke="#6b7a88" stroke-width="1" stroke-dasharray="4,3" fill="none"/>
+
+          <rect x="580" y="110" width="140" height="28" rx="4" fill="#131a22" class="sb-info" opacity="0.7"/>
+          <text x="650" y="128" text-anchor="middle" class="lbl">days pass…</text>
+
+          <rect x="40" y="160" width="680" height="80" rx="7" fill="#131a22" class="sb-good" stroke-width="2"/>
+          <text x="60" y="184" class="ttl sb-good">outcome attached · 7 days later</text>
+          <text x="60" y="206" class="lbl">• claim accepted by payer · no manual correction</text>
+          <text x="60" y="226" class="lbl">• patient received shipment</text>
+          <text x="400" y="206" class="lbl sb-good">→ label = 1 · "correct trace"</text>
+          <text x="400" y="226" class="lbl">(joined by trace_id on the business record)</text>
+        </svg>
+        <div class="cap"><strong>3 · Outcome label joins the tree.</strong> The trace's business outcome isn't visible at runtime — it resolves days later when the claim is paid or the patient receives the package. Persisting the trace_id on the business record lets you join back and <em>label</em> every past trace. <em>Trace without outcome = ambient noise. Trace with outcome = labeled training data.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — audit one flow</h4>
+    <p>Pick one flow in a system you run. Draw the call tree. For every edge: would it appear in a trace today? Name the span, the parent, the attributes it carries. For every leaf: where's the outcome label, and by what mechanism does it get attached? The gaps are your observability backlog.</p>
+    <textarea placeholder="flow · call tree · present in traces? · outcome label source..."></textarea>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M11 EXPLORE VS EXPLOIT                                   -->
+<!-- ======================================================== -->
+<section class="module" id="m11">
+  <div class="eyebrow">11 · Evolution</div>
+  <h2>Explore vs. exploit — avoid premature path-freezing</h2>
+  <div class="glyphs">
+    <span class="chip accent">Multi-armed bandits</span>
+    <span class="chip accent">Contextual bandits</span>
+    <span class="chip accent">Policy iteration</span>
+    <span class="chip accent">Goodhart's law</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> early routing wins <em>look</em> like correctness but are often overfits to a small sample. Hardcoding them freezes today's taxonomy and closes off learning. The right move is to keep decision trees open, log every choice + outcome, and let weights emerge from evidence — then harden only the paths whose posterior is actually tight.
+  </div>
+
+  <h3>The trap — "it worked three times in a row"</h3>
+  <p>Day 3 of the new orchestrator: in every trace, rejection-code 70 was routed to <code>rx-flow-billing</code>, and every claim succeeded. The instinct is: "codify it, it's clearly correct." Don't. Three is a sample. The cases so far may not represent the long tail. You've observed <em>what succeeded</em>; you haven't observed <em>what would have happened if we'd routed differently</em>. That counterfactual is what makes a decision truly "right."</p>
+
+  <svg class="diagram" viewBox="0 0 900 280">
+    <text x="50" y="26" class="ttl">Two paths for turning evidence into weight</text>
+
+    <!-- Too early -->
+    <g>
+      <rect x="50" y="50" width="380" height="200" rx="10" fill="#131a22" stroke="#e07a7a"/>
+      <text x="240" y="78" text-anchor="middle" class="ttl" fill="#e07a7a">Premature hardening</text>
+      <text x="70" y="108" class="lbl">day 3: route 3/3 correct → add switch</text>
+      <text x="70" y="128" class="lbl">day 10: new edge case arrives → routed wrong</text>
+      <text x="70" y="148" class="lbl">day 20: "the hardcode is the problem"</text>
+      <text x="70" y="168" class="lbl">day 30: removal PR stalls (who's on the hook?)</text>
+      <text x="70" y="198" class="lbl" fill="#e07a7a">net: learned less, tech debt grew</text>
+      <text x="70" y="218" class="lbl" fill="#e07a7a">the 10% you don't see becomes invisible</text>
+    </g>
+
+    <!-- Right -->
+    <g>
+      <rect x="470" y="50" width="380" height="200" rx="10" fill="#131a22" stroke="#6cc17b"/>
+      <text x="660" y="78" text-anchor="middle" class="ttl" fill="#6cc17b">Weighted exploitation</text>
+      <text x="490" y="108" class="lbl">keep orchestrator routing open</text>
+      <text x="490" y="128" class="lbl">log (context, choice, outcome) on every run</text>
+      <text x="490" y="148" class="lbl">after N: look at posterior per (context, expert)</text>
+      <text x="490" y="168" class="lbl">seed prompt with exemplars; sometimes fast-path</text>
+      <text x="490" y="198" class="lbl" fill="#6cc17b">net: routing improves <em>with</em> data</text>
+      <text x="490" y="218" class="lbl" fill="#6cc17b">novel cases still reach the open path</text>
+    </g>
+  </svg>
+
+  <h3>The explore–exploit tradeoff, stated plainly</h3>
+  <ul>
+    <li><strong>Exploit:</strong> use the path you already believe works. Fast, confident, blind to news.</li>
+    <li><strong>Explore:</strong> try a different path to learn whether it's better. Slower per-case, accumulates evidence.</li>
+    <li><strong>Pure exploit (hardcode from day 1):</strong> maximum confidence, zero learning. You freeze your priors.</li>
+    <li><strong>Pure explore (random routing forever):</strong> maximum learning, never benefits from what you learned.</li>
+    <li><strong>The real answer:</strong> a gradient. Heavy explore early (no data); shift to exploit as evidence accumulates; keep some baseline explore forever (the world changes).</li>
+  </ul>
+
+  <h3>Four strategies, in order of complexity</h3>
+  <table class="matrix">
+    <thead><tr><th>Strategy</th><th>How</th><th>When to reach for it</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Epsilon-greedy</strong></td>
+        <td>Pick the current-best path with probability 1−ε; random otherwise. Decay ε over time.</td>
+        <td>When you have a clear win metric and low-stakes arms. Cheapest bandit, ships in a day.</td>
+      </tr>
+      <tr>
+        <td><strong>Thompson sampling</strong></td>
+        <td>Maintain a posterior over each arm's success rate; sample from each and pick the max.</td>
+        <td>When you want self-regulating exploration — uncertain arms get explored more automatically.</td>
+      </tr>
+      <tr>
+        <td><strong>UCB (upper confidence bound)</strong></td>
+        <td>Pick the arm with the highest "mean + uncertainty" score. Exploration = uncertainty bonus.</td>
+        <td>When you want a deterministic bandit with explicit confidence math.</td>
+      </tr>
+      <tr>
+        <td><strong>Contextual bandit</strong></td>
+        <td>Score arms based on context features (case type, payer, drug class). "Best arm" depends on the input.</td>
+        <td>When different arms win in different conditions (nearly always, for routing).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>What this looks like for rx-flow</h3>
+  <ol>
+    <li><strong>Phase 1 — pure exploration (orchestrator-only).</strong> The orchestrator decides every routing. Every decision + outcome is logged (Module 10). No fast paths. No switch statements.</li>
+    <li><strong>Phase 2 — posterior inspection.</strong> After N runs, aggregate by (case context, expert chosen, outcome). For each (context, expert) pair: is the posterior success rate tight and high? Or wide and uncertain?</li>
+    <li><strong>Phase 3 — seeded exploitation.</strong> For (context, expert) pairs with tight, high posteriors: seed the orchestrator's system prompt with exemplars ("for rejection-code 70, billing expert has 98% success over 400 cases"). Don't hardcode — <em>inform</em>. The orchestrator can still route otherwise for novel shapes.</li>
+    <li><strong>Phase 4 — fast path, with fallback.</strong> Only when a (context, expert) pair is extremely tight AND the context is narrow, add a fast path that bypasses the orchestrator. Keep a minimum exploration rate (~2%) that still routes through the orchestrator, so novel cases stay visible.</li>
+    <li><strong>Phase 5 — keep watching.</strong> If the distribution shifts (new drug class, new payer), the fast path's success rate drifts. You'll see it in traces (Module 10). Unfreeze.</li>
+  </ol>
+
+  <h3>Canonical mapping</h3>
+  <div class="pr"><div class="k">Robbins 1952</div><div class="v">Multi-armed bandit as a formal problem. Still the cleanest framing of the tradeoff.</div></div>
+  <div class="pr"><div class="k">Vowpal Wabbit</div><div class="v">Microsoft's contextual-bandit library; production-grade, battle-tested on news ranking.</div></div>
+  <div class="pr"><div class="k">Monte Carlo Tree Search</div><div class="v">AlphaGo, AlphaZero. Visits + value = a learned weight over a decision tree. The same idea, at depth.</div></div>
+  <div class="pr"><div class="k">Sutton</div><div class="v">"The Bitter Lesson" — at scale, learned methods beat hand-coded knowledge. The domain expertise is the exception, not the rule.</div></div>
+  <div class="pr"><div class="k">Goodhart</div><div class="v">When a measure becomes a target, it ceases to be a good measure. The shadow over the entire explore/exploit project.</div></div>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · Netflix / YouTube ranking</div>
+      <div class="title">Billions of bandit decisions per day</div>
+      <div class="body">Contextual bandits drive row ordering, thumbnail selection, next-up picks. Hand-tuned rules were abandoned a decade ago because learned weights, given enough traces, are better.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Google Ads auction</div>
+      <div class="title">Exploration in creative selection</div>
+      <div class="body">A small % of impressions always explore new creatives. Without it, the system collapses to a local maximum and stops learning about shifting taste.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · AlphaGo / AlphaZero</div>
+      <div class="title">Weights on a decision tree from self-play</div>
+      <div class="body">MCTS doesn't search all of Go. It allocates search budget by "visits × value," which is exploration × exploitation over a tree. Same principle, extreme scale.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Duolingo spaced repetition</div>
+      <div class="title">Which word do we review next?</div>
+      <div class="body">Per-user, per-word bandits. Explore "might have forgotten"; exploit "definitely needs review." Pure exploitation would bore; pure exploration would exhaust.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · No traces → no data</div>
+      <div class="title">"Let's explore" with nothing to learn from</div>
+      <div class="body">Without Module 10, you're not exploring — you're improvising. The loop is trace → label → weight. Break any link and the system is noise.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Confounded outcome metric (Goodhart)</div>
+      <div class="title">Optimize "expert finished" → optimize for anything that finishes</div>
+      <div class="body">If the outcome label is "expert returned valid JSON," the orchestrator learns to route to the most compliant expert — not the most <em>correct</em>. Label the business outcome, not the implementation.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Early-winner artifacts</div>
+      <div class="title">3 wins ≠ 100 wins</div>
+      <div class="body">Posterior width matters more than posterior mean. Tight, narrow, high = harden cautiously. Wide = keep exploring. Don't let anecdotes promote themselves to architecture.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Distribution shift</div>
+      <div class="title">New drug class, new payer, new rejection code</div>
+      <div class="body">Yesterday's training data doesn't match tomorrow's reality. Without a baseline explore rate, the system is blind to novelty. Keep ~2% minimum exploration, forever.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · High-stakes arms</div>
+      <div class="title">"Every exploration pull is an incident"</div>
+      <div class="body">Medical decisions, financial trades. You can't A/B user safety. Here: explore offline (simulation, shadow traffic, historical replay), exploit online. The loop still works — it just moves.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Hardcoding the 90%</div>
+      <div class="title">The 10% becomes invisible</div>
+      <div class="body">Fast path handles 90%; 10% doesn't match the fast path's signature and is silently mis-routed. Always keep an open path for novel cases, and keep watching it.</div>
+    </div>
+  </div>
+
+  <h3>The meta-principle</h3>
+  <p><mark>Decisions you can't undo are the ones to defer.</mark> Hardcoding a routing rule is a commit to a hypothesis. An open orchestrator is a hedge. Pay for the hedge until the evidence makes it clearly unnecessary. When you do harden, leave a minimum exploration rate running in parallel — the world shifts, and you want to notice.</p>
+
+  <h3>Growth path</h3>
+  <p>Pure orchestrator (no priors) <span class="arrow">→</span> prompt-seeded with exemplars (weak priors) <span class="arrow">→</span> epsilon-greedy fast path + orchestrator fallback <span class="arrow">→</span> contextual bandit with features <span class="arrow">→</span> learned policy (small classifier or fine-tuned routing model).</p>
+  <p>Each rung demands more traces, more labels, more infrastructure — and pays back in correctness and speed. Walk up when the evidence is there, not because the rung is higher.</p>
+
+  <details class="deep">
+    <summary>Deep dive — how "weighting" shows up concretely</summary>
+    <div>
+      <p>"Add weights to the decision tree" could mean many things. Concretely, in rx-flow, it might be any of:</p>
+      <ul>
+        <li><strong>Prompt exemplars.</strong> The orchestrator's system prompt grows a "what has worked" section pulled from the top-N most-similar past traces, with outcomes. No ML; just retrieval-augmented orchestration.</li>
+        <li><strong>Routing prior.</strong> A lightweight table mapping (context features) → (posterior over experts). Orchestrator reads it, treats it as a suggestion. Can override when the case looks unusual.</li>
+        <li><strong>Classifier-as-assistant.</strong> A small model (scikit-learn, logistic regression) predicts expert from features; orchestrator calls it and either agrees or overrides. Classifier retrained weekly.</li>
+        <li><strong>Fast-path switch.</strong> For the tightest (context, expert) pairs with 99%+ posterior, bypass the orchestrator. Fall back on any uncertainty signal.</li>
+      </ul>
+      <p>They differ in infra cost and traceability. All of them need Module 10 (traces + outcome labels) to work. None of them should be implemented before the 14-day falsification gate (Module 05) passes — you need the baseline dataset first.</p>
+    </div>
+  </details>
+
+  <h3>Watch — Explore / exploit in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">David Silver</span> — <span class="tt">Introduction to Reinforcement Learning · Lecture 2 (MDPs)</span> <span class="ctx">DeepMind / UCL · ~1.5h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=David+Silver+RL+Course+Lecture+2+Markov" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The formal foundation. Silver's whole course is worth the time, but the bandit / MDP framing clicks fastest with the routing problem this module is really about.</p>
+    </li>
+    <li>
+      <span class="spk">John Langford</span> — <span class="tt">Contextual Bandits in Practice (Vowpal Wabbit)</span> <span class="ctx">various · ~40min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=John+Langford+contextual+bandits+Vowpal+Wabbit" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Production-grade contextual bandits, with the honest "here's where it bites" commentary missing from textbook treatments.</p>
+    </li>
+    <li>
+      <span class="spk">DeepMind</span> — <span class="tt">AlphaGo — The Movie</span> <span class="ctx">documentary · ~1.5h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=AlphaGo+The+Movie+DeepMind+documentary" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">MCTS = exploration × exploitation over a decision tree, applied to Go. The Move 37 moment is the most viscerally memorable demonstration of the trade-off ever filmed.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Explore / exploit, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: day 3, hardcode after 3 wins">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-bad">"it worked three times · codify it"</text>
+
+          <rect x="40" y="60" width="240" height="180" rx="7" fill="#131a22" stroke="#2f3e50"/>
+          <text x="160" y="82" text-anchor="middle" class="ttl">day 3 observations</text>
+          <text x="60" y="108" class="lbl">reject code 70 · → billing · ✓</text>
+          <text x="60" y="128" class="lbl">reject code 70 · → billing · ✓</text>
+          <text x="60" y="148" class="lbl">reject code 70 · → billing · ✓</text>
+          <text x="60" y="178" class="lbl sb-bad">n = 3</text>
+          <text x="60" y="202" class="lbl">posterior: wide, uncertain</text>
+
+          <path d="M290,140 L330,140" class="sb-acc" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <text x="310" y="130" text-anchor="middle" class="lbl sb-bad">instinct</text>
+
+          <rect x="350" y="100" width="370" height="100" rx="7" fill="#131a22" class="sb-bad" stroke-width="2"/>
+          <text x="535" y="128" text-anchor="middle" class="ttl sb-bad">if (reject_code == 70): billing_expert()</text>
+          <text x="535" y="152" text-anchor="middle" class="lbl">hardcoded switch · PR merged</text>
+          <text x="535" y="176" text-anchor="middle" class="lbl sb-bad">tomorrow's edge case now has nowhere to go</text>
+        </svg>
+        <div class="cap"><strong>1 · Premature hardening.</strong> Three successes feel like a truth. They're a sample. The posterior is wide — we've only observed what we chose, never the counterfactual. <em>Hardcoding at n=3 freezes today's taxonomy and closes the door on learning.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: day 10, new edge case arrives, hardcode routes wrong">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-bad">day 10 · novel case · hardcode routes wrong</text>
+
+          <rect x="40" y="60" width="280" height="150" rx="7" fill="#131a22" stroke="#2f3e50"/>
+          <text x="180" y="84" text-anchor="middle" class="ttl">new case arrives</text>
+          <text x="60" y="110" class="lbl">reject code 70</text>
+          <text x="60" y="130" class="lbl sb-info">+ drug class: specialty</text>
+          <text x="60" y="150" class="lbl sb-info">+ payer: new formulary</text>
+          <text x="60" y="178" class="lbl">looks like reject-70 on paper</text>
+          <text x="60" y="198" class="lbl sb-bad">behaves like a PA</text>
+
+          <path d="M330,138 L380,138" class="sb-bad" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+          <rect x="400" y="60" width="320" height="150" rx="7" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="560" y="84" text-anchor="middle" class="ttl sb-bad">hardcoded switch fires</text>
+          <text x="420" y="110" class="lbl sb-bad">→ billing_expert (wrong)</text>
+          <text x="420" y="130" class="lbl">claim rejected · manual retry</text>
+          <text x="420" y="150" class="lbl">30 min pharmacist time</text>
+          <text x="420" y="172" class="lbl sb-bad">"the hardcode is the problem"</text>
+          <text x="420" y="192" class="lbl">PR to remove stalls — who owns it?</text>
+        </svg>
+        <div class="cap"><strong>2 · The edge that became invisible.</strong> The model the hardcode encoded didn't have features for "specialty + new formulary." Nothing routed the novel shape through the open path — you never saw the counterfactual. <em>Goodhart in miniature: optimize "expert finished," ignore "decision was right."</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: weighted exploitation — fast path with open fallback">
+          <text x="380" y="26" text-anchor="middle" class="ttl sb-good">weighted exploitation · always leave a door open</text>
+
+          <rect x="40" y="56" width="680" height="22" rx="3" fill="#131a22" stroke="#2f3e50"/>
+          <rect x="40" y="56" width="640" height="22" rx="3" fill="rgba(108,193,123,.25)"/>
+          <text x="50" y="72" class="lbl sb-good">95% · tight (context, expert) posterior · fast path</text>
+
+          <rect x="40" y="84" width="680" height="22" rx="3" fill="#131a22" stroke="#2f3e50"/>
+          <rect x="40" y="84" width="20"  height="22" rx="3" fill="rgba(242,166,90,.3)"/>
+          <text x="68" y="100" class="lbl sb-acc">3% · exploration · route through orchestrator anyway</text>
+
+          <rect x="40" y="112" width="680" height="22" rx="3" fill="#131a22" stroke="#2f3e50"/>
+          <rect x="40" y="112" width="13"  height="22" rx="3" fill="rgba(127,180,228,.35)"/>
+          <text x="60" y="128" class="lbl sb-info">2% · novel context · full orchestrator reasoning</text>
+
+          <rect x="40" y="156" width="680" height="80" rx="7" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="380" y="180" text-anchor="middle" class="ttl sb-good">distribution shift is visible in the open 5%</text>
+          <text x="60" y="208" class="lbl">• new drug class surfaces via the 2% novel path</text>
+          <text x="60" y="228" class="lbl">• ongoing 3% explore keeps posteriors honest as the world changes</text>
+          <text x="470" y="208" class="lbl sb-acc">→ fast path earns its 95%</text>
+          <text x="470" y="228" class="lbl sb-acc">→ hardcode becomes a setting, not a commit</text>
+        </svg>
+        <div class="cap"><strong>3 · Weighted with a permanent hedge.</strong> Fast-path the tight-posterior cases, but leave a minimum explore rate running forever. Distribution shift is detectable because the open path is still sampling. <em>Decisions you can't undo are the ones to defer — always leave the door open.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — find a decision you froze too early</h4>
+    <p>Pick a switch statement, a routing config, or a feature flag threshold. Ask: "when did we last check that this is still the right choice?" If never: you've committed to a hypothesis that you stopped testing. Add a log; start collecting the counterfactual; set a review date. Make the commit conscious.</p>
+    <textarea placeholder="frozen decision · last reviewed · counterfactual you could start collecting..."></textarea>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M8 APPLY                                                 -->
+<!-- ======================================================== -->
+<section class="module" id="m8">
+  <div class="eyebrow">08 · Apply elsewhere</div>
+  <h2>Six drills for other projects</h2>
+
+  <p>Walk these in order. One per sitting.</p>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h4>01 · Find the god object</h4>
+      <ol>
+        <li>Line-count the 3 largest files.</li>
+        <li>List domain vocabularies each speaks.</li>
+        <li>Group methods by vocabulary.</li>
+        <li>If ≥2 vocab-groups in one file: candidate.</li>
+        <li>Draw the minimal interface. <em>Don't split yet.</em></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>02 · Strengthen one boundary</h4>
+      <ol>
+        <li>Pick a function returning <code>dict</code>/<code>Any</code>.</li>
+        <li>Walk callers. Write the actual shape.</li>
+        <li>Check in. Update callers to use typed fields.</li>
+        <li>Smallest real instance of contract design.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>03 · Locate the orchestration</h4>
+      <ol>
+        <li>Pick a critical flow.</li>
+        <li>Trace: what decides what runs next?</li>
+        <li>One component? Becoming a god object?</li>
+        <li>Event-emergent? Can you sentence the sequence?</li>
+        <li>"No" on either answer = coordination risk.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>04 · Subtract authority</h4>
+      <ol>
+        <li>Pick an IAM role / API token.</li>
+        <li>List every statement.</li>
+        <li>Remove one you think is unused.</li>
+        <li>Ship to staging, then prod.</li>
+        <li>Once a week, forever.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>05 · Pre-register a disproof</h4>
+      <ol>
+        <li>Before your next deploy, write:<br><em>"disproven if M crosses T in window W."</em></li>
+        <li>Paste in PR description.</li>
+        <li>Set dashboard / alert for (M, T, W).</li>
+        <li>After the window: passed / failed / "didn't monitor."</li>
+        <li>Option three is the most educational.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>06 · Write a deletion criterion</h4>
+      <ol>
+        <li>Pick legacy everyone says we'll replace.</li>
+        <li>Write measurable deletion conditions.</li>
+        <li>Traffic = 0%? Parity diff = 0%? Callers migrated?</li>
+        <li>If unwritable, it's an extension, not a migration. Own that.</li>
+      </ol>
+    </div>
+  </div>
+
+  <hr>
+
+  <h3>Closing principle</h3>
+  <p>The senior engineer's edge isn't knowing <em>more</em> patterns. It's knowing where each one <em>fails</em>, and reaching for the cheapest one that clears the actual bar in front of them. Prefer modular monolith over microservices until a real force pushes you up the ladder. Prefer code-first typing until schema-first pays for itself. Prefer orchestration until choreography's parallelism is worth the blindness. Prefer subtractive defaults even when inconvenient. Prefer evidence gates over promises. Prefer strangler fig over rewrites <em>always</em>.</p>
+  <p>Walk up the ladders only when the current rung concretely hurts. That discipline is what separates architecture from architecture-astronaut.</p>
+
+  <hr>
+  <p class="meta"><em>Built as a learning artifact for the rx-flow Option B migration, 2026-04-21. Not a spec. Meant to be edited, marked up, argued with.</em></p>
+</section>
+
+</main>
+
+<footer>
+  <span class="mono">docs/learning-lab.html</span> · companion to <span class="mono">docs/indexes/rx-flow/</span> · read in any order
+</footer>
+
+</div>
+
+<script>
+  const tabs = document.getElementById('tabs');
+  const buttons = tabs.querySelectorAll('button[data-target]');
+  const sections = document.querySelectorAll('section.module');
+
+  function show(id) {
+    sections.forEach(s => s.classList.toggle('active', s.id === id));
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.target === id));
+    if (history.replaceState) history.replaceState(null, '', '#' + id);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  buttons.forEach(b => b.addEventListener('click', () => show(b.dataset.target)));
+
+  // Clickable SVG nodes in landscape
+  document.querySelectorAll('[data-goto]').forEach(g => {
+    g.style.cursor = 'pointer';
+    g.addEventListener('click', () => show(g.dataset.goto));
+  });
+
+  // Additive/subtractive toggle
+  document.querySelectorAll('.toggle-row').forEach(row => {
+    row.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        row.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        const section = row.closest('section') || document;
+        section.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
+        const t = section.querySelector('.pane[data-pane="' + btn.dataset.pane + '"]');
+        if (t) t.classList.add('on');
+      });
+    });
+  });
+
+  if (location.hash) {
+    const id = location.hash.slice(1);
+    if (document.getElementById(id)) show(id);
+  }
+
+  // Storyboard navigation — 3-frame visual stepper
+  document.querySelectorAll('.storyboard').forEach(sb => {
+    const frames = sb.querySelectorAll('.frame');
+    const prev = sb.querySelector('.sb-prev');
+    const next = sb.querySelector('.sb-next');
+    const counter = sb.querySelector('.counter');
+    const dots = sb.querySelectorAll('.dot');
+    let idx = 0;
+    const show = (i) => {
+      idx = Math.max(0, Math.min(frames.length - 1, i));
+      frames.forEach((f, j) => f.classList.toggle('active', idx === j));
+      dots.forEach((d, j) => d.classList.toggle('active', idx === j));
+      if (counter) counter.textContent = (idx + 1) + ' / ' + frames.length;
+      if (prev) prev.disabled = idx === 0;
+      if (next) next.disabled = idx === frames.length - 1;
+    };
+    if (prev) prev.addEventListener('click', () => show(idx - 1));
+    if (next) next.addEventListener('click', () => show(idx + 1));
+    dots.forEach((d, j) => d.addEventListener('click', () => show(j)));
+    // Arrow-key nav when storyboard is focused or hovered
+    sb.tabIndex = 0;
+    sb.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { e.preventDefault(); show(idx + 1); }
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); show(idx - 1); }
+    });
+    show(0);
+  });
+</script>
+
+</body>
+</html>
