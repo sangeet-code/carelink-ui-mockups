@@ -1,0 +1,2312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CareLink AGI — Intake PoC, Expert Registry & MCP-vs-Native Dispatch</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2333;
+    --surface3: #232c3a;
+    --border: #30363d;
+    --border-strong: #4a5260;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #6e7681;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --pink: #f778ba;
+    --cyan: #39d2c0;
+    --yellow: #e3b341;
+    --teal: #2dd4bf;
+    --mcp: #d29922;
+    --mcp-bg: rgba(210, 153, 34, 0.08);
+    --mcp-border: rgba(210, 153, 34, 0.4);
+    --native: #58a6ff;
+    --native-bg: rgba(88, 166, 255, 0.08);
+    --native-border: rgba(88, 166, 255, 0.4);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; line-height: 1.55; }
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; }
+
+  /* TOPNAV */
+  .topnav { position: sticky; top: 0; z-index: 100; background: rgba(22,27,34,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; height: 56px; gap: 4px; }
+  .topnav .logo { font-weight: 700; font-size: 16px; color: var(--teal); margin-right: 20px; letter-spacing: -0.3px; }
+  .topnav .logo span { color: var(--text2); font-weight: 400; }
+  .nav-btn { background: none; border: 1px solid transparent; color: var(--text2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.15s; white-space: nowrap; }
+  .nav-btn:hover { color: var(--text); background: var(--surface2); }
+  .nav-btn.active { color: var(--teal); border-color: var(--teal); background: rgba(45,212,191,0.08); }
+
+  /* MAIN */
+  main { padding: 32px 24px 80px; max-width: 1340px; margin: 0 auto; }
+  .section { display: none; animation: fadeIn 0.25s ease; }
+  .section.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  h1 { font-size: 28px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.5px; }
+  h2 { font-size: 22px; font-weight: 700; margin: 32px 0 12px; letter-spacing: -0.3px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 17px; font-weight: 600; margin: 22px 0 10px; color: var(--text); }
+  h4 { font-size: 14px; font-weight: 600; margin: 16px 0 8px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px; }
+  p, li { color: var(--text); margin-bottom: 10px; }
+  p.lede { color: var(--text2); font-size: 15px; max-width: 880px; }
+  ul, ol { padding-left: 22px; margin-bottom: 12px; }
+  li { margin-bottom: 6px; }
+
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; line-height: 1.6; vertical-align: middle; margin: 0 2px; }
+  .pill-mcp { background: var(--mcp-bg); color: var(--mcp); border: 1px solid var(--mcp-border); }
+  .pill-native { background: var(--native-bg); color: var(--native); border: 1px solid var(--native-border); }
+  .pill-good { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.4); }
+  .pill-bad { background: rgba(248,81,73,0.12); color: var(--red); border: 1px solid rgba(248,81,73,0.4); }
+  .pill-warn { background: rgba(227,179,65,0.12); color: var(--yellow); border: 1px solid rgba(227,179,65,0.4); }
+  .pill-info { background: rgba(45,212,191,0.10); color: var(--teal); border: 1px solid rgba(45,212,191,0.4); }
+
+  code { font-size: 12.5px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--cyan); }
+  pre { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; overflow-x: auto; margin: 10px 0; font-size: 12.5px; line-height: 1.6; }
+  pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 12.5px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; margin: 12px 0; }
+  .card.mcp { border-left: 3px solid var(--mcp); }
+  .card.native { border-left: 3px solid var(--native); }
+  .card.warn { border-left: 3px solid var(--yellow); background: rgba(227,179,65,0.04); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 16px 0; }
+  @media (max-width: 1024px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-weight: 600; color: var(--text2); background: var(--surface); font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+  td { color: var(--text); }
+  tr:hover td { background: var(--surface); }
+
+  .file-cite { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; color: var(--text3); }
+  .file-cite::before { content: "▸ "; color: var(--text3); }
+
+  /* DISPATCH SUB-TABS */
+  .subtab-bar { display: flex; gap: 6px; margin: 16px 0 8px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; width: fit-content; }
+  .subtab-btn { background: none; border: 1px solid transparent; color: var(--text2); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+  .subtab-btn:hover { color: var(--text); }
+  .subtab-btn.active.mcp-tone { background: var(--mcp-bg); color: var(--mcp); border-color: var(--mcp-border); }
+  .subtab-btn.active.native-tone { background: var(--native-bg); color: var(--native); border-color: var(--native-border); }
+  .subtab-btn.active.compare-tone { background: rgba(45,212,191,0.10); color: var(--teal); border-color: rgba(45,212,191,0.4); }
+
+  .subtab-pane { display: none; }
+  .subtab-pane.active { display: block; }
+
+  /* FLOW DIAGRAM */
+  .flow { display: flex; flex-direction: column; gap: 0; margin: 20px 0; }
+  .flow-row { display: flex; align-items: stretch; gap: 12px; }
+  .flow-step { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; position: relative; }
+  .flow-step.mcp { border-color: var(--mcp-border); background: var(--mcp-bg); }
+  .flow-step.native { border-color: var(--native-border); background: var(--native-bg); }
+  .flow-step.shared { border-style: dashed; }
+  .flow-step h4 { margin: 0 0 4px; font-size: 12px; color: var(--text); text-transform: none; letter-spacing: 0; }
+  .flow-step p { font-size: 12.5px; color: var(--text2); margin: 0; }
+  .flow-step .file-cite { display: block; margin-top: 6px; }
+  .step-num { position: absolute; top: -10px; left: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 1px 8px; font-size: 11px; color: var(--text2); font-weight: 600; font-family: ui-monospace, monospace; }
+  .step-num.mcp { color: var(--mcp); border-color: var(--mcp-border); }
+  .step-num.native { color: var(--native); border-color: var(--native-border); }
+  .arrow { display: flex; align-items: center; justify-content: center; padding: 6px 0; font-size: 18px; color: var(--text3); }
+  .arrow::before { content: "↓"; }
+  .arrow-double::before { content: "⇅"; color: var(--text2); }
+
+  /* DRIFT GRID */
+  .drift-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; margin: 12px 0; }
+  .drift-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .drift-header h3 { margin: 0; flex: 1; font-size: 15px; }
+  .drift-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 10px; }
+  @media (max-width: 900px) { .drift-body { grid-template-columns: minmax(0, 1fr); } }
+  .drift-side { padding: 12px; border-radius: 6px; min-width: 0; }
+  .drift-side p, .drift-side li { overflow-wrap: anywhere; word-break: break-word; }
+  .drift-side.mcp { background: var(--mcp-bg); border: 1px solid var(--mcp-border); }
+  .drift-side.native { background: var(--native-bg); border: 1px solid var(--native-border); }
+  .drift-side h4 { margin: 0 0 8px; font-size: 11px; }
+  .drift-side ul { padding-left: 18px; margin: 0; }
+  .drift-side li { font-size: 12.5px; margin-bottom: 4px; color: var(--text); }
+
+  .legend { display: flex; gap: 16px; margin: 14px 0 8px; flex-wrap: wrap; font-size: 12px; color: var(--text2); }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .legend-dot.mcp { background: var(--mcp); }
+  .legend-dot.native { background: var(--native); }
+  .legend-dot.shared { background: var(--text3); border: 1px dashed var(--text2); }
+  .legend-dot.good { background: var(--green); }
+  .legend-dot.bad { background: var(--red); }
+
+  /* CALLOUT */
+  .callout { padding: 14px 18px; border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .callout strong { color: var(--accent); }
+  .callout.warn { border-left-color: var(--yellow); }
+  .callout.warn strong { color: var(--yellow); }
+  .callout.bad { border-left-color: var(--red); }
+  .callout.bad strong { color: var(--red); }
+
+  details { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; overflow: hidden; }
+  details > summary { padding: 12px 16px; cursor: pointer; font-weight: 500; color: var(--text); list-style: none; user-select: none; display: flex; align-items: center; gap: 8px; }
+  details > summary::before { content: "▶"; font-size: 10px; color: var(--text2); transition: transform 0.15s; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  details > summary:hover { background: var(--surface2); }
+  details > div { padding: 0 16px 16px; }
+
+  /* WALKTHROUGH STEPS */
+  .scenario-card { background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%); border: 1px solid var(--border-strong); border-radius: 10px; padding: 18px 22px; margin: 14px 0 22px; }
+  .scenario-card h3 { margin: 0 0 8px; color: var(--cyan); font-size: 16px; }
+  .scenario-card .scenario-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 10px; }
+  @media (max-width: 900px) { .scenario-card .scenario-grid { grid-template-columns: repeat(2, 1fr); } }
+  .scenario-card .field { font-size: 12px; }
+  .scenario-card .field .l { color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px; font-size: 10px; }
+  .scenario-card .field .v { color: var(--text); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; word-break: break-all; }
+
+  .progress-bar { display: flex; gap: 4px; margin: 14px 0 8px; overflow-x: auto; padding: 4px 0; }
+  .progress-dot { flex: 1; min-width: 24px; height: 28px; border-radius: 4px; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; font-family: ui-monospace, monospace; color: var(--text3); border: 1px solid var(--border); background: var(--surface); }
+  .progress-dot.same { background: rgba(63,185,80,0.08); border-color: rgba(63,185,80,0.3); color: var(--green); }
+  .progress-dot.diverge { background: linear-gradient(90deg, rgba(210,153,34,0.12) 0%, rgba(88,166,255,0.12) 100%); border-color: rgba(210,153,34,0.4); color: var(--text); }
+  .progress-dot:hover { transform: translateY(-2px); border-color: var(--text2); }
+  .progress-dot.active { box-shadow: 0 0 0 2px var(--teal); }
+
+  .filter-bar { display: flex; align-items: center; gap: 12px; margin: 16px 0 10px; flex-wrap: wrap; }
+  .toggle-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text2); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; display: flex; align-items: center; gap: 8px; }
+  .toggle-btn:hover { color: var(--text); border-color: var(--border-strong); }
+  .toggle-btn.active { background: rgba(45,212,191,0.10); color: var(--teal); border-color: rgba(45,212,191,0.4); }
+  .toggle-btn .count { background: var(--bg); padding: 1px 7px; border-radius: 10px; font-size: 11px; font-family: ui-monospace, monospace; }
+
+  .step-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin: 14px 0; overflow: hidden; transition: all 0.2s; }
+  .step-card.same { border-left: 3px solid var(--green); }
+  .step-card.diverge { border-left: 3px solid; border-image: linear-gradient(to bottom, var(--mcp), var(--native)) 1; }
+  .step-card.hidden { display: none; }
+  .step-head { padding: 14px 18px; display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; background: var(--surface); transition: background 0.15s; }
+  .step-head:hover { background: var(--surface2); }
+  .step-num-circle { width: 32px; height: 32px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border-strong); color: var(--text2); font-size: 13px; font-weight: 600; font-family: ui-monospace, monospace; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-card.same .step-num-circle { background: rgba(63,185,80,0.10); color: var(--green); border-color: rgba(63,185,80,0.3); }
+  .step-card.diverge .step-num-circle { background: rgba(210,153,34,0.10); color: var(--text); border-color: var(--border-strong); }
+  .step-title { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
+  .step-badge { padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 500; flex-shrink: 0; }
+  .step-badge.same { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.4); }
+  .step-badge.diverge { background: linear-gradient(90deg, rgba(210,153,34,0.12), rgba(88,166,255,0.12)); color: var(--text); border: 1px solid rgba(210,153,34,0.4); }
+  .step-toggle { color: var(--text3); font-size: 12px; font-family: ui-monospace, monospace; transition: transform 0.15s; flex-shrink: 0; }
+  .step-card.open .step-toggle { transform: rotate(90deg); }
+  .step-body { padding: 0 18px 18px; display: none; }
+  .step-card.open .step-body { display: block; }
+  .step-body p { font-size: 13.5px; color: var(--text); margin-bottom: 10px; }
+  .step-body p.note { font-size: 12.5px; color: var(--text2); font-style: italic; }
+
+  .step-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 12px; }
+  @media (max-width: 900px) { .step-split { grid-template-columns: minmax(0, 1fr); } }
+  .step-side { padding: 14px; border-radius: 8px; min-width: 0; }
+  .step-side p, .step-side li { overflow-wrap: anywhere; word-break: break-word; }
+  .step-side.mcp-side { background: var(--mcp-bg); border: 1px solid var(--mcp-border); }
+  .step-side.native-side { background: var(--native-bg); border: 1px solid var(--native-border); }
+  .step-side h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .step-side.mcp-side h4 { color: var(--mcp); }
+  .step-side.native-side h4 { color: var(--native); }
+  .step-side p { font-size: 12.5px; color: var(--text); margin-bottom: 8px; }
+  .step-side ul { font-size: 12.5px; padding-left: 18px; margin: 0; }
+  .step-side li { margin-bottom: 4px; color: var(--text); }
+  .step-side pre { background: rgba(13,17,23,0.6); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 10px 12px; font-size: 11.5px; line-height: 1.5; margin: 8px 0; max-height: 360px; overflow: auto; white-space: pre; }
+  .step-side pre code { color: var(--text); white-space: pre; }
+  .step-side pre::-webkit-scrollbar, .step-shared-block pre::-webkit-scrollbar { width: 8px; height: 8px; }
+  .step-side pre::-webkit-scrollbar-track, .step-shared-block pre::-webkit-scrollbar-track { background: rgba(13,17,23,0.4); border-radius: 4px; }
+  .step-side pre::-webkit-scrollbar-thumb, .step-shared-block pre::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+  .step-side pre::-webkit-scrollbar-thumb:hover, .step-shared-block pre::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+  .step-side pre::-webkit-scrollbar-corner, .step-shared-block pre::-webkit-scrollbar-corner { background: transparent; }
+  .step-shared-block { background: rgba(63,185,80,0.04); border: 1px solid rgba(63,185,80,0.25); border-radius: 8px; padding: 14px; margin-top: 12px; }
+  .step-shared-block h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--green); }
+  .step-shared-block p { font-size: 13px; color: var(--text); margin-bottom: 8px; }
+  .step-shared-block pre { background: rgba(13,17,23,0.6); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 10px 12px; font-size: 11.5px; margin: 8px 0; max-height: 360px; overflow: auto; white-space: pre; }
+  .step-shared-block pre code { white-space: pre; }
+
+  .impact-tag { display: inline-block; background: var(--surface3); padding: 2px 8px; border-radius: 4px; font-size: 11px; color: var(--text2); margin-left: 6px; }
+
+  /* WALKTHROUGH 2-column layout with sticky topology diagram */
+  .walkthrough-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: flex-start; }
+  @media (max-width: 1100px) { .walkthrough-grid { grid-template-columns: 1fr; } .walkthrough-aside { position: static !important; } }
+  .walkthrough-content { min-width: 0; }
+  .walkthrough-aside { position: sticky; top: 76px; align-self: flex-start; max-height: calc(100vh - 92px); overflow-y: auto; }
+  .walkthrough-aside::-webkit-scrollbar { width: 6px; }
+  .walkthrough-aside::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  .topology-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .topology-card h3 { margin: 0 0 6px; font-size: 13px; color: var(--text); text-transform: uppercase; letter-spacing: 0.4px; }
+  .topology-card .topo-sub { font-size: 11px; color: var(--text2); margin-bottom: 10px; }
+  .topology-svg { width: 100%; display: block; }
+  .topo-node { cursor: pointer; transition: all 0.15s; }
+  .topo-node:hover circle { stroke-width: 2.5; }
+  .topo-node circle { transition: all 0.15s; }
+  .topo-node.same circle { fill: rgba(63,185,80,0.18); stroke: var(--green); stroke-width: 1.5; }
+  .topo-node.mcp circle { fill: rgba(210,153,34,0.20); stroke: var(--mcp); stroke-width: 1.5; }
+  .topo-node.native circle { fill: rgba(88,166,255,0.20); stroke: var(--native); stroke-width: 1.5; }
+  .topo-node.active circle { stroke-width: 3; filter: drop-shadow(0 0 6px currentColor); }
+  .topo-node.same.active circle { fill: rgba(63,185,80,0.45); }
+  .topo-node.mcp.active circle { fill: rgba(210,153,34,0.45); }
+  .topo-node.native.active circle { fill: rgba(88,166,255,0.45); }
+  .topo-node text { font-family: ui-monospace, monospace; font-size: 9px; font-weight: 600; pointer-events: none; }
+  .topo-node.same text { fill: var(--green); }
+  .topo-node.mcp text { fill: var(--mcp); }
+  .topo-node.native text { fill: var(--native); }
+  .topo-line { stroke: var(--border-strong); stroke-width: 1.2; fill: none; }
+  .topo-line.fork-mcp { stroke: var(--mcp); stroke-dasharray: 3 2; }
+  .topo-line.fork-native { stroke: var(--native); stroke-dasharray: 3 2; }
+  .topo-line.same { stroke: var(--green); }
+  .topo-region-label { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 9px; fill: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; }
+  .topo-region-label.mcp { fill: var(--mcp); }
+  .topo-region-label.native { fill: var(--native); }
+  .topo-legend { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 11px; }
+  .topo-legend-row { display: flex; align-items: center; gap: 8px; color: var(--text2); }
+  .topo-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .topo-legend-dot.same { background: rgba(63,185,80,0.18); border: 1.5px solid var(--green); }
+  .topo-legend-dot.mcp { background: rgba(210,153,34,0.20); border: 1.5px solid var(--mcp); }
+  .topo-legend-dot.native { background: rgba(88,166,255,0.20); border: 1.5px solid var(--native); }
+  .topo-tooltip { position: absolute; background: var(--bg); border: 1px solid var(--border-strong); border-radius: 4px; padding: 6px 10px; font-size: 11px; color: var(--text); pointer-events: none; z-index: 1000; max-width: 220px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+
+  /* TABLE OF NUMBERED ROWS */
+  .ordered-flow { counter-reset: stepc; padding-left: 0; list-style: none; }
+  .ordered-flow > li { counter-increment: stepc; padding: 12px 14px 12px 50px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; position: relative; }
+  .ordered-flow > li::before { content: counter(stepc); position: absolute; top: 12px; left: 12px; width: 26px; height: 26px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border-strong); color: var(--text2); font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; font-family: ui-monospace, monospace; }
+  .ordered-flow.mcp-flow > li { border-left: 2px solid var(--mcp-border); }
+  .ordered-flow.mcp-flow > li::before { color: var(--mcp); border-color: var(--mcp-border); }
+  .ordered-flow.native-flow > li { border-left: 2px solid var(--native-border); }
+  .ordered-flow.native-flow > li::before { color: var(--native); border-color: var(--native-border); }
+  .ordered-flow li strong { color: var(--text); }
+  .ordered-flow li .file-cite { display: block; margin-top: 4px; }
+
+  hr.sep { border: none; height: 1px; background: var(--border); margin: 24px 0; }
+
+  .kvp { display: grid; grid-template-columns: 200px 1fr; gap: 4px 14px; font-size: 13px; margin: 8px 0; }
+  .kvp .k { color: var(--text2); font-family: ui-monospace, monospace; font-size: 12px; }
+  .kvp .v { color: var(--text); }
+
+  .badge-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+
+  footer { text-align: center; padding: 32px 0 16px; color: var(--text3); font-size: 12px; border-top: 1px solid var(--border); margin-top: 48px; }
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="logo">CareLink AGI <span>· Option B</span></div>
+  <button class="nav-btn active" data-tab="overview">Overview</button>
+  <button class="nav-btn" data-tab="intake">Intake PoC</button>
+  <button class="nav-btn" data-tab="registry">Expert Registry</button>
+  <button class="nav-btn" data-tab="dispatch">Dispatch</button>
+  <button class="nav-btn" data-tab="dataflow">Data Flow</button>
+  <button class="nav-btn" data-tab="walkthrough">Sarah's NewRx</button>
+  <button class="nav-btn" data-tab="drift">Drift Handling</button>
+  <button class="nav-btn" data-tab="decision">Decision</button>
+</nav>
+
+<main>
+
+<!-- ============ OVERVIEW ============ -->
+<section class="section active" id="overview">
+  <h1>Rx-Flow Option B: Intake PoC, Expert Registry &amp; MCP-vs-Native Dispatch</h1>
+  <p class="lede">A walkthrough of where the rx-flow Option-B migration sits today, and what the architecture looks like if we replace the MCP <code>invoke_expert</code> wrapper with the Claude Agent SDK's native <code>Agent</code> tool. Drift handling is compared side-by-side for both paths.</p>
+
+  <div class="badge-row">
+    <span class="pill pill-info">Branch: feature/ai-orchestration-with-domain-agents</span>
+    <span class="pill pill-info">Phase 0 + 1 shipped</span>
+    <span class="pill pill-mcp">MCP path = today</span>
+    <span class="pill pill-native">Native path = dormant, wired</span>
+  </div>
+
+  <h2>What this document is</h2>
+  <p>The rx-flow workflow is mid-migration from a single monolithic-prompt orchestrator (Option A) to an orchestrator + 8 scoped domain experts (Option B). PR 1 landed the first end-to-end expert (the <strong>Intake PoC</strong>) and the supporting <strong>Expert Registry</strong>. The orchestrator dispatches experts via a custom MCP tool <code>invoke_expert</code>. The Claude Agent SDK's native <code>Agent</code> tool is wired but unused — activating it would simplify the dispatch path at the cost of validation/retry guarantees. This doc lays out both paths and how each handles LLM-side and subprocess-side drift.</p>
+
+  <h2>Glossary</h2>
+  <div class="grid-2">
+    <div class="card">
+      <h3>MCP (Model Context Protocol)</h3>
+      <p>A JSON-RPC protocol the Claude Agent SDK uses to expose custom tools to a running model. In this codebase the <code>invoke_expert</code> tool is registered on an in-process MCP server attached to the orchestrator's <code>ClaudeAgentOptions(mcp_servers=...)</code>.</p>
+    </div>
+    <div class="card">
+      <h3>Native <code>Agent</code> tool</h3>
+      <p>A first-class SDK tool that takes <code>{ subagent_type, prompt }</code> and dispatches a subagent subprocess directly. Subagents come from <code>ClaudeAgentOptions(agents={id: AgentDefinition})</code>. No MCP layer involved.</p>
+    </div>
+    <div class="card">
+      <h3>Expert</h3>
+      <p>A scoped subagent defined by a Markdown file with YAML frontmatter under <code>carelink-pms/carelink/agi/agents/*.md</code>. Each expert owns a narrow domain (intake, billing, DUR, fulfillment, shipping, clinical-checklist, rejection-classifier, data-entry).</p>
+    </div>
+    <div class="card">
+      <h3>Drift</h3>
+      <p>The gap between what the orchestrator (or expert subprocess) is <em>supposed</em> to emit and what it actually emits. Output drift = wrong schema. Tool drift = calling a disallowed verb. Subprocess drift = silent crash. Each path handles each kind differently.</p>
+    </div>
+  </div>
+
+  <h2>The architecture in one diagram</h2>
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot mcp"></span> MCP path (today)</div>
+    <div class="legend-item"><span class="legend-dot native"></span> Native Agent path (dormant)</div>
+    <div class="legend-item"><span class="legend-dot shared"></span> Shared</div>
+  </div>
+
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 12px 0;">
+    <svg viewBox="0 0 1100 460" style="width: 100%; max-width: 1100px; display: block;" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr-mcp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#d29922"/>
+        </marker>
+        <marker id="arr-native" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#58a6ff"/>
+        </marker>
+        <marker id="arr-shared" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/>
+        </marker>
+      </defs>
+      <!-- Orchestrator -->
+      <rect x="430" y="20" width="240" height="60" rx="8" fill="#1c2333" stroke="#4a5260" stroke-width="1.5"/>
+      <text x="550" y="44" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="600">Orchestrator LLM</text>
+      <text x="550" y="62" text-anchor="middle" fill="#8b949e" font-size="11">ClaudeSDKClient (long-lived)</text>
+
+      <!-- MCP branch (left) -->
+      <rect x="60" y="130" width="240" height="60" rx="8" fill="rgba(210,153,34,0.08)" stroke="#d29922" stroke-width="1.5"/>
+      <text x="180" y="154" text-anchor="middle" fill="#d29922" font-size="13" font-weight="600">MCP server (in-process)</text>
+      <text x="180" y="172" text-anchor="middle" fill="#8b949e" font-size="11">invoke_expert tool</text>
+
+      <rect x="60" y="220" width="240" height="60" rx="8" fill="rgba(210,153,34,0.08)" stroke="#d29922" stroke-width="1.5"/>
+      <text x="180" y="244" text-anchor="middle" fill="#d29922" font-size="13" font-weight="600">_invoke_expert handler</text>
+      <text x="180" y="262" text-anchor="middle" fill="#8b949e" font-size="11">Pydantic validate · retry · envelope</text>
+
+      <rect x="60" y="310" width="240" height="60" rx="8" fill="rgba(210,153,34,0.08)" stroke="#d29922" stroke-width="1.5"/>
+      <text x="180" y="334" text-anchor="middle" fill="#d29922" font-size="13" font-weight="600">_spawn_expert_agent</text>
+      <text x="180" y="352" text-anchor="middle" fill="#8b949e" font-size="11">sdk.query(prompt, options)</text>
+
+      <line x1="490" y1="80" x2="290" y2="130" stroke="#d29922" stroke-width="2" stroke-dasharray="0" marker-end="url(#arr-mcp)"/>
+      <line x1="180" y1="190" x2="180" y2="220" stroke="#d29922" stroke-width="2" marker-end="url(#arr-mcp)"/>
+      <line x1="180" y1="280" x2="180" y2="310" stroke="#d29922" stroke-width="2" marker-end="url(#arr-mcp)"/>
+
+      <!-- Native branch (right) -->
+      <rect x="800" y="220" width="240" height="60" rx="8" fill="rgba(88,166,255,0.08)" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text x="920" y="244" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="600">SDK Agent dispatch</text>
+      <text x="920" y="262" text-anchor="middle" fill="#8b949e" font-size="11">agents={id: AgentDefinition}</text>
+
+      <line x1="610" y1="80" x2="850" y2="220" stroke="#58a6ff" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr-native)"/>
+
+      <!-- Expert subprocess (shared) -->
+      <rect x="430" y="380" width="240" height="60" rx="8" fill="#1c2333" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text x="550" y="404" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="600">Expert subprocess</text>
+      <text x="550" y="422" text-anchor="middle" fill="#8b949e" font-size="11">claude CLI · Bash · restish carelink</text>
+
+      <line x1="180" y1="370" x2="430" y2="395" stroke="#d29922" stroke-width="2" marker-end="url(#arr-mcp)"/>
+      <line x1="920" y1="280" x2="670" y2="400" stroke="#58a6ff" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr-native)"/>
+
+      <text x="180" y="115" fill="#d29922" font-size="11" font-weight="600">CURRENT</text>
+      <text x="920" y="205" fill="#58a6ff" font-size="11" font-weight="600">DORMANT (wired)</text>
+    </svg>
+  </div>
+
+  <p class="lede">The orchestrator's LLM picks one of two tools when it wants to invoke an expert. Today it picks <code>invoke_expert</code> because the system prompt tells it to. Flip the prompt and remove the MCP server, and the same orchestrator picks <code>Agent(subagent_type=...)</code> instead. The expert subprocess is identical in both cases — the difference is the route.</p>
+</section>
+
+<!-- ============ INTAKE POC ============ -->
+<section class="section" id="intake">
+  <h1>The Intake PoC</h1>
+  <p class="lede">PR 1 of the Option B migration. The first scoped domain expert + the dispatcher that routes to it + the typed contracts that keep its inputs and outputs honest. Landed on commits <code>aeff02a</code> + <code>645727d</code>.</p>
+
+  <h2>What it does</h2>
+  <p><code>rx-flow-intake</code> is a scoped subagent that takes a parsed NCPDP NewRx message + a <code>pharmacy_id</code> and resolves four references against CareLink's records:</p>
+  <ol>
+    <li><strong>Patient</strong> — match by last name + DOB. Create if safe; else escalate via <code>HumanQuestion</code>.</li>
+    <li><strong>Prescriber</strong> — match by NPI, fall back to name. Create if safe.</li>
+    <li><strong>Drug / inventory product</strong> — match by NDC, fall back to <code>search-drugs</code> by GCN if DAW=0 and no NDC hit.</li>
+    <li><strong>Insurance</strong> — match against the patient's record using the NewRx insurance segment.</li>
+  </ol>
+  <p>Once those resolve, intake calls <code>create-prescription</code> to mint the <code>rx_id</code> and returns a structured <code>IntakeExpertOutput</code>. Anything ambiguous becomes a <code>human_questions[]</code> entry instead of a guess.</p>
+
+  <h2>Frontmatter (the contract with the orchestrator)</h2>
+  <div class="card mcp">
+    <div class="kvp">
+      <div class="k">name</div><div class="v"><code>rx-flow-intake</code></div>
+      <div class="k">tools</div><div class="v"><code>[Bash]</code> (no Read, no AskUserQuestion)</div>
+      <div class="k">allowed_restish_commands</div><div class="v"><code>list-patients</code>, <code>create-patient</code>, <code>list-prescribers</code>, <code>create-prescriber</code>, <code>list-products</code>, <code>create-product</code>, <code>search-drugs</code>, <code>get-drug</code>, <code>create-prescription</code>, <code>get-prescription</code></div>
+      <div class="k">input_schema</div><div class="v"><code>carelink.agi.contracts.rx_flow.IntakeExpertInput</code></div>
+      <div class="k">output_schema</div><div class="v"><code>carelink.agi.contracts.rx_flow.IntakeExpertOutput</code></div>
+      <div class="k">can_advance_phase</div><div class="v"><code>false</code> (intake is a step, not a state-machine driver)</div>
+      <div class="k">skill_subset</div><div class="v"><code>match-pt</code>, <code>match-prescriber</code>, <code>match-inventory-drug</code>, <code>match-insurance</code></div>
+    </div>
+    <p class="file-cite mono">carelink-pms/carelink/agi/agents/rx-flow-intake.md:1-22</p>
+  </div>
+
+  <h2>Typed contracts</h2>
+  <div class="grid-2">
+    <div class="card">
+      <h3>IntakeExpertInput <span class="pill pill-info">strict</span></h3>
+      <table>
+        <tr><td><code>ncpdp_message</code></td><td>dict</td><td>Parsed NewRx</td></tr>
+        <tr><td><code>pharmacy_id</code></td><td>str</td><td>Pharmacy UUID</td></tr>
+        <tr><td><code>human_answers</code></td><td>dict</td><td>Folded HITL replies</td></tr>
+        <tr><td><code>schema_version</code></td><td>Literal[1]</td><td>Contract version</td></tr>
+      </table>
+      <p class="file-cite mono">carelink-pms/carelink/agi/contracts/rx_flow.py:148-153</p>
+      <p style="font-size: 12.5px; color: var(--text2);">Inputs are <strong>strict</strong> — they're built by orchestrator Python code, so a ValidationError here is a real bug, not LLM drift.</p>
+    </div>
+    <div class="card">
+      <h3>IntakeExpertOutput <span class="pill pill-warn">loose by design</span></h3>
+      <table>
+        <tr><td><code>step_name</code></td><td>str</td><td>"rx-flow-intake"</td></tr>
+        <tr><td><code>status</code></td><td>str?</td><td>success/partial/failed/hitl_required</td></tr>
+        <tr><td><code>rx_id</code></td><td>str?</td><td>From create-prescription</td></tr>
+        <tr><td><code>patient_id, prescriber_id, product_id</code></td><td>str?</td><td>Resolved UUIDs</td></tr>
+        <tr><td><code>insurance_matched, insurance_id</code></td><td>bool/str?</td><td>Insurance state</td></tr>
+        <tr><td><code>human_questions</code></td><td>list[HumanQuestion]</td><td>HITL escalations</td></tr>
+        <tr><td><code>partial_state</code></td><td>dict</td><td>Carry-over for re-runs</td></tr>
+      </table>
+      <p class="file-cite mono">carelink-pms/carelink/agi/contracts/rx_flow.py:155-217</p>
+      <p style="font-size: 12.5px; color: var(--text2);">Outputs are <strong>loose by design</strong> — every field optional, sensible defaults. Treadmill experience showed tightening just invites the next drift to land elsewhere.</p>
+    </div>
+  </div>
+
+  <h2>Why "PoC"</h2>
+  <p>It's the first end-to-end Option-B expert dispatch. Intake exercises every piece the rest of the experts will use: registry load, frontmatter parse, input/output Pydantic validation, subprocess spawn, restish allowlist enforcement, schema-drift retry, fallback envelope. If intake's plumbing is sound, the other 7 experts plug in with config-only changes (a new <code>.md</code> file + matching contracts).</p>
+
+  <div class="callout">
+    <strong>Status note.</strong> The Pydantic input schema for <code>BillingExpertInput</code> recently exposed an under-specified case: it required <code>insurance_id</code> but didn't accept the <code>ncpdp_insurance</code> dict that intake emits when no local Insurance record was matched. That's a contract gap, not a dispatch issue — fixed today with a <code>model_validator</code> requiring exactly one of the two.
+  </div>
+</section>
+
+<!-- ============ EXPERT REGISTRY ============ -->
+<section class="section" id="registry">
+  <h1>The Expert Registry</h1>
+  <p class="lede">The thing that turns <code>agents/*.md</code> files into runtime <code>ExpertSpec</code> objects. Already implemented as part of the PoC; PR 2.1 is about formalizing what's there into the canonical primitive every dispatcher uses.</p>
+
+  <h2>Lifecycle</h2>
+  <ol class="ordered-flow">
+    <li>
+      <strong>Discover</strong> — at <code>load()</code>, scan <code>carelink-pms/carelink/agi/agents/*.md</code> alphabetically.
+      <span class="file-cite mono">registry.py:212-217</span>
+    </li>
+    <li>
+      <strong>Parse</strong> — regex out the YAML frontmatter, <code>yaml.safe_load</code>, remap aliases (<code>tools→allowed_tools</code>, <code>skill_subset→skills</code>), validate via <code>ExpertSpec</code> Pydantic model, glue body + source path.
+      <span class="file-cite mono">registry.py:256-301</span>
+    </li>
+    <li>
+      <strong>Validate</strong> — gates: <span class="pill pill-good">filename == frontmatter id</span> <span class="pill pill-good">no duplicate ids</span> <span class="pill pill-good">I/O schema dotted-paths import successfully</span> <span class="pill pill-good">claude CLI on PATH</span>.
+      <span class="file-cite mono">registry.py:331-395</span>
+    </li>
+    <li>
+      <strong>Prepend shared preamble</strong> — every expert's body gets the cross-cutting preamble (HumanQuestion shape, restish hygiene, output-line discipline) prepended at load time.
+      <span class="file-cite mono">registry.py:203-254 + agents/preamble.py</span>
+    </li>
+    <li>
+      <strong>Expose</strong> — <code>get(id) → ExpertSpec</code> for dispatchers; <code>list_catalog() → [{id, name, description, domain}]</code> for orchestrator-facing lean view.
+      <span class="file-cite mono">registry.py:307-321</span>
+    </li>
+  </ol>
+
+  <h2>Who consumes the registry</h2>
+  <table>
+    <tr><th>Caller</th><th>What it reads</th><th>Why</th></tr>
+    <tr><td><code>tools.py::invoke_expert</code></td><td><code>get(expert_id)</code></td><td>Resolve input/output Pydantic classes for validation</td></tr>
+    <tr><td><code>tools.py::_spawn_expert_agent</code></td><td><code>get(agent_file)</code></td><td>Pull body, allowed_tools, model into <code>ClaudeAgentOptions</code></td></tr>
+    <tr><td><code>tools.py::build_restish_allowlist_hook</code></td><td><code>get(agent_file)</code></td><td>Defense-in-depth: check Bash command against expert's allowlist at runtime</td></tr>
+    <tr><td><code>service.py::validate_registry_at_startup</code></td><td><code>load()</code> + <code>validate()</code></td><td>Production startup gate — refuse to boot if any expert is malformed</td></tr>
+    <tr><td><code>agents/loader.py::load_all_experts</code></td><td><code>list_catalog()</code> + <code>get(id)</code></td><td>Build <code>{id: AgentDefinition}</code> for the dormant native path</td></tr>
+  </table>
+
+  <div class="callout">
+    <strong>What PR 2.1 likely formalizes.</strong> The registry already exists and works. PR 2.1 promotes it from "an implementation detail of <code>invoke_expert</code>" to the canonical primitive — single source of truth for both dispatch paths, stronger validation gates (e.g., schema reachability checks), and a public <code>list_catalog()</code> shape that the orchestrator's system prompt can be generated from instead of hand-maintained.
+  </div>
+
+  <h2>The expert catalog today</h2>
+  <table>
+    <tr><th>Expert</th><th>Owns</th><th>Tools</th><th>Mutating?</th></tr>
+    <tr><td><code>rx-flow-intake</code></td><td>NCPDP NewRx → resolved refs + create-prescription</td><td>Bash</td><td>Yes (creates patient/prescriber/product/rx)</td></tr>
+    <tr><td><code>rx-flow-clinical-checklist</code></td><td>Allergy / interaction / contraindication checks</td><td>Bash</td><td>No (read-only)</td></tr>
+    <tr><td><code>rx-flow-data-entry</code></td><td>SPM / sig coding</td><td>Bash</td><td>Yes (sig + SPM mutations)</td></tr>
+    <tr><td><code>rx-flow-dur</code></td><td>DUR review</td><td>Bash</td><td>No (read-only)</td></tr>
+    <tr><td><code>rx-flow-billing</code></td><td>NCPDP D.0 B1 payload assembly</td><td>Bash</td><td>No (returns payload; downstream submits)</td></tr>
+    <tr><td><code>rx-flow-rejection-classifier</code></td><td>Map switch reject codes → action</td><td>Bash</td><td>No (read-only)</td></tr>
+    <tr><td><code>rx-flow-fulfillment</code></td><td>Pick / pack workflow advancement</td><td>Bash</td><td>Yes</td></tr>
+    <tr><td><code>rx-flow-shipping</code></td><td>Shipstation label + tracking</td><td>Bash</td><td>Yes</td></tr>
+  </table>
+</section>
+
+<!-- ============ DISPATCH ============ -->
+<section class="section" id="dispatch">
+  <h1>Dispatch: MCP today vs Native if we flip</h1>
+  <p class="lede">Same orchestrator LLM, same expert subprocess. The route between them is what changes. Click between the views.</p>
+
+  <div class="subtab-bar">
+    <button class="subtab-btn mcp-tone active" data-pane="mcp">Current — MCP path</button>
+    <button class="subtab-btn native-tone" data-pane="native">Proposed — Native Agent path</button>
+    <button class="subtab-btn compare-tone" data-pane="compare">Side-by-side</button>
+  </div>
+
+  <!-- ===== MCP PANE ===== -->
+  <div class="subtab-pane active" id="pane-mcp">
+    <h2>MCP path — 4 hops, full validation/retry</h2>
+    <p>Today, the orchestrator emits <code>invoke_expert(expert_id, input)</code>. The SDK routes that to the in-process MCP server registered on <code>ClaudeAgentOptions(mcp_servers=...)</code>. Our handler does the heavy lifting before the expert subprocess is even spawned, and again after it returns.</p>
+
+    <ol class="ordered-flow mcp-flow">
+      <li>
+        <strong>Orchestrator LLM emits tool_use</strong> <code>invoke_expert(expert_id="rx-flow-intake", input={...})</code>.
+        <span class="file-cite mono">system-prompt-templates.ts:541-542 (instructs the model)</span>
+      </li>
+      <li>
+        <strong>SDK dispatches to MCP server</strong> via the configured <code>mcp_servers={"agi": ...}</code> map.
+        <span class="file-cite mono">service.py:1690 (mcp_servers kwarg)</span>
+      </li>
+      <li>
+        <strong>MCP tool handler runs</strong> — <code>_invoke_expert(args)</code> at <code>tools.py:871</code>, which calls into the dispatcher.
+        <span class="file-cite mono">tools.py:843-870 (sdk.tool registration), tools.py:871-930 (handler body)</span>
+      </li>
+      <li>
+        <strong>Input validation</strong> — <code>spec.input_schema.model_validate(input)</code>. Pydantic raises immediately if the orchestrator passed a malformed input. Caught in the dispatcher; orchestrator gets a typed error envelope.
+        <span class="file-cite mono">tools.py:734</span>
+      </li>
+      <li>
+        <strong>Subprocess spawn (with one transient retry)</strong> — <code>_try_spawn_with_subprocess_retry</code> calls <code>_spawn_expert_agent</code>, which builds an <code>sdk.ClaudeAgentOptions</code> per-expert (system_prompt = expert body, allowed_tools, model, restish allowlist hook on Bash) and runs <code>sdk.query(prompt, options)</code>. ProcessError / CLIConnectionError / rate-limit are classified; transient → backoff + retry once, permanent → typed envelope.
+        <span class="file-cite mono">tools.py:543-679 (retry wrapper), tools.py:108-329 (spawn)</span>
+      </li>
+      <li>
+        <strong>Subprocess runs the expert</strong> — claude CLI in a sandboxed workspace, executes Bash → restish carelink &lt;verb&gt;, emits a final JSON line.
+      </li>
+      <li>
+        <strong>Output extraction</strong> — <code>_extract_final_json(raw)</code> grabs the last JSON object from the subprocess's stdout and parses it.
+        <span class="file-cite mono">tools.py:387-407</span>
+      </li>
+      <li>
+        <strong>Output validation (with one schema-drift retry)</strong> — Pydantic <code>output_cls.model_validate(parsed)</code>. On failure, <code>_retry_once_on_validation_error</code> re-spawns the expert with the original input + a <strong>nudge</strong> message containing the ValidationError + the full JSON schema. Validates the second result.
+        <span class="file-cite mono">tools.py:410-500 (retry), tools.py:447-451 (nudge prose)</span>
+      </li>
+      <li>
+        <strong>Fallback envelope on double failure</strong> — if both attempts fail validation, the dispatcher returns <code>{"status": "failed", "step_name": expert_id, "error": str(first_error), "raw": raw}</code>. The orchestrator reads <code>status == "failed"</code> and routes to HITL.
+        <span class="file-cite mono">tools.py:787-792</span>
+      </li>
+      <li>
+        <strong>Orchestrator receives a Python dict</strong> — typed, validated (or a typed failure envelope). Drift is contained at the expert boundary; the orchestrator never sees malformed JSON.
+      </li>
+    </ol>
+  </div>
+
+  <!-- ===== NATIVE PANE ===== -->
+  <div class="subtab-pane" id="pane-native">
+    <h2>Native path — 1 hop, hook-based validation only</h2>
+    <p>If we delete <code>invoke_expert</code> and update the orchestrator's system prompt to use the SDK's native <code>Agent</code> tool, the route collapses. The SDK already has <code>agents={id: AgentDefinition}</code> populated by <code>load_all_experts(registry)</code> at <code>service.py:1681,1691</code> — it just isn't being asked.</p>
+
+    <ol class="ordered-flow native-flow">
+      <li>
+        <strong>Orchestrator LLM emits tool_use</strong> <code>Agent(subagent_type="rx-flow-intake", prompt="<input as text>")</code>.
+        <span class="file-cite mono">(system prompt would change to teach this form)</span>
+      </li>
+      <li>
+        <strong>SDK looks up the agent definition</strong> in <code>options.agents[subagent_type]</code> — already populated by <code>load_all_experts(registry)</code>.
+        <span class="file-cite mono">agents/loader.py:28-59 (load_all_experts), service.py:1691 (kwarg)</span>
+      </li>
+      <li>
+        <strong>SDK spawns the subagent subprocess directly</strong> — using the <code>AgentDefinition</code>'s <code>{description, prompt, tools, model}</code>. Same workspace + env. No Python-side dispatcher in between.
+      </li>
+      <li>
+        <strong>Subprocess runs the expert</strong> — identical to the MCP path. Bash → restish.
+      </li>
+      <li>
+        <strong>PostToolUse hook intercepts the tool_result</strong> — a hook registered on <code>Agent</code> tool calls receives the raw tool_response. <strong>This is the only place we can do output validation now.</strong> The hook can <code>updatedMCPToolOutput</code> to mutate the result, but it cannot directly trigger a retry — the orchestrator LLM has to choose to re-invoke on the next turn based on what the hook leaves in the tool_result.
+        <span class="file-cite mono">claude_agent_sdk/types.py:280, 384 (PostToolUse + updatedMCPToolOutput)</span>
+      </li>
+      <li>
+        <strong>Orchestrator LLM receives a ToolResultBlock</strong> — text-shaped, possibly mutated by the hook. The LLM has to decide whether the tool_result indicates success or whether to re-invoke. The hook can write a structured error message into the tool_result content to nudge the LLM, but cannot guarantee a retry.
+      </li>
+      <li class="warn-row" style="border-left-color: var(--red); background: rgba(248,81,73,0.04);">
+        <strong>Subprocess crash → orchestrator session tears down</strong> — on the native path, a subagent ProcessError isn't returned to the orchestrator as <code>is_error: true</code>. The SDK propagates it. <code>SubagentStop</code> hook fires but cannot prevent the parent from also failing. There is no "transient retry" equivalent.
+        <span class="file-cite mono">claude_agent_sdk/_internal/* (no error envelope on subagent crash)</span>
+      </li>
+    </ol>
+
+    <div class="callout warn">
+      <strong>What's lost from MCP path.</strong> Three things: (1) Pydantic input validation BEFORE spawn — moves to a <code>PreToolUse</code> hook, doable but a different surface. (2) One-shot output-validation retry — gone; the LLM has to retry. (3) Transient subprocess retry — gone; subprocess crash goes straight to session teardown.
+    </div>
+  </div>
+
+  <!-- ===== COMPARE PANE ===== -->
+  <div class="subtab-pane" id="pane-compare">
+    <h2>Side-by-side</h2>
+    <table>
+      <tr><th>Concern</th><th>MCP path (today)</th><th>Native Agent path</th></tr>
+      <tr>
+        <td>Hops orchestrator → expert</td>
+        <td><span class="pill pill-mcp">4</span> orchestrator → MCP server → handler → spawn → SDK</td>
+        <td><span class="pill pill-native">1</span> orchestrator → SDK</td>
+      </tr>
+      <tr>
+        <td>LoC delta if you flip</td>
+        <td>—</td>
+        <td><span class="pill pill-good">~−400 net</span> (delete <code>invoke_expert</code>, retry helpers, spawn helper, MCP registration ≈ 487 LoC; add hook module ≈ 150 LoC)</td>
+      </tr>
+      <tr>
+        <td>Input validation</td>
+        <td><span class="pill pill-good">Pydantic raise</span> at dispatcher boundary</td>
+        <td><span class="pill pill-warn">PreToolUse hook</span> can validate; reject = <code>permissionDecision="deny"</code> + nudge in result</td>
+      </tr>
+      <tr>
+        <td>Output validation</td>
+        <td><span class="pill pill-good">Pydantic validate</span> in dispatcher</td>
+        <td><span class="pill pill-warn">PostToolUse hook</span> can validate + mutate result</td>
+      </tr>
+      <tr>
+        <td>Schema-drift retry</td>
+        <td><span class="pill pill-good">Auto, one-shot</span> with explicit nudge containing schema JSON</td>
+        <td><span class="pill pill-bad">LLM-driven</span> — orchestrator reads error from tool_result, decides to re-invoke</td>
+      </tr>
+      <tr>
+        <td>Transient subprocess retry</td>
+        <td><span class="pill pill-good">Auto, one-shot</span> with backoff after error classification</td>
+        <td><span class="pill pill-bad">None</span> — crash propagates; session may tear down</td>
+      </tr>
+      <tr>
+        <td>Fallback envelope on double failure</td>
+        <td><span class="pill pill-good">Typed dict</span> <code>{status: failed, error, raw}</code> — orchestrator can branch</td>
+        <td><span class="pill pill-warn">Hook-emitted text</span> in tool_result; orchestrator parses prose</td>
+      </tr>
+      <tr>
+        <td>Stderr capture for diagnosis</td>
+        <td><span class="pill pill-good">Live</span> via stderr callback in spawn</td>
+        <td><span class="pill pill-warn">Post-hoc</span> via SubagentStop hook + transcript path</td>
+      </tr>
+      <tr>
+        <td>Per-expert ClaudeAgentOptions tuning</td>
+        <td><span class="pill pill-good">Yes</span> — built fresh in <code>_spawn_expert_agent</code>, includes restish allowlist hook</td>
+        <td><span class="pill pill-warn">Limited</span> — <code>AgentDefinition</code> shape (description, prompt, tools, model). Allowlist enforcement moves to PreToolUse on Bash.</td>
+      </tr>
+      <tr>
+        <td>Trace/observability granularity</td>
+        <td><span class="pill pill-good">Per-message fan-out</span> in <code>_spawn_expert_agent</code> publishes to <code>ExpertTraceRegistry</code> live</td>
+        <td><span class="pill pill-warn">Start/Stop only</span> via SubagentStart + SubagentStop hooks</td>
+      </tr>
+      <tr>
+        <td>Sibling parity (<code>openaiagentssdk</code>)</td>
+        <td><span class="pill pill-bad">Drift</span> from sibling pattern</td>
+        <td><span class="pill pill-good">Matches</span> sibling's <code>Task</code>-tool pattern</td>
+      </tr>
+      <tr>
+        <td>Test rewrite cost</td>
+        <td>—</td>
+        <td><span class="pill pill-bad">~28 test functions</span> across 8 <code>test_invoke_expert_*.py</code> files</td>
+      </tr>
+    </table>
+  </div>
+</section>
+
+<!-- ============ DATA FLOW ============ -->
+<section class="section" id="dataflow">
+  <h1>Data flow &amp; component map</h1>
+  <p class="lede">Every piece of the AGI stack — where it lives, when it gets loaded, and who touches it during a real expert call. The dispatch route changes between MCP and Native, but most components are shared. This tab makes the "what's actually different" concrete.</p>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot" style="background:#39d2c0"></span> Shared (path-independent)</div>
+    <div class="legend-item"><span class="legend-dot mcp"></span> MCP-only</div>
+    <div class="legend-item"><span class="legend-dot native"></span> Native-only</div>
+  </div>
+
+  <h2>Where every resource lives</h2>
+  <p style="font-size: 13px; color: var(--text2);">Grouped by where it sits at runtime, not by what folder it lives in on disk.</p>
+
+  <!-- TIER 1: ON DISK -->
+  <div class="card">
+    <h3>① On-disk (compile-time / load-time) <span class="pill pill-info">Read at boot, frozen until restart</span></h3>
+    <table>
+      <tr><th>Resource</th><th>Path</th><th>What it carries</th><th>Loaded by</th></tr>
+      <tr>
+        <td><code>agents/*.md</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td><code>carelink-pms/carelink/agi/agents/rx-flow-*.md</code> (8 files)</td>
+        <td>YAML frontmatter (name, tools, allowed_restish_commands, input/output schema dotted-paths, skill_subset, can_advance_phase) + Markdown body (Scope, Domain rules, Output schema, Boundaries, Memory scope)</td>
+        <td><code>ExpertRegistry.load()</code></td>
+      </tr>
+      <tr>
+        <td><code>preamble.py</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td><code>carelink-pms/carelink/agi/agents/preamble.py</code></td>
+        <td><code>SHARED_EXPERT_PREAMBLE_MD</code> — HITL-resume protocol, Memory protocol, Restish CLI conventions, Output-contract reminder. Prepended ONCE to every expert body at load time (not per spawn).</td>
+        <td><code>ExpertRegistry.load()</code> (idempotent — sentinel guard against double-prepend)</td>
+      </tr>
+      <tr>
+        <td><code>contracts/rx_flow.py</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td><code>carelink-pms/carelink/agi/contracts/rx_flow.py</code></td>
+        <td>Pydantic <code>BaseExpertInput</code> / <code>BaseExpertOutput</code> + 8 concrete pairs (one per expert). Inputs strict, outputs deliberately loose.</td>
+        <td>Imported lazily in <code>tools.py</code> via the expert's <code>input_schema</code> / <code>output_schema</code> dotted path</td>
+      </tr>
+      <tr>
+        <td><code>skills/*/SKILL.md</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td><code>carelink-pms/carelink/agi/skills/&lt;skill-name&gt;/SKILL.md</code> (~40 directories)</td>
+        <td>Skill instruction prose, trigger phrases, references. Each expert's <code>skill_subset</code> frontmatter declares which skills it can invoke.</td>
+        <td>The expert subprocess discovers them via the SDK's skill-loading mechanism on cold start; the registry just records the list for catalog purposes.</td>
+      </tr>
+      <tr>
+        <td><code>system-prompt-templates.ts</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td><code>carelink-frontend/src/constants/system-prompt-templates.ts</code></td>
+        <td>The orchestrator's system prompt. Today it teaches <code>invoke_expert(...)</code>; on Native it would teach <code>Agent(subagent_type=...)</code>.</td>
+        <td>Sent from the frontend on session start; passed into <code>ClaudeAgentOptions(system_prompt=...)</code></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- TIER 2: ORCHESTRATOR PROCESS -->
+  <div class="card">
+    <h3>② Orchestrator process (per session, in-memory) <span class="pill pill-info">Lives for the session lifetime</span></h3>
+    <table>
+      <tr><th>Resource</th><th>Where created</th><th>Role</th><th>MCP vs Native</th></tr>
+      <tr>
+        <td><code>ExpertRegistry</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td><code>service.py</code> at app boot (singleton)</td>
+        <td>Catalog of <code>ExpertSpec</code>s. <code>get(id)</code> for dispatchers, <code>list_catalog()</code> for the orchestrator's lean view.</td>
+        <td>Both paths consume it</td>
+      </tr>
+      <tr>
+        <td><code>ClaudeAgentOptions</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td><code>service.py::_build_options</code> per session</td>
+        <td>The single options object passed to <code>ClaudeSDKClient</code>. Carries <em>everything</em>: system_prompt, allowed_tools, mcp_servers, agents, hooks, env, cwd, model, max_turns, permission_mode.</td>
+        <td>The <code>mcp_servers=</code> kwarg matters on MCP; the <code>agents=</code> kwarg matters on Native. <strong>Both are populated today</strong> — only one is consumed depending on what the LLM picks.</td>
+      </tr>
+      <tr>
+        <td><code>build_mcp_server(...)</code> <span class="pill pill-mcp">MCP-only</span></td>
+        <td><code>service.py:1655</code> per session</td>
+        <td>In-process MCP server holding the <code>invoke_expert</code> tool registration. Lives only as long as the orchestrator session.</td>
+        <td>Becomes dead code if the native path is activated — its <code>mcp_servers=</code> wiring goes away.</td>
+      </tr>
+      <tr>
+        <td><code>load_all_experts(registry)</code> <span class="pill pill-native">Native-only (today: dormant)</span></td>
+        <td><code>agents/loader.py:28-59</code>; called at <code>service.py:1681</code></td>
+        <td>Builds <code>{expert_id: AgentDefinition}</code> from the registry — what the SDK consumes for native <code>Agent</code> dispatch.</td>
+        <td>Already populated; the LLM just doesn't ask for it today.</td>
+      </tr>
+      <tr>
+        <td><code>ToolApprovalGate</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td>Per-session in <code>create_session</code></td>
+        <td>Holds pending Bash-approval requests; cooperates with the just-shipped cold-park path (Inngest drain).</td>
+        <td>Lives inside the expert subprocess via PreToolUse hook on Bash — independent of orchestrator dispatch route.</td>
+      </tr>
+      <tr>
+        <td><code>UserQuestionGate</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td>Per-session</td>
+        <td>HITL gate for <code>AskUserQuestion</code> tool calls. Hot-path waits up to <code>hot_ttl_seconds</code>, then cold-parks via session store + Inngest.</td>
+        <td>Same on both paths.</td>
+      </tr>
+      <tr>
+        <td><code>ExpertTraceRegistry</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td>Singleton on <code>AGIService._trace_registry</code></td>
+        <td>Per-session ring buffer (500 events) of every SDK message the orchestrator/expert emits. Powers the live Agent Trace panel + the new export endpoint.</td>
+        <td>MCP path publishes per-message via <code>_spawn_expert_agent</code>'s loop; Native path would need a SubagentStart/Stop hook to feed it (granularity drops to start/end only).</td>
+      </tr>
+      <tr>
+        <td><code>AuditCollector</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td>Per-session</td>
+        <td>Records every tool invocation + subagent stop for observability. Wired as <code>PostToolUse</code> + <code>SubagentStop</code> hooks on the orchestrator session.</td>
+        <td>Same on both paths.</td>
+      </tr>
+      <tr>
+        <td><code>build_scope_guard(...)</code> <span class="pill" style="background:rgba(57,210,192,0.1);color:#39d2c0;border:1px solid rgba(57,210,192,0.4);">shared</span></td>
+        <td>Per session via <code>can_use_tool=</code></td>
+        <td>Enforces tool-name allowlist at the orchestrator level (e.g., orchestrator can only use <code>invoke_expert</code>, <code>AskUserQuestion</code>, <code>dispatch_claim</code>).</td>
+        <td>Same hook contract; the allowlist values change when MCP tools are removed in favor of <code>Agent</code>.</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- TIER 3: EXPERT SUBPROCESS -->
+  <div class="card">
+    <h3>③ Expert subprocess (per invocation, ephemeral) <span class="pill pill-info">Spawned per <code>invoke_expert</code> / <code>Agent</code> call</span></h3>
+    <table>
+      <tr><th>Resource</th><th>Lives in</th><th>Role</th></tr>
+      <tr>
+        <td>Expert system prompt = preamble + body</td>
+        <td>Constructed in <code>_spawn_expert_agent</code> (MCP) OR baked into <code>AgentDefinition.prompt</code> at registry-load (Native)</td>
+        <td>The subprocess's system prompt. Identical content either way; only the route differs.</td>
+      </tr>
+      <tr>
+        <td><code>allowed_tools</code></td>
+        <td><code>ClaudeAgentOptions.allowed_tools</code> per spawn (MCP) / <code>AgentDefinition.tools</code> (Native)</td>
+        <td>What tools the subprocess's LLM can call. Almost always <code>[Bash]</code> for the rx-flow experts.</td>
+      </tr>
+      <tr>
+        <td>Restish allowlist hook</td>
+        <td><code>tools.py:236-249</code> — registered as PreToolUse on Bash inside the expert spawn</td>
+        <td>Defense-in-depth: at runtime, when the expert tries to <code>restish carelink &lt;verb&gt;</code>, this hook checks the verb against <code>spec.allowed_restish_commands</code> and blocks unauthorized calls with a structured error nudge. <strong>Unchanged on Native</strong> — still wires inside the expert spawn.</td>
+      </tr>
+      <tr>
+        <td>Bash approval hook (with cold-park)</td>
+        <td>PreToolUse on Bash inside expert spawn</td>
+        <td>Intercepts <em>mutating</em> restish verbs (regex match on create-/update-/delete-/submit-/etc.), blocks the subprocess until operator approves via the API. Just-shipped cold-park persists pending approval to DB + fires Inngest drain when hot TTL elapses. <strong>Unchanged on Native</strong>.</td>
+      </tr>
+      <tr>
+        <td>Workspace directory</td>
+        <td>Filesystem, scoped to the orchestrator session: <code>&lt;tmp&gt;/agi-&lt;session_id&gt;/</code></td>
+        <td>Sandboxed CWD for the subprocess. Holds <code>memories/</code> subdirs the expert reads/writes for cross-run learning.</td>
+      </tr>
+      <tr>
+        <td>Subprocess env</td>
+        <td>Built by <code>_build_subprocess_env</code> in <code>service.py</code></td>
+        <td>HOME/XDG redirected into workspace; ZDOTDIR / BASH_ENV / ENV / PROMPT_COMMAND cleared (just-shipped Part A) to prevent rc-file noise; bearer token + Vertex creds + restish output format injected.</td>
+      </tr>
+      <tr>
+        <td><code>memories/&lt;topic&gt;/&lt;key&gt;.md</code></td>
+        <td>Filesystem in workspace dir; expert reads on entry, appends terse 1–3 line dated notes on exit</td>
+        <td>Cross-run learning. e.g. <code>memories/insurance/&lt;bin_pcn&gt;.md</code> for billing's payer quirks; <code>memories/patients/&lt;patient_id&gt;.md</code> for intake's known idiosyncrasies; <code>memories/tools/&lt;command&gt;.md</code> for restish flag/response quirks.</td>
+      </tr>
+      <tr>
+        <td>Skills</td>
+        <td>Loaded by SDK on cold start from <code>~/.claude/skills</code> + workspace-scoped paths</td>
+        <td>The expert's <code>skill_subset</code> frontmatter is a soft contract — the LLM is told it has these skills, but skill discovery is the SDK's job. Skills are <code>SKILL.md</code> instruction files in <code>carelink-pms/carelink/agi/skills/&lt;name&gt;/</code>.</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- TIER 4: PERSISTENT -->
+  <div class="card">
+    <h3>④ Persistent state (DB + Inngest) <span class="pill pill-info">Survives crashes &amp; restarts</span></h3>
+    <table>
+      <tr><th>Resource</th><th>Where</th><th>Role</th></tr>
+      <tr>
+        <td><code>AGISession</code> row</td>
+        <td>Postgres table; <code>SessionStore</code> wraps it</td>
+        <td>Per session: actor_id, sdk_session_id, status, <code>extra_data</code> JSONB blob. <code>extra_data</code> carries pending_question, pending_approval (just-shipped Part C), revive_state (idempotency for cold drains), pending_answers map.</td>
+      </tr>
+      <tr>
+        <td><code>workspace</code></td>
+        <td>Filesystem; path stored in <code>extra_data</code></td>
+        <td>Outlives the orchestrator process so cold-revive can re-spawn against the same memory dir.</td>
+      </tr>
+      <tr>
+        <td>Inngest functions</td>
+        <td><code>carelink-pms/carelink/integrations/inngest/agi_cold_revive.py</code></td>
+        <td><code>func_cold_revive_drain</code> (HITL question revive), <code>func_cold_approval_drain</code> (just-shipped). Idempotent via <code>ctx.step.run</code> + <code>revive_state</code>.</td>
+      </tr>
+      <tr>
+        <td>Audit table</td>
+        <td>Postgres; <code>AuditCollector</code> writes</td>
+        <td>Tool-call ledger for every session. Used for postmortem + compliance.</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- TIER 5: EXTERNAL -->
+  <div class="card">
+    <h3>⑤ External boundary <span class="pill pill-info">Out of process</span></h3>
+    <table>
+      <tr><th>Resource</th><th>How experts reach it</th><th>What sits behind</th></tr>
+      <tr>
+        <td>restish CLI</td>
+        <td><code>Bash</code> tool → <code>restish carelink &lt;verb&gt;</code> via subprocess. Bearer token in env; <code>RSH_OUTPUT_FORMAT=json</code>.</td>
+        <td>FastAPI backend (carelink-backend), which routes to PostgreSQL + FHIR + 17 external integrations.</td>
+      </tr>
+      <tr>
+        <td>Vertex AI (Anthropic on GCP)</td>
+        <td>SDK reads <code>ANTHROPIC_VERTEX_PROJECT_ID</code> + region from subprocess env; ADC creds resolve via <code>GOOGLE_APPLICATION_CREDENTIALS</code>.</td>
+        <td>Where the actual model inference happens. Both orchestrator and expert subprocesses talk to it.</td>
+      </tr>
+      <tr>
+        <td>Inngest cloud (or self-hosted)</td>
+        <td>FastAPI → Inngest SDK → durable function execution.</td>
+        <td>Where cold-revive drains run. Orchestrator + experts never call it directly; only the router does.</td>
+      </tr>
+    </table>
+  </div>
+
+  <hr class="sep">
+
+  <h2>The per-expert "resource bundle"</h2>
+  <p>Every expert is a bundle of <strong>five things</strong> stitched together at load time. The bundle is identical between MCP and Native — only the dispatcher reads it differently.</p>
+
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0;">
+    <svg viewBox="0 0 1000 320" style="width: 100%; max-width: 1000px; display: block;" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr-bundle" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/>
+        </marker>
+      </defs>
+      <!-- Center: ExpertSpec -->
+      <rect x="380" y="130" width="240" height="60" rx="8" fill="#1c2333" stroke="#39d2c0" stroke-width="2"/>
+      <text x="500" y="156" text-anchor="middle" fill="#39d2c0" font-size="14" font-weight="700">ExpertSpec</text>
+      <text x="500" y="174" text-anchor="middle" fill="#8b949e" font-size="11">runtime object · in registry</text>
+
+      <!-- 5 inputs -->
+      <rect x="20" y="20" width="200" height="44" rx="6" fill="rgba(210,153,34,0.08)" stroke="#d29922"/>
+      <text x="120" y="38" text-anchor="middle" fill="#d29922" font-size="12" font-weight="600">YAML frontmatter</text>
+      <text x="120" y="54" text-anchor="middle" fill="#8b949e" font-size="10">tools, allowed verbs, schemas, skills</text>
+
+      <rect x="20" y="80" width="200" height="44" rx="6" fill="rgba(210,153,34,0.08)" stroke="#d29922"/>
+      <text x="120" y="98" text-anchor="middle" fill="#d29922" font-size="12" font-weight="600">Markdown body</text>
+      <text x="120" y="114" text-anchor="middle" fill="#8b949e" font-size="10">scope, domain rules, output schema</text>
+
+      <rect x="20" y="140" width="200" height="44" rx="6" fill="rgba(57,210,192,0.08)" stroke="#39d2c0"/>
+      <text x="120" y="158" text-anchor="middle" fill="#39d2c0" font-size="12" font-weight="600">Shared preamble</text>
+      <text x="120" y="174" text-anchor="middle" fill="#8b949e" font-size="10">HITL · memory · restish CLI conv.</text>
+
+      <rect x="20" y="200" width="200" height="44" rx="6" fill="rgba(188,140,255,0.08)" stroke="#bc8cff"/>
+      <text x="120" y="218" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="600">Pydantic contracts</text>
+      <text x="120" y="234" text-anchor="middle" fill="#8b949e" font-size="10">input + output classes</text>
+
+      <rect x="20" y="260" width="200" height="44" rx="6" fill="rgba(247,120,186,0.08)" stroke="#f778ba"/>
+      <text x="120" y="278" text-anchor="middle" fill="#f778ba" font-size="12" font-weight="600">Skills (SKILL.md)</text>
+      <text x="120" y="294" text-anchor="middle" fill="#8b949e" font-size="10">declared via skill_subset</text>
+
+      <line x1="220" y1="42" x2="380" y2="145" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr-bundle)"/>
+      <line x1="220" y1="102" x2="380" y2="155" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr-bundle)"/>
+      <line x1="220" y1="162" x2="380" y2="160" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr-bundle)"/>
+      <line x1="220" y1="222" x2="380" y2="170" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr-bundle)"/>
+      <line x1="220" y1="282" x2="380" y2="180" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr-bundle)"/>
+
+      <!-- 2 outputs -->
+      <rect x="780" y="60" width="200" height="60" rx="8" fill="rgba(210,153,34,0.08)" stroke="#d29922" stroke-width="1.5"/>
+      <text x="880" y="84" text-anchor="middle" fill="#d29922" font-size="13" font-weight="600">MCP tool wrapper</text>
+      <text x="880" y="102" text-anchor="middle" fill="#8b949e" font-size="11">invoke_expert + retry +</text>
+      <text x="880" y="116" text-anchor="middle" fill="#8b949e" font-size="11">spawn dispatcher</text>
+
+      <rect x="780" y="200" width="200" height="60" rx="8" fill="rgba(88,166,255,0.08)" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text x="880" y="224" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="600">AgentDefinition</text>
+      <text x="880" y="242" text-anchor="middle" fill="#8b949e" font-size="11">{description, prompt,</text>
+      <text x="880" y="256" text-anchor="middle" fill="#8b949e" font-size="11">tools, model}</text>
+
+      <line x1="620" y1="150" x2="780" y2="90" stroke="#d29922" stroke-width="2" marker-end="url(#arr-bundle)"/>
+      <line x1="620" y1="170" x2="780" y2="225" stroke="#58a6ff" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr-bundle)"/>
+
+      <text x="500" y="250" text-anchor="middle" fill="#8b949e" font-size="11">Same bundle, two consumers:</text>
+      <text x="500" y="268" text-anchor="middle" fill="#d29922" font-size="11" font-weight="600">MCP path (today) ↗</text>
+      <text x="500" y="284" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="600">Native path (dormant) ↘</text>
+    </svg>
+  </div>
+
+  <h3>Bundle field-by-field — intake as the example</h3>
+  <table>
+    <tr><th>Bundle field</th><th>Concrete value for <code>rx-flow-intake</code></th><th>Where it ends up at runtime</th></tr>
+    <tr>
+      <td><code>tools</code></td>
+      <td><code>[Bash]</code></td>
+      <td>Subprocess <code>ClaudeAgentOptions.allowed_tools</code></td>
+    </tr>
+    <tr>
+      <td><code>allowed_restish_commands</code></td>
+      <td><code>list-patients</code>, <code>create-patient</code>, <code>list-prescribers</code>, <code>create-prescriber</code>, <code>list-products</code>, <code>create-product</code>, <code>search-drugs</code>, <code>get-drug</code>, <code>create-prescription</code>, <code>get-prescription</code></td>
+      <td>Closed over by <code>build_restish_allowlist_hook</code> — registered as PreToolUse on Bash <em>inside the expert subprocess</em></td>
+    </tr>
+    <tr>
+      <td><code>input_schema</code></td>
+      <td><code>IntakeExpertInput</code></td>
+      <td>MCP path: validated in <code>tools.py:734</code> before spawn. Native path: would be validated in a PreToolUse hook on the orchestrator's <code>Agent</code> call.</td>
+    </tr>
+    <tr>
+      <td><code>output_schema</code></td>
+      <td><code>IntakeExpertOutput</code></td>
+      <td>MCP path: validated in <code>tools.py:766</code> after spawn (with one-shot retry). Native path: validated in a PostToolUse hook on the orchestrator's <code>Agent</code> result.</td>
+    </tr>
+    <tr>
+      <td><code>skill_subset</code></td>
+      <td><code>match-pt</code>, <code>match-prescriber</code>, <code>match-inventory-drug</code>, <code>match-insurance</code></td>
+      <td>Catalog/audit only at the registry layer; the expert's LLM discovers them through the SDK's skill-loading on cold start.</td>
+    </tr>
+    <tr>
+      <td><code>body</code> (after preamble prepend)</td>
+      <td>Preamble + intake's Scope + Domain rules + Output schema + Boundaries + Memory scope</td>
+      <td>Subprocess <code>ClaudeAgentOptions.system_prompt</code> (MCP) or <code>AgentDefinition.prompt</code> (Native)</td>
+    </tr>
+    <tr>
+      <td>Memory scope (declared in body)</td>
+      <td><code>memories/patients/&lt;patient_id&gt;.md</code>, <code>memories/prescribers/&lt;npi&gt;.md</code>, <code>memories/drugs/&lt;ndc&gt;.md</code>, <code>memories/tools/&lt;command&gt;.md</code></td>
+      <td>Filesystem in the session workspace; expert reads + appends</td>
+    </tr>
+  </table>
+
+  <hr class="sep">
+
+  <h2>Trace a single intake call — step by step</h2>
+  <p>An operator triggers rx-flow on a NewRx fax. Same input on both paths; only the dispatch route differs. Steps where MCP and Native diverge are tagged inline.</p>
+
+  <ol class="ordered-flow">
+    <li>
+      <strong>Operator action lands at FastAPI</strong> — <code>POST /api/agi/sessions</code> with the parsed NCPDP message + pharmacy_id. Auth resolved (actor_id), bearer minted with 1h TTL.
+      <span class="file-cite mono">backend router → AGIService.create_session</span>
+    </li>
+    <li>
+      <strong>AGIService prepares the session</strong> — creates workspace dir, mints bearer, persists <code>AGISession</code> row with status=<code>active</code>, builds <code>ClaudeAgentOptions</code> via <code>_build_options</code>.
+      <span class="file-cite mono">service.py::create_session + _build_options</span>
+    </li>
+    <li>
+      <strong><code>ClaudeAgentOptions</code> is assembled</strong> — every shared resource gets wired into one object: system_prompt (orchestrator template), allowed_tools (orchestrator's lean set), <code>mcp_servers={"agi": build_mcp_server(...)}</code>, <code>agents=load_all_experts(registry)</code>, hooks (PreToolUse for AskUserQuestion + Bash approval, PostToolUse for audit, SubagentStop for audit), env (HOME redirected, restish JSON, bearer in env), cwd (workspace), permission_mode=<code>bypassPermissions</code>.
+      <span class="file-cite mono">service.py:1684-1749</span>
+    </li>
+    <li>
+      <strong>Orchestrator <code>ClaudeSDKClient</code> spawns</strong> — long-lived. Reads system prompt from frontend template, sees <code>invoke_expert</code> in the toolset (or <code>Agent</code> on Native).
+    </li>
+    <li>
+      <strong>Orchestrator LLM emits a tool_use</strong> for the first expert.
+      <ul>
+        <li><span class="pill pill-mcp">MCP today</span>&nbsp;<code>invoke_expert(expert_id="rx-flow-intake", input={...})</code> — the <code>input</code> dict carries <code>ncpdp_message</code>, <code>pharmacy_id</code>, and any folded <code>human_answers</code> from a prior HITL turn.</li>
+        <li><span class="pill pill-native">Native if flipped</span>&nbsp;<code>Agent(subagent_type="rx-flow-intake", prompt="<input as JSON-in-string>")</code> — same payload, encoded as text instead of an object property.</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Dispatch routes the call</strong>.
+      <ul>
+        <li><span class="pill pill-mcp">MCP</span>&nbsp;SDK looks up <code>"agi"</code> in <code>mcp_servers</code>, invokes the registered <code>invoke_expert</code> tool's handler. Handler runs <strong>input Pydantic validation</strong> (line 734); on fail, returns typed error to the orchestrator without spawning anything.</li>
+        <li><span class="pill pill-native">Native</span>&nbsp;SDK looks up <code>"rx-flow-intake"</code> in <code>agents={}</code>. Pre-spawn validation only happens if a PreToolUse hook on <code>Agent</code> tool calls is registered (would need to be added).</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Subprocess spawns</strong>.
+      <ul>
+        <li><span class="pill pill-mcp">MCP</span>&nbsp;<code>_spawn_expert_agent</code> builds a fresh <code>ClaudeAgentOptions</code> per spawn: system_prompt = <code>spec.body</code> (preamble already prepended), allowed_tools = <code>spec.allowed_tools</code>, hooks = <code>{PreToolUse: [restish_allowlist_hook(spec)]}</code>, model from spec, env from same builder. Calls <code>sdk.query(prompt, options)</code>.</li>
+        <li><span class="pill pill-native">Native</span>&nbsp;SDK reads <code>AgentDefinition</code> directly: prompt + tools + model. Spawns with the same env / workspace as the orchestrator. The restish allowlist hook would still work because it's registered <em>by the SDK on subagent spawn</em> through the agents= mechanism — but the wiring is different: today it's wired in <code>_spawn_expert_agent</code>'s per-spawn options; on Native it'd live on the parent's <code>hooks={}</code> with a <code>HookMatcher</code> scoped to subagent tool calls.</li>
+      </ul>
+      <span class="file-cite mono">tools.py:108-329 (MCP spawn) / agents/loader.py + SDK internals (Native)</span>
+    </li>
+    <li>
+      <strong>Subprocess cold-starts</strong> — claude CLI in workspace. Reads system prompt (preamble + body), discovers skills via SDK skill-loader, reads <code>memories/</code> dir on disk in workspace.
+    </li>
+    <li>
+      <strong>Expert LLM emits Bash tool_use</strong> — e.g., <code>echo '{"last_name":"Smith","dob":"1980-01-01"}' | restish carelink list-patients</code>. PreToolUse allowlist hook fires <em>inside the expert subprocess</em>: checks <code>list-patients</code> against <code>spec.allowed_restish_commands</code> → allowed. <em>If</em> the verb is mutating (e.g., <code>create-prescription</code>), the Bash approval hook also fires — operator decides hot or it cold-parks.
+      <span class="file-cite mono">tools.py:236-249 (allowlist) + hooks.py (approval gate)</span>
+    </li>
+    <li>
+      <strong>Bash command runs</strong> — bearer token from env authorizes restish; backend serves the response; expert reads stdout JSON.
+    </li>
+    <li>
+      <strong>Expert may emit <code>AskUserQuestion</code></strong> — flows up to the orchestrator's <code>ClaudeAgentOptions.hooks</code> registered <code>PreToolUse</code> for AskUserQuestion. Hot path: gate blocks subprocess until operator answers via REST. Cold path: persist to DB, fire Inngest, return synthetic answer on revive. <strong>Identical on both paths</strong> — the gate is wired on the orchestrator-side options.
+    </li>
+    <li>
+      <strong>Expert finishes its work + emits the final JSON line</strong> (last line of stdout = single-line JSON validating <code>IntakeExpertOutput</code>).
+    </li>
+    <li>
+      <strong>Output capture</strong>.
+      <ul>
+        <li><span class="pill pill-mcp">MCP</span>&nbsp;<code>_extract_final_json</code> grabs the last JSON object from the raw subprocess stdout. Pydantic <code>output_cls.model_validate(parsed)</code>. On fail: <code>_retry_once_on_validation_error</code> re-spawns with a nudge containing the schema. Returns either the validated dict or a typed failure envelope.</li>
+        <li><span class="pill pill-native">Native</span>&nbsp;SDK delivers the subagent's result as a <code>ToolResultBlock</code> on the orchestrator's stream. PostToolUse hook (would-be-added) does its own <code>_extract_final_json</code> + Pydantic validate, then either passes through or rewrites the tool_result to flag drift. No automatic re-spawn.</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Trace + audit</strong> — every message (orchestrator + expert) flows into <code>ExpertTraceRegistry</code>. <code>AuditCollector</code> records the tool invocation. <strong>MCP path has per-message granularity</strong> because <code>_spawn_expert_agent</code>'s loop publishes each SDK message; <strong>Native path drops to start/stop granularity</strong> via SubagentStart/Stop hooks.
+    </li>
+    <li>
+      <strong>Result reaches the orchestrator</strong>.
+      <ul>
+        <li><span class="pill pill-mcp">MCP</span>&nbsp;Python dict, typed or fallback envelope. Orchestrator branches on <code>output.status</code>.</li>
+        <li><span class="pill pill-native">Native</span>&nbsp;ToolResultBlock with text content (possibly mutated by the hook). Orchestrator parses prose to decide what's there.</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Orchestrator decides next step</strong> — typically dispatches the next expert (e.g., <code>rx-flow-data-entry</code>) with the merged state. Loop continues until rx-flow reaches a terminal state (claim submitted / HITL escalation / hard failure).
+    </li>
+  </ol>
+
+  <hr class="sep">
+
+  <h2>What moves where if we flip to Native</h2>
+  <p>Most resources don't move at all. The dispatch layer (one of two kwargs on <code>ClaudeAgentOptions</code>) is what flips. Here's the precise diff.</p>
+
+  <table>
+    <tr><th>Resource</th><th>MCP path (today)</th><th>Native path (proposed)</th><th>Movement</th></tr>
+    <tr>
+      <td>Expert <code>.md</code> + frontmatter</td>
+      <td>Read by registry; consumed in <code>_spawn_expert_agent</code> per spawn</td>
+      <td>Read by registry; consumed in <code>load_all_experts</code> ONCE → <code>AgentDefinition</code></td>
+      <td>Same source, different consumer</td>
+    </tr>
+    <tr>
+      <td>Pydantic input validation</td>
+      <td><code>tools.py:734</code> in dispatcher (Python-side, before spawn)</td>
+      <td>PreToolUse hook on Agent calls, in orchestrator session</td>
+      <td><strong>Moves</strong> from dispatcher to hook layer</td>
+    </tr>
+    <tr>
+      <td>Pydantic output validation</td>
+      <td><code>tools.py:766</code> in dispatcher (Python-side, after spawn)</td>
+      <td>PostToolUse hook on Agent calls, in orchestrator session</td>
+      <td><strong>Moves</strong> from dispatcher to hook layer</td>
+    </tr>
+    <tr>
+      <td>One-shot output-validation retry</td>
+      <td><code>_retry_once_on_validation_error</code> in dispatcher</td>
+      <td>Doesn't exist — orchestrator LLM has to re-invoke based on hook-mutated tool_result</td>
+      <td><strong>Lost</strong></td>
+    </tr>
+    <tr>
+      <td>Transient subprocess retry</td>
+      <td><code>_try_spawn_with_subprocess_retry</code> classifies + backs off</td>
+      <td>Doesn't exist — SDK propagates ProcessError</td>
+      <td><strong>Lost</strong></td>
+    </tr>
+    <tr>
+      <td>Restish allowlist hook</td>
+      <td>Per-spawn <code>ClaudeAgentOptions(hooks={PreToolUse: [...]})</code> in <code>_spawn_expert_agent</code></td>
+      <td>HookMatcher on parent's <code>hooks={}</code>, scoped to subagent Bash calls</td>
+      <td>Wiring point moves; <strong>behavior preserved</strong></td>
+    </tr>
+    <tr>
+      <td>Bash approval gate (hot + cold)</td>
+      <td>Per-spawn options.hooks</td>
+      <td>Same — wired on orchestrator-level options targeting subagent Bash calls</td>
+      <td>Same as above; <strong>behavior preserved</strong></td>
+    </tr>
+    <tr>
+      <td>AskUserQuestion gate (hot + cold)</td>
+      <td>Orchestrator-level <code>options.hooks</code></td>
+      <td>Same</td>
+      <td><strong>Unchanged</strong></td>
+    </tr>
+    <tr>
+      <td>Trace publishing</td>
+      <td>Per-message in <code>_spawn_expert_agent</code>'s loop</td>
+      <td>Start/Stop only via SubagentStart/SubagentStop hooks</td>
+      <td>Granularity drops</td>
+    </tr>
+    <tr>
+      <td>Stderr capture</td>
+      <td>Live via stderr callback in spawn</td>
+      <td>Post-hoc via SubagentStop transcript path</td>
+      <td>Loses live capture</td>
+    </tr>
+    <tr>
+      <td>MCP server (<code>build_mcp_server</code>)</td>
+      <td>In-process, holds <code>invoke_expert</code></td>
+      <td>Removed</td>
+      <td><strong>Deleted</strong></td>
+    </tr>
+    <tr>
+      <td>Workspace + memory dirs</td>
+      <td>Filesystem, per session</td>
+      <td>Same</td>
+      <td><strong>Unchanged</strong></td>
+    </tr>
+    <tr>
+      <td>Skills (<code>SKILL.md</code>)</td>
+      <td>SDK-loaded in expert subprocess</td>
+      <td>Same</td>
+      <td><strong>Unchanged</strong></td>
+    </tr>
+    <tr>
+      <td>Session store / Inngest cold-revive</td>
+      <td>Postgres + durable functions</td>
+      <td>Same</td>
+      <td><strong>Unchanged</strong></td>
+    </tr>
+    <tr>
+      <td>System prompt</td>
+      <td>Teaches <code>invoke_expert</code></td>
+      <td>Teaches <code>Agent(subagent_type=...)</code></td>
+      <td>Re-written (~140 lines of template)</td>
+    </tr>
+    <tr>
+      <td>Per-expert tests</td>
+      <td>Call <code>invoke_expert</code> directly</td>
+      <td>Need to drive an orchestrator session and observe Agent dispatch</td>
+      <td>Significant rewrite (~28 functions)</td>
+    </tr>
+  </table>
+
+  <div class="callout">
+    <strong>Read the table top to bottom.</strong> Most rows say "unchanged" or "wiring moves but behavior preserved." Three rows are real losses (one-shot validation retry, transient subprocess retry, live stderr); two are observability degradations (trace granularity, post-hoc stderr). The deletion is one row. Everything else is the same code, same data, same flow — just consumed by a different SDK kwarg.
+  </div>
+</section>
+
+<!-- ============ WALKTHROUGH ============ -->
+<section class="section" id="walkthrough">
+  <h1>Sarah's NewRx — step by step, MCP vs Native</h1>
+  <p class="lede">A real fax came in for Sarah Smith. We trace it through both dispatch paths to surface exactly which steps stay identical and which diverge. Click any step to expand. Use the filter to hide the "same on both paths" steps and see only the moments that change.</p>
+
+  <div class="scenario-card">
+    <h3>The dummy NewRx</h3>
+    <p style="margin: 0 0 6px; font-size: 13px; color: var(--text2);">Faxed prescription, currently parked as a WorkItem awaiting rx-flow dispatch.</p>
+    <div class="scenario-grid">
+      <div class="field"><div class="l">Patient</div><div class="v">Sarah Smith · DOB 1985-03-15</div></div>
+      <div class="field"><div class="l">Prescriber</div><div class="v">Dr. James Chen · NPI 1234567893</div></div>
+      <div class="field"><div class="l">Drug</div><div class="v">Atorvastatin 40mg · NDC 00591040701</div></div>
+      <div class="field"><div class="l">Insurance</div><div class="v">Anthem · BIN 330033 · PCN RXLCOPAY5</div></div>
+      <div class="field"><div class="l">Quantity</div><div class="v">30 tabs · 30 d/s · 3 refills</div></div>
+      <div class="field"><div class="l">Sig</div><div class="v">"Take 1 tablet by mouth once daily"</div></div>
+      <div class="field"><div class="l">Pharmacy</div><div class="v">Demo · 4a11e46e-9b5b-445e-9c11-a33204eddd49</div></div>
+      <div class="field"><div class="l">Diagnosis</div><div class="v">I10 (Essential hypertension)</div></div>
+    </div>
+  </div>
+
+  <div class="walkthrough-grid">
+    <div class="walkthrough-content">
+
+      <div class="filter-bar">
+        <button class="toggle-btn" id="filter-all">All steps <span class="count" id="count-all">14</span></button>
+        <button class="toggle-btn active" id="filter-diverge">Only diverging <span class="count" id="count-diverge">8</span></button>
+        <button class="toggle-btn" id="expand-all">Expand all</button>
+        <button class="toggle-btn" id="collapse-all">Collapse all</button>
+      </div>
+
+      <div class="progress-bar" id="progress-bar"></div>
+
+      <div id="steps">
+
+    <!-- STEP 1 -->
+    <div class="step-card same" data-step="1" data-kind="same">
+      <div class="step-head">
+        <div class="step-num-circle">1</div>
+        <div class="step-title">Operator action lands at FastAPI</div>
+        <span class="step-badge same">SAME</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>Operator clicks "Process this fax" on the WorkItems queue. Frontend POSTs to <code>/api/agi/sessions</code> with the parsed NCPDP payload + <code>pharmacy_id</code>. WorkOS-issued JWT verified, actor_id resolved, internal AGI bearer minted with 1h TTL.</p>
+        <div class="step-shared-block">
+          <h4>Identical on both paths</h4>
+          <p>The HTTP entry point + auth + bearer minting are upstream of dispatch — they don't know or care which route is used. Stays the same regardless.</p>
+          <pre><code>POST /api/agi/sessions
+Authorization: Bearer &lt;workos-jwt&gt;
+{
+  "ncpdp_message": { "patient": {...}, "prescriber": {...}, "drug": {...}, ... },
+  "pharmacy_id": "4a11e46e-9b5b-445e-9c11-a33204eddd49"
+}</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="step-card same" data-step="2" data-kind="same">
+      <div class="step-head">
+        <div class="step-num-circle">2</div>
+        <div class="step-title">AGIService creates the session + workspace</div>
+        <span class="step-badge same">SAME</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>Inserts <code>AGISession</code> row (status=<code>active</code>, sdk_session_id=null until first turn), creates a sandboxed workspace dir, mints the internal bearer, prepares subprocess env (HOME redirected, restish output as JSON, PROMPT_COMMAND cleared).</p>
+        <div class="step-shared-block">
+          <h4>Identical on both paths</h4>
+          <p>Workspace, env builder, bearer minting, session row are all path-independent. Lives entirely in <code>service.py::create_session</code> and helpers.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="step-card same" data-step="3" data-kind="same">
+      <div class="step-head">
+        <div class="step-num-circle">3</div>
+        <div class="step-title">ClaudeAgentOptions assembled (both kwargs populated)</div>
+        <span class="step-badge same">SAME</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>The orchestrator's options object gets built. Today, <strong>both</strong> dispatch kwargs are populated — only one is consumed depending on what the LLM picks.</p>
+        <div class="step-shared-block">
+          <h4>Identical today; one kwarg becomes dead code if you flip</h4>
+          <pre><code>ClaudeAgentOptions(
+  system_prompt = orchestrator_template,        # tells LLM which tool to call
+  allowed_tools = [..., "invoke_expert", "Agent", ...],
+  mcp_servers   = {"agi": build_mcp_server(...)},  # ← MCP path consumes
+  agents        = load_all_experts(registry),      # ← Native path consumes
+  hooks         = {...},                           # AskUserQuestion + Bash approval + audit
+  cwd           = workspace,
+  env           = subprocess_env,
+  permission_mode = "bypassPermissions",
+)</code></pre>
+          <p style="font-size: 12.5px; color: var(--text2); margin: 0;">If we flip to Native, <code>mcp_servers</code> goes empty and <code>build_mcp_server</code> + <code>invoke_expert</code> become deletable.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4 — DIVERGE -->
+    <div class="step-card diverge" data-step="4" data-kind="diverge">
+      <div class="step-head">
+        <div class="step-num-circle">4</div>
+        <div class="step-title">Orchestrator LLM emits a tool_use for intake</div>
+        <span class="step-badge diverge">DIVERGES</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>Orchestrator system prompt instructs: "Step 1 — invoke intake with the parsed NewRx + pharmacy_id." The LLM emits its first tool call. <strong>The shape of that call is fundamentally different.</strong></p>
+        <div class="step-split">
+          <div class="step-side mcp-side">
+            <h4>MCP — structured object input</h4>
+            <p>Tool name = <code>invoke_expert</code>. <code>input</code> is a real nested dict on the wire; preserved end-to-end as a Python object.</p>
+            <pre><code>{
+  "type": "tool_use",
+  "name": "invoke_expert",
+  "input": {
+    "expert_id": "rx-flow-intake",
+    "input": {
+      "ncpdp_message": {
+        "patient": {"first":"Sarah","last":"Smith","dob":"1985-03-15"},
+        "prescriber": {"npi":"1234567893",...},
+        "drug": {"ndc":"00591040701","qty":30,...}
+      },
+      "pharmacy_id": "4a11e46e-9b5b-...",
+      "human_answers": {}
+    }
+  }
+}</code></pre>
+          </div>
+          <div class="step-side native-side">
+            <h4>Native — flattened to string</h4>
+            <p>Tool name = <code>Agent</code>. The whole input is encoded into the <code>prompt</code> string. The receiving expert has to re-parse the prompt to find its NCPDP payload.</p>
+            <pre><code>{
+  "type": "tool_use",
+  "name": "Agent",
+  "input": {
+    "subagent_type": "rx-flow-intake",
+    "prompt": "Process this NewRx for pharmacy 4a11e46e-...\n\nNCPDP message:\n{\"patient\": {\"first\":\"Sarah\",...},...}\n\nReturn IntakeExpertOutput on the last line."
+  }
+}</code></pre>
+          </div>
+        </div>
+        <p class="note">Impact: structure preserved (MCP) vs prose-encoded (Native). The Native path sacrifices type fidelity at the dispatch boundary; the system prompt has to teach the LLM how to encode the input as text and the expert has to decode it.</p>
+      </div>
+    </div>
+
+    <!-- STEP 5 — DIVERGE -->
+    <div class="step-card diverge" data-step="5" data-kind="diverge">
+      <div class="step-head">
+        <div class="step-num-circle">5</div>
+        <div class="step-title">SDK routes the call</div>
+        <span class="step-badge diverge">DIVERGES</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="step-split">
+          <div class="step-side mcp-side">
+            <h4>MCP — Python handler invoked</h4>
+            <p>SDK sees <code>name == "invoke_expert"</code>, looks up <code>mcp_servers["agi"]</code>, finds the registered tool, calls our async handler <code>_invoke_expert(args)</code>. <strong>We're now in our Python code with the full structured input in hand.</strong></p>
+            <pre><code>async def _invoke_expert(args: dict) -> dict:
+    expert_id = args["expert_id"]   # "rx-flow-intake"
+    raw_input = args["input"]       # nested dict
+    spec = registry.get(expert_id)
+    # ... ready to validate and spawn</code></pre>
+          </div>
+          <div class="step-side native-side">
+            <h4>Native — SDK takes over</h4>
+            <p>SDK sees <code>name == "Agent"</code>, looks up <code>agents["rx-flow-intake"]</code> in the options dict, finds the <code>AgentDefinition</code>. <strong>No Python entry point</strong> — the SDK itself owns spawning the subprocess. We can only intercept via hooks (PreToolUse on Agent calls).</p>
+            <pre><code># SDK-internal — no Python code of ours runs here
+# Unless we register a PreToolUse hook on Agent calls
+# (which we'd add in the migration), we don't see this happen.</code></pre>
+          </div>
+        </div>
+        <p class="note">Impact: MCP gives us a Python callback at this exact moment — the most natural place to validate, log, intercept. Native moves all of that to hooks.</p>
+      </div>
+    </div>
+
+    <!-- STEP 6 — DIVERGE -->
+    <div class="step-card diverge" data-step="6" data-kind="diverge">
+      <div class="step-head">
+        <div class="step-num-circle">6</div>
+        <div class="step-title">Pre-spawn input validation</div>
+        <span class="step-badge diverge">DIVERGES</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>Before we spend ~30s of Vertex tokens spawning intake's subprocess, we want to know that the input is well-shaped. <strong>This is exactly the case that crashed earlier today</strong> — the orchestrator passed <code>insurance_matched: false + ncpdp_insurance: {...}</code> but billing's schema required <code>insurance_id</code>.</p>
+        <div class="step-split">
+          <div class="step-side mcp-side">
+            <h4>MCP — Pydantic raises before spawn</h4>
+            <pre><code>input_cls = resolve(spec.input_schema)   # IntakeExpertInput
+try:
+    validated = input_cls.model_validate(raw_input)
+except ValidationError as e:
+    return {"status": "failed",
+            "error": "input_validation_failed",
+            "details": e.errors()}
+# Zero subprocess cost on bad input.</code></pre>
+            <p style="font-size: 12px; color: var(--text2); margin: 0;">Orchestrator gets a typed error in tool_result, can self-correct on the next turn.</p>
+          </div>
+          <div class="step-side native-side">
+            <h4>Native — PreToolUse hook (must be wired)</h4>
+            <pre><code>async def pre_agent_hook(input_data, tool_use_id, ctx):
+    if input_data["tool_name"] != "Agent": return {}
+    spec_id = input_data["tool_input"]["subagent_type"]
+    spec = registry.get(spec_id)
+    payload = parse_prompt_for_input(...)  # decode string!
+    try:
+        spec.input_cls.model_validate(payload)
+    except ValidationError as e:
+        return {"hookSpecificOutput": {
+            "permissionDecision": "deny",
+            "permissionDecisionReason": str(e)}}</code></pre>
+            <p style="font-size: 12px; color: var(--text2); margin: 0;">Equivalent IF wired correctly + IF prompt-encoding is reversible.</p>
+          </div>
+        </div>
+        <p class="note">Impact: behavior achievable on both paths, but Native requires reliable string-decode of the input the orchestrator encoded into the prompt. One layer of fragility added.</p>
+      </div>
+    </div>
+
+    <!-- STEP 7 — DIVERGE -->
+    <div class="step-card diverge" data-step="7" data-kind="diverge">
+      <div class="step-head">
+        <div class="step-num-circle">7</div>
+        <div class="step-title">Subprocess spawns the expert</div>
+        <span class="step-badge diverge">DIVERGES</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="step-split">
+          <div class="step-side mcp-side">
+            <h4>MCP — fresh options per call</h4>
+            <p><code>_spawn_expert_agent</code> builds a brand-new <code>ClaudeAgentOptions</code> per spawn. Per-expert allowed_tools, per-expert hook block (restish allowlist), per-expert model.</p>
+            <pre><code>options = ClaudeAgentOptions(
+  system_prompt=spec.body,    # preamble + intake MD
+  allowed_tools=spec.allowed_tools,  # ["Bash"]
+  hooks={"PreToolUse": [
+    HookMatcher(matcher="Bash",
+      hooks=[restish_allowlist_hook(spec)]),
+  ]},
+  cwd=workspace, env=subprocess_env,
+  model=spec.model, max_turns=20,
+)
+prompt = f"Input:\n{json.dumps(validated.model_dump())}"
+async for msg in sdk.query(prompt, options): ...</code></pre>
+          </div>
+          <div class="step-side native-side">
+            <h4>Native — SDK reads <code>AgentDefinition</code></h4>
+            <p>SDK uses what was registered at boot: <code>{description, prompt: spec.body, tools: ["Bash"], model}</code>. No per-call tuning. Hooks live on the parent's options with <code>HookMatcher</code> scoped to subagent calls.</p>
+            <pre><code># Static at registration time:
+agents["rx-flow-intake"] = AgentDefinition(
+  description=spec.description,
+  prompt=spec.body,
+  tools=list(spec.allowed_tools),
+  model=spec.model,
+)
+# Restish allowlist hook re-wired on parent options:
+parent_options.hooks["PreToolUse"].append(
+  HookMatcher(matcher="Bash",
+    hooks=[restish_allowlist_hook_for_subagents]))</code></pre>
+          </div>
+        </div>
+        <p class="note">Impact: per-call dynamism vs static configuration. The restish allowlist behavior is preserved either way; the wiring point moves.</p>
+      </div>
+    </div>
+
+    <!-- STEP 8 — SAME -->
+    <div class="step-card same" data-step="8" data-kind="same">
+      <div class="step-head">
+        <div class="step-num-circle">8</div>
+        <div class="step-title">Expert subprocess cold-starts</div>
+        <span class="step-badge same">SAME</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>Claude CLI launches in workspace dir. Reads system prompt (preamble + intake body). Discovers skills via SDK skill-loader (intake's <code>skill_subset</code>: match-pt, match-prescriber, match-inventory-drug, match-insurance). Reads <code>memories/</code> dir on disk for cross-run learning hints.</p>
+        <div class="step-shared-block">
+          <h4>Identical on both paths</h4>
+          <p>Workspace + memories + skills + claude CLI cold start — none of these care about which route brought intake here. The expert subprocess sees the same world.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 9 — SAME -->
+    <div class="step-card same" data-step="9" data-kind="same">
+      <div class="step-head">
+        <div class="step-num-circle">9</div>
+        <div class="step-title">Expert emits Bash → restish (hook chain fires)</div>
+        <span class="step-badge same">SAME</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>Intake's LLM thinks: "I need to find Sarah Smith." Emits a Bash tool_use. PreToolUse allowlist hook fires inside the subprocess, checks <code>list-patients</code> against <code>spec.allowed_restish_commands</code> → allowed. Bash runs; restish authenticates with bearer token in env; backend returns:</p>
+        <pre><code>$ echo '{"last_name":"Smith","date_of_birth":"1985-03-15"}' | restish carelink list-patients
+[{"id":"6a12404e-a9b9-4502-ae4f-5a13159f23c0",
+  "first_name":"Sarah","last_name":"Smith","dob":"1985-03-15"}]</code></pre>
+        <p>Same flow for prescriber lookup (NPI hit on Dr. Chen), drug lookup (NDC matches Atorvastatin 40mg), insurance lookup (BIN 330033 doesn't match Sarah's local Insurance row → unmatched, ncpdp_insurance fallback).</p>
+        <div class="step-shared-block">
+          <h4>Identical on both paths</h4>
+          <p>The Bash → restish path is the canonical CLI-shaped surface. The allowlist hook is wired into the expert subprocess on both paths (just at different registration points).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 10 — SAME -->
+    <div class="step-card same" data-step="10" data-kind="same">
+      <div class="step-head">
+        <div class="step-num-circle">10</div>
+        <div class="step-title">Mutating call hits the Bash approval gate (hot or cold)</div>
+        <span class="step-badge same">SAME</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>Intake reaches its final step: <code>create-prescription</code> for Sarah's atorvastatin. This verb is on the allowlist <em>and</em> matches the mutating-command regex. Approval gate fires:</p>
+        <ul>
+          <li><strong>Hot path</strong> (operator clicks approve in &lt;60s): subprocess unblocks, <code>create-prescription</code> runs, returns <code>{"id": "57718a37-6488-4500-ad5b-8ef0b9431fde", ...}</code>.</li>
+          <li><strong>Cold path</strong> (operator takes longer): the just-shipped Part C kicks in — gate persists pending approval to <code>extra_data.pending_approval</code>, fires <code>agi/cold_approval_requested</code>, subprocess returns deny + exits cleanly. Inngest drain executes the parked command itself, injects synthetic tool_result on resume.</li>
+        </ul>
+        <div class="step-shared-block">
+          <h4>Identical on both paths</h4>
+          <p>Approval gate + cold-park live entirely inside the expert subprocess (PreToolUse hook on Bash) + the session store + Inngest. Dispatch route is invisible to all of it.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 11 — SAME -->
+    <div class="step-card same" data-step="11" data-kind="same">
+      <div class="step-head">
+        <div class="step-num-circle">11</div>
+        <div class="step-title">Expert emits final JSON line</div>
+        <span class="step-badge same">SAME</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>Intake is done. Last line of stdout is a single-line JSON object validating <code>IntakeExpertOutput</code>:</p>
+        <pre><code>{"step_name":"rx-flow-intake","status":"success",
+ "rx_id":"57718a37-6488-4500-ad5b-8ef0b9431fde",
+ "patient_id":"6a12404e-a9b9-4502-ae4f-5a13159f23c0",
+ "prescriber_id":"2f4ad811-df78-40a4-a716-dd2df3dca58c",
+ "product_id":"89d46dfc-b60b-4a4c-b4f0-62cc8be03f90",
+ "inventory_product_id":"89d46dfc-b60b-4a4c-b4f0-62cc8be03f90",
+ "ndc":"00591040701","insurance_matched":false,
+ "ncpdp_insurance":{"bin":"330033","pcn":"RXLCOPAY5",
+   "cardholder_id":"XYZ123456789","group_id":"GRP-5001",
+   "payer_name":"Anthem Blue Cross"}}</code></pre>
+        <div class="step-shared-block">
+          <h4>Identical on both paths</h4>
+          <p>The expert subprocess doesn't know or care which dispatch route brought it here. It emits the same JSON regardless.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 12 — DIVERGE -->
+    <div class="step-card diverge" data-step="12" data-kind="diverge">
+      <div class="step-head">
+        <div class="step-num-circle">12</div>
+        <div class="step-title">Output extraction + Pydantic validation</div>
+        <span class="step-badge diverge">DIVERGES</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="step-split">
+          <div class="step-side mcp-side">
+            <h4>MCP — Python dispatcher validates</h4>
+            <p>Control returns to <code>_invoke_expert</code>. The accumulated raw stdout is in our hands. We extract + validate.</p>
+            <pre><code>parsed = _extract_final_json(raw)        # last JSON line
+output = output_cls.model_validate(parsed)  # IntakeExpertOutput
+return output.model_dump()</code></pre>
+            <p style="font-size: 12px; color: var(--text2); margin: 0;">If validation fails → STEP 13 (auto retry). Orchestrator only ever sees the validated dict OR a typed envelope.</p>
+          </div>
+          <div class="step-side native-side">
+            <h4>Native — PostToolUse hook validates</h4>
+            <p>SDK delivers the result to the orchestrator as a <code>ToolResultBlock</code>. PostToolUse hook (must be wired) intercepts before the orchestrator LLM sees it.</p>
+            <pre><code>async def post_agent_hook(input_data, tid, ctx):
+    if input_data["tool_name"] != "Agent": return {}
+    raw = input_data["tool_response"]["content"][0]["text"]
+    try:
+        parsed = _extract_final_json(raw)
+        output_cls.model_validate(parsed)
+        return {}  # passthrough
+    except Exception as e:
+        return {"hookSpecificOutput": {
+          "updatedMCPToolOutput": {
+            "content": [{"type":"text",
+              "text": f"[SCHEMA_ERROR] {e}\n\n{raw}"}]}}}</code></pre>
+          </div>
+        </div>
+        <p class="note">Impact: same validation work, different wiring. The Native hook can mutate but cannot return a typed envelope to the orchestrator's branching logic — orchestrator has to parse prose to know what happened.</p>
+      </div>
+    </div>
+
+    <!-- STEP 13 — DIVERGE -->
+    <div class="step-card diverge" data-step="13" data-kind="diverge">
+      <div class="step-head">
+        <div class="step-num-circle">13</div>
+        <div class="step-title">On schema drift — the retry loop</div>
+        <span class="step-badge diverge">DIVERGES</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>Suppose intake's LLM forgot <code>step_name</code> (real drift case). Pydantic raises. Now what?</p>
+        <div class="step-split">
+          <div class="step-side mcp-side">
+            <h4>MCP — auto-retry inside one tool call</h4>
+            <pre><code>nudge = (
+  f"Your previous output did not match the required "
+  f"schema. Error: {first_error}. Return a single-line "
+  f"JSON object that validates against this schema: "
+  f"{schema_json}"
+)
+raw2 = await _spawn_expert_agent(prompt + nudge, ...)
+parsed2 = _extract_final_json(raw2)
+output = output_cls.model_validate(parsed2)
+return output.model_dump()</code></pre>
+            <ul>
+              <li>Two subprocess spawns inside <strong>one orchestrator turn</strong></li>
+              <li>Operator never sees the drift — invisible recovery</li>
+              <li>Cost: ~10s extra wall-clock + ~1× expert tokens</li>
+            </ul>
+          </div>
+          <div class="step-side native-side">
+            <h4>Native — LLM-mediated retry across turns</h4>
+            <pre><code>// Hook mutates tool_result with [SCHEMA_ERROR]
+// Orchestrator's next turn sees:
+ToolResultBlock(content="[SCHEMA_ERROR] missing step_name\n\n{...broken JSON...}")
+
+// Orchestrator LLM has to DECIDE to re-invoke:
+if "[SCHEMA_ERROR]" in tool_result:
+    emit Agent(subagent_type="rx-flow-intake", prompt=...)</code></pre>
+            <ul>
+              <li>Two <strong>orchestrator turns</strong>, two subagent spawns</li>
+              <li>Operator pays for an extra round-trip in latency + tokens</li>
+              <li>If orchestrator misreads or skips the marker, broken output flows downstream into billing</li>
+            </ul>
+          </div>
+        </div>
+        <p class="note">Impact: this is the biggest practical difference. MCP turns drift into invisible 10s blips; Native turns drift into operator-visible turns + a contained-failure risk.</p>
+      </div>
+    </div>
+
+    <!-- STEP 14 — DIVERGE -->
+    <div class="step-card diverge" data-step="14" data-kind="diverge">
+      <div class="step-head">
+        <div class="step-num-circle">14</div>
+        <div class="step-title">Trace fan-out granularity</div>
+        <span class="step-badge diverge">DIVERGES</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>Every SDK message gets fed into <code>ExpertTraceRegistry</code> for live observability + post-mortem replay (just-shipped Part B exports it as JSONL).</p>
+        <div class="step-split">
+          <div class="step-side mcp-side">
+            <h4>MCP — per-message granularity</h4>
+            <p><code>_spawn_expert_agent</code>'s loop iterates each SDK message and publishes individually:</p>
+            <pre><code>async for msg in sdk.query(prompt, options):
+    trace_publisher(spec.id, msg)
+    if isinstance(msg, ResultMessage):
+        raw = msg.result_text</code></pre>
+            <p style="font-size: 12px; color: var(--text2); margin: 0;">Trace panel shows: AssistantMessage, ToolUseBlock (Bash), ToolResultBlock (restish output), AssistantMessage, ... — every iteration.</p>
+          </div>
+          <div class="step-side native-side">
+            <h4>Native — start/stop only</h4>
+            <p>SubagentStart and SubagentStop hooks give us begin/end markers, with a transcript path on stop. No per-iteration messages.</p>
+            <pre><code>SubagentStart(agent_id="rx-flow-intake", ...)
+# ... subagent runs to completion, SDK-internal ...
+SubagentStop(agent_id, agent_transcript_path=".../session.jsonl")</code></pre>
+            <p style="font-size: 12px; color: var(--text2); margin: 0;">Trace panel shows: "intake started" → "intake stopped". To replay the middle, parse the transcript file post-hoc.</p>
+          </div>
+        </div>
+        <p class="note">Impact: live observability degrades. The Agent Trace panel becomes start/stop only; debugging mid-flight expert behavior requires parsing transcript files instead of watching events stream.</p>
+      </div>
+    </div>
+
+    <!-- STEP 15 — DIVERGE -->
+    <div class="step-card diverge" data-step="15" data-kind="diverge">
+      <div class="step-head">
+        <div class="step-num-circle">15</div>
+        <div class="step-title">Result reaches the orchestrator</div>
+        <span class="step-badge diverge">DIVERGES</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="step-split">
+          <div class="step-side mcp-side">
+            <h4>MCP — typed dict in tool_result</h4>
+            <p>Orchestrator sees a structured Python dict via the SDK's MCP tool_result wrapper. Branching logic in the orchestrator's prompt reads <code>output["status"]</code>, <code>output["rx_id"]</code>, etc. directly.</p>
+            <pre><code># Orchestrator's view:
+ToolResultBlock(content=[{
+  "type": "tool_result",
+  "tool_use_id": "tu_intake_001",
+  "content": {
+    "step_name": "rx-flow-intake",
+    "status": "success",
+    "rx_id": "57718a37-...",
+    ...validated IntakeExpertOutput...
+  }
+}])</code></pre>
+          </div>
+          <div class="step-side native-side">
+            <h4>Native — text content (possibly mutated)</h4>
+            <p>Orchestrator sees a text-shaped tool_result from the subagent. Hook may have prepended an error marker. Orchestrator reads prose to decide.</p>
+            <pre><code># Orchestrator's view:
+ToolResultBlock(content=[{
+  "type": "tool_result",
+  "tool_use_id": "tu_intake_001",
+  "content": "{...intake's stdout including final JSON line...}"
+}])
+# Orchestrator's prompt has to teach: "extract the
+# JSON line, parse it, branch on status."</code></pre>
+          </div>
+        </div>
+        <p class="note">Impact: the orchestrator's branching prompt has to be more sophisticated on Native (it parses prose). On MCP, the orchestrator just reads a dict.</p>
+      </div>
+    </div>
+
+    <!-- STEP 16 — SAME -->
+    <div class="step-card same" data-step="16" data-kind="same">
+      <div class="step-head">
+        <div class="step-num-circle">16</div>
+        <div class="step-title">Orchestrator dispatches the next expert</div>
+        <span class="step-badge same">SAME</span>
+        <span class="step-toggle">▶</span>
+      </div>
+      <div class="step-body">
+        <p>With intake's output in hand, the orchestrator builds the input for <code>rx-flow-data-entry</code>: SPM coding, sig parsing. Then <code>rx-flow-clinical-checklist</code>, <code>rx-flow-dur</code>, <code>rx-flow-billing</code>, etc. Each follows the same dispatch pattern.</p>
+        <div class="step-shared-block">
+          <h4>Identical on both paths</h4>
+          <p>The orchestrator's iteration logic ("invoke expert N+1 with merged state") is path-independent. The dispatch route is set once at session boot via the system prompt + options; every expert call after intake follows the same route.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  </div><!-- /.walkthrough-content -->
+
+  <aside class="walkthrough-aside">
+    <div class="topology-card">
+      <h3>Flow topology</h3>
+      <div class="topo-sub">Click a node to jump. Nodes glow when the matching step is open.</div>
+
+      <svg class="topology-svg" viewBox="0 0 260 800" xmlns="http://www.w3.org/2000/svg">
+        <!-- ============================================================
+             Vertical "river" diagram. Trunk runs at x=130 for SAME
+             steps; forks to x=60 (MCP) and x=200 (Native) for divergent
+             regions. Steps spaced 45px apart starting at y=40.
+             ============================================================ -->
+
+        <!-- Region labels -->
+        <text x="130" y="20" class="topo-region-label" text-anchor="middle">SETUP · same</text>
+        <text x="60" y="172" class="topo-region-label mcp" text-anchor="middle">MCP</text>
+        <text x="200" y="172" class="topo-region-label native" text-anchor="middle">NATIVE</text>
+        <text x="130" y="396" class="topo-region-label" text-anchor="middle">EXPERT RUNS · same</text>
+        <text x="60" y="618" class="topo-region-label mcp" text-anchor="middle">MCP</text>
+        <text x="200" y="618" class="topo-region-label native" text-anchor="middle">NATIVE</text>
+        <text x="130" y="792" class="topo-region-label" text-anchor="middle">NEXT EXPERT · same</text>
+
+        <!-- Region 1: SAME 1-3 -->
+        <line class="topo-line same" x1="130" y1="52" x2="130" y2="78"/>
+        <line class="topo-line same" x1="130" y1="97" x2="130" y2="123"/>
+
+        <!-- Fork 3 → 4-7 -->
+        <path class="topo-line fork-mcp" d="M 130 142 Q 130 165, 60 188"/>
+        <path class="topo-line fork-native" d="M 130 142 Q 130 165, 200 188"/>
+
+        <!-- Region 2: DIVERGE 4-7 -->
+        <line class="topo-line fork-mcp" x1="60" y1="207" x2="60" y2="233"/>
+        <line class="topo-line fork-mcp" x1="60" y1="252" x2="60" y2="278"/>
+        <line class="topo-line fork-mcp" x1="60" y1="297" x2="60" y2="323"/>
+        <line class="topo-line fork-native" x1="200" y1="207" x2="200" y2="233"/>
+        <line class="topo-line fork-native" x1="200" y1="252" x2="200" y2="278"/>
+        <line class="topo-line fork-native" x1="200" y1="297" x2="200" y2="323"/>
+
+        <!-- Merge 7 → 8 -->
+        <path class="topo-line fork-mcp" d="M 60 342 Q 60 365, 130 388"/>
+        <path class="topo-line fork-native" d="M 200 342 Q 200 365, 130 388"/>
+
+        <!-- Region 3: SAME 8-11 -->
+        <line class="topo-line same" x1="130" y1="407" x2="130" y2="433"/>
+        <line class="topo-line same" x1="130" y1="452" x2="130" y2="478"/>
+        <line class="topo-line same" x1="130" y1="497" x2="130" y2="523"/>
+
+        <!-- Fork 11 → 12-15 -->
+        <path class="topo-line fork-mcp" d="M 130 542 Q 130 565, 60 588"/>
+        <path class="topo-line fork-native" d="M 130 542 Q 130 565, 200 588"/>
+
+        <!-- Region 4: DIVERGE 12-15 -->
+        <line class="topo-line fork-mcp" x1="60" y1="607" x2="60" y2="633"/>
+        <line class="topo-line fork-mcp" x1="60" y1="652" x2="60" y2="678"/>
+        <line class="topo-line fork-mcp" x1="60" y1="697" x2="60" y2="723"/>
+        <line class="topo-line fork-native" x1="200" y1="607" x2="200" y2="633"/>
+        <line class="topo-line fork-native" x1="200" y1="652" x2="200" y2="678"/>
+        <line class="topo-line fork-native" x1="200" y1="697" x2="200" y2="723"/>
+
+        <!-- Merge 15 → 16 -->
+        <path class="topo-line fork-mcp" d="M 60 742 Q 60 765, 130 788"/>
+        <path class="topo-line fork-native" d="M 200 742 Q 200 765, 130 788"/>
+
+        <!-- ============ NODES ============ -->
+        <!-- Step 1 SAME (y=40) -->
+        <g class="topo-node same" data-step="1"><circle cx="130" cy="40" r="13"/><text x="130" y="44" text-anchor="middle">1</text><title>Step 1 — Operator action lands at FastAPI (SAME)</title></g>
+        <!-- Step 2 SAME (y=85) -->
+        <g class="topo-node same" data-step="2"><circle cx="130" cy="85" r="13"/><text x="130" y="89" text-anchor="middle">2</text><title>Step 2 — AGIService creates session + workspace (SAME)</title></g>
+        <!-- Step 3 SAME (y=130) -->
+        <g class="topo-node same" data-step="3"><circle cx="130" cy="130" r="13"/><text x="130" y="134" text-anchor="middle">3</text><title>Step 3 — ClaudeAgentOptions assembled (SAME)</title></g>
+
+        <!-- Step 4 DIVERGE (y=195) -->
+        <g class="topo-node mcp" data-step="4"><circle cx="60" cy="195" r="11"/><text x="60" y="199" text-anchor="middle">4</text><title>Step 4 (MCP) — invoke_expert tool_use (DIVERGES)</title></g>
+        <g class="topo-node native" data-step="4"><circle cx="200" cy="195" r="11"/><text x="200" y="199" text-anchor="middle">4</text><title>Step 4 (Native) — Agent tool_use with prompt string (DIVERGES)</title></g>
+        <!-- Step 5 DIVERGE (y=240) -->
+        <g class="topo-node mcp" data-step="5"><circle cx="60" cy="240" r="11"/><text x="60" y="244" text-anchor="middle">5</text><title>Step 5 (MCP) — Python handler invoked (DIVERGES)</title></g>
+        <g class="topo-node native" data-step="5"><circle cx="200" cy="240" r="11"/><text x="200" y="244" text-anchor="middle">5</text><title>Step 5 (Native) — SDK takes over (DIVERGES)</title></g>
+        <!-- Step 6 DIVERGE (y=285) -->
+        <g class="topo-node mcp" data-step="6"><circle cx="60" cy="285" r="11"/><text x="60" y="289" text-anchor="middle">6</text><title>Step 6 (MCP) — Pydantic raises before spawn (DIVERGES)</title></g>
+        <g class="topo-node native" data-step="6"><circle cx="200" cy="285" r="11"/><text x="200" y="289" text-anchor="middle">6</text><title>Step 6 (Native) — PreToolUse hook validates (DIVERGES)</title></g>
+        <!-- Step 7 DIVERGE (y=330) -->
+        <g class="topo-node mcp" data-step="7"><circle cx="60" cy="330" r="11"/><text x="60" y="334" text-anchor="middle">7</text><title>Step 7 (MCP) — fresh per-call options (DIVERGES)</title></g>
+        <g class="topo-node native" data-step="7"><circle cx="200" cy="330" r="11"/><text x="200" y="334" text-anchor="middle">7</text><title>Step 7 (Native) — SDK reads AgentDefinition (DIVERGES)</title></g>
+
+        <!-- Step 8 SAME (y=400) -->
+        <g class="topo-node same" data-step="8"><circle cx="130" cy="400" r="13"/><text x="130" y="404" text-anchor="middle">8</text><title>Step 8 — Expert subprocess cold-starts (SAME)</title></g>
+        <!-- Step 9 SAME (y=445) -->
+        <g class="topo-node same" data-step="9"><circle cx="130" cy="445" r="13"/><text x="130" y="449" text-anchor="middle">9</text><title>Step 9 — Bash → restish allowlist + execution (SAME)</title></g>
+        <!-- Step 10 SAME (y=490) -->
+        <g class="topo-node same" data-step="10"><circle cx="130" cy="490" r="13"/><text x="130" y="494" text-anchor="middle">10</text><title>Step 10 — Bash approval gate hot/cold (SAME)</title></g>
+        <!-- Step 11 SAME (y=535) -->
+        <g class="topo-node same" data-step="11"><circle cx="130" cy="535" r="13"/><text x="130" y="539" text-anchor="middle">11</text><title>Step 11 — Final JSON line emitted (SAME)</title></g>
+
+        <!-- Step 12 DIVERGE (y=595) -->
+        <g class="topo-node mcp" data-step="12"><circle cx="60" cy="595" r="11"/><text x="60" y="599" text-anchor="middle">12</text><title>Step 12 (MCP) — Python dispatcher validates (DIVERGES)</title></g>
+        <g class="topo-node native" data-step="12"><circle cx="200" cy="595" r="11"/><text x="200" y="599" text-anchor="middle">12</text><title>Step 12 (Native) — PostToolUse hook validates (DIVERGES)</title></g>
+        <!-- Step 13 DIVERGE (y=640) -->
+        <g class="topo-node mcp" data-step="13"><circle cx="60" cy="640" r="11"/><text x="60" y="644" text-anchor="middle">13</text><title>Step 13 (MCP) — Auto-retry inside one call (DIVERGES)</title></g>
+        <g class="topo-node native" data-step="13"><circle cx="200" cy="640" r="11"/><text x="200" y="644" text-anchor="middle">13</text><title>Step 13 (Native) — LLM-mediated retry across turns (DIVERGES)</title></g>
+        <!-- Step 14 DIVERGE (y=685) -->
+        <g class="topo-node mcp" data-step="14"><circle cx="60" cy="685" r="11"/><text x="60" y="689" text-anchor="middle">14</text><title>Step 14 (MCP) — Per-message trace fan-out (DIVERGES)</title></g>
+        <g class="topo-node native" data-step="14"><circle cx="200" cy="685" r="11"/><text x="200" y="689" text-anchor="middle">14</text><title>Step 14 (Native) — Start/Stop trace only (DIVERGES)</title></g>
+        <!-- Step 15 DIVERGE (y=730) -->
+        <g class="topo-node mcp" data-step="15"><circle cx="60" cy="730" r="11"/><text x="60" y="734" text-anchor="middle">15</text><title>Step 15 (MCP) — Typed dict in tool_result (DIVERGES)</title></g>
+        <g class="topo-node native" data-step="15"><circle cx="200" cy="730" r="11"/><text x="200" y="734" text-anchor="middle">15</text><title>Step 15 (Native) — Text content possibly mutated (DIVERGES)</title></g>
+
+        <!-- Step 16 SAME (y=800) -->
+        <g class="topo-node same" data-step="16"><circle cx="130" cy="800" r="13"/><text x="130" y="804" text-anchor="middle">16</text><title>Step 16 — Orchestrator dispatches next expert (SAME)</title></g>
+      </svg>
+
+      <div class="topo-legend">
+        <div class="topo-legend-row"><span class="topo-legend-dot same"></span> Same on both paths (8 steps)</div>
+        <div class="topo-legend-row"><span class="topo-legend-dot mcp"></span> MCP-side of a divergence</div>
+        <div class="topo-legend-row"><span class="topo-legend-dot native"></span> Native-side of a divergence</div>
+      </div>
+    </div>
+  </aside>
+
+  </div><!-- /.walkthrough-grid -->
+
+  <hr class="sep">
+
+  <h2>The score for Sarah's flow</h2>
+  <table>
+    <tr><th>Outcome</th><th>MCP path</th><th>Native path</th></tr>
+    <tr>
+      <td>Steps that stay identical</td>
+      <td colspan="2" style="text-align:center; color: var(--green); font-weight: 600;">8 of 16 (auth, workspace, options, expert subprocess, restish, approval gate, final JSON emission, orchestrator iteration)</td>
+    </tr>
+    <tr>
+      <td>Steps that diverge</td>
+      <td colspan="2" style="text-align:center; color: var(--text); font-weight: 600;">8 of 16 (tool_use shape, route lookup, input validation, spawn options, output validation, retry mechanism, trace fan-out, result handoff)</td>
+    </tr>
+    <tr>
+      <td>Code lines deleted if you flip</td>
+      <td>—</td>
+      <td><span class="pill pill-good">~487</span> (invoke_expert + retry helpers + spawn helper + MCP registration)</td>
+    </tr>
+    <tr>
+      <td>Code lines added if you flip</td>
+      <td>—</td>
+      <td><span class="pill pill-warn">~150</span> (PreToolUse + PostToolUse hooks + system prompt rewrite)</td>
+    </tr>
+    <tr>
+      <td>Behavior preserved 1:1</td>
+      <td colspan="2" style="text-align:center;">restish allowlist · Bash approval (hot+cold) · AskUserQuestion (hot+cold) · workspace · skills · memory · audit · session store · Inngest drains</td>
+    </tr>
+    <tr>
+      <td>Behavior degraded</td>
+      <td>—</td>
+      <td><span class="pill pill-bad">trace granularity</span> <span class="pill pill-bad">live stderr</span></td>
+    </tr>
+    <tr>
+      <td>Behavior lost</td>
+      <td>—</td>
+      <td><span class="pill pill-bad">auto schema-drift retry</span> <span class="pill pill-bad">transient subprocess retry</span></td>
+    </tr>
+  </table>
+</section>
+
+<!-- ============ DRIFT ============ -->
+<section class="section" id="drift">
+  <h1>Drift handling — both paths, scenario-by-scenario</h1>
+  <p class="lede">"Drift" here means: the LLM (orchestrator or expert) emitted something that doesn't match the contract. Or the subprocess died. Or a tool was called wrong. Each path catches some, misses others. This is where the trade-offs are concrete.</p>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot good"></span> Handled cleanly</div>
+    <div class="legend-item"><span class="legend-dot bad"></span> Degraded / lossy</div>
+    <div class="legend-item"><span class="legend-dot mcp"></span> MCP path</div>
+    <div class="legend-item"><span class="legend-dot native"></span> Native path</div>
+  </div>
+
+  <h2>Output-shape drift</h2>
+
+  <div class="drift-card">
+    <div class="drift-header">
+      <h3>D1. Output JSON missing a required field</h3>
+      <span class="pill pill-info">Common</span>
+    </div>
+    <p style="font-size: 13px; color: var(--text2); margin-bottom: 0;">e.g., expert emits <code>{"rx_id": "...", "patient_id": "..."}</code> with no <code>step_name</code>.</p>
+    <div class="drift-body">
+      <div class="drift-side mcp">
+        <h4>MCP path <span class="pill pill-good">Handled</span></h4>
+        <ul>
+          <li>Pydantic <code>ValidationError</code> at <code>tools.py:766</code></li>
+          <li><code>_retry_once_on_validation_error</code> re-spawns expert with nudge: <em>"Your previous output did not match the required schema. Error: ... Return a single-line JSON object that validates against this schema: ..."</em></li>
+          <li>Most drift cases recover on retry 2</li>
+          <li>If retry also fails: typed envelope <code>{"status":"failed", "error": "...", "raw": "..."}</code> → orchestrator escalates to HITL</li>
+        </ul>
+      </div>
+      <div class="drift-side native">
+        <h4>Native path <span class="pill pill-warn">Lossy</span></h4>
+        <ul>
+          <li>PostToolUse hook can run <code>output_cls.model_validate(parsed)</code> and mutate the tool_result with an error note</li>
+          <li>Hook <strong>cannot</strong> trigger a retry directly — orchestrator LLM must read the mutated tool_result and choose to re-invoke</li>
+          <li>If orchestrator misses the cue and proceeds, downstream experts get garbage input</li>
+          <li>Compensating: explicit error prose in tool_result + orchestrator system-prompt rule "if tool_result starts with [SCHEMA_ERROR], re-invoke"</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="drift-card">
+    <div class="drift-header">
+      <h3>D2. Wrong type on a field</h3>
+      <span class="pill pill-info">Common</span>
+    </div>
+    <p style="font-size: 13px; color: var(--text2); margin-bottom: 0;">e.g., <code>at_a_loss: "true"</code> string instead of <code>true</code> bool; <code>days_supply: "30"</code> string.</p>
+    <div class="drift-body">
+      <div class="drift-side mcp">
+        <h4>MCP path <span class="pill pill-good">Handled</span></h4>
+        <ul>
+          <li>Pydantic strict-mode reject; same retry path as D1</li>
+          <li>Output contracts are deliberately loose where coercion is safe (e.g., <code>notes</code> accepts str OR list[str]) — fewer false positives</li>
+        </ul>
+      </div>
+      <div class="drift-side native">
+        <h4>Native path <span class="pill pill-warn">Lossy</span></h4>
+        <ul>
+          <li>Hook can validate + mutate, but no automatic retry</li>
+          <li>If the orchestrator interprets the mutated result as success, the wrong-type field flows downstream — billing reads <code>days_supply</code> as string and crashes deeper in the call chain</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="drift-card">
+    <div class="drift-header">
+      <h3>D3. Malformed JSON (truncated, prose around it)</h3>
+      <span class="pill pill-warn">Less common</span>
+    </div>
+    <p style="font-size: 13px; color: var(--text2); margin-bottom: 0;">e.g., expert emits prose explanation followed by JSON; or hits max_turns mid-emit.</p>
+    <div class="drift-body">
+      <div class="drift-side mcp">
+        <h4>MCP path <span class="pill pill-good">Handled</span></h4>
+        <ul>
+          <li><code>_extract_final_json(raw)</code> grabs the last JSON object from raw text — tolerates surrounding prose</li>
+          <li>Truncation → <code>JSONDecodeError</code> → same retry path</li>
+        </ul>
+      </div>
+      <div class="drift-side native">
+        <h4>Native path <span class="pill pill-warn">Manual</span></h4>
+        <ul>
+          <li>Hook needs its own JSON-extractor (port the one from <code>tools.py:387</code>)</li>
+          <li>Truncation: hook can detect, but again — no retry mechanism, only nudge-via-mutated-result</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h2>Tool-use drift</h2>
+
+  <div class="drift-card">
+    <div class="drift-header">
+      <h3>D4. Expert calls a disallowed restish verb</h3>
+      <span class="pill pill-info">Common during prompt-tuning</span>
+    </div>
+    <p style="font-size: 13px; color: var(--text2); margin-bottom: 0;">e.g., billing expert calls <code>get-pharmacy</code> when its allowlist doesn't include it (real example from earlier today).</p>
+    <div class="drift-body">
+      <div class="drift-side mcp">
+        <h4>MCP path <span class="pill pill-good">Handled</span></h4>
+        <ul>
+          <li>PreToolUse hook on Bash inside the expert subprocess — <code>build_restish_allowlist_hook</code> at <code>tools.py:236-249</code></li>
+          <li>Returns a structured error to the expert LLM that names the violation and the allowed list</li>
+          <li>Expert often self-corrects on next turn</li>
+        </ul>
+      </div>
+      <div class="drift-side native">
+        <h4>Native path <span class="pill pill-good">Handled</span></h4>
+        <ul>
+          <li>Same PreToolUse-on-Bash hook; allowlist enforcement is identical because it lives inside the expert subprocess, not in the dispatch layer</li>
+          <li>Independent of MCP vs Native</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="drift-card">
+    <div class="drift-header">
+      <h3>D5. Mutating Bash command requires operator approval</h3>
+      <span class="pill pill-warn">Hot or cold path</span>
+    </div>
+    <p style="font-size: 13px; color: var(--text2); margin-bottom: 0;">e.g., expert calls <code>create-prescription</code>. Hot: operator clicks approve in &lt;60s. Cold: operator takes longer; subprocess exits.</p>
+    <div class="drift-body">
+      <div class="drift-side mcp">
+        <h4>MCP path <span class="pill pill-good">Handled (hot + cold)</span></h4>
+        <ul>
+          <li>Hot: <code>ToolApprovalGate</code> + <code>build_bash_approval_hook</code> blocks until decision</li>
+          <li>Cold: today's just-shipped Part C — gate persists pending approval to DB, fires Inngest <code>agi/cold_approval_requested</code>; drain executes the parked command + injects synthetic tool_result on resume</li>
+        </ul>
+      </div>
+      <div class="drift-side native">
+        <h4>Native path <span class="pill pill-good">Handled (same)</span></h4>
+        <ul>
+          <li>Independent of dispatch route — approval gate lives inside the expert subprocess as a PreToolUse hook on Bash; cold path is Inngest-driven and doesn't care if the parent was MCP or Native</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h2>Subprocess drift</h2>
+
+  <div class="drift-card">
+    <div class="drift-header">
+      <h3>D6. Transient subprocess error (rate limit, network blip, GCS hiccup)</h3>
+      <span class="pill pill-warn">Common in production</span>
+    </div>
+    <div class="drift-body">
+      <div class="drift-side mcp">
+        <h4>MCP path <span class="pill pill-good">Handled</span></h4>
+        <ul>
+          <li><code>classify_subprocess_failure</code> distinguishes transient (<code>RateLimitError</code>, <code>CLIConnectionError</code>) from permanent</li>
+          <li>Transient → backoff + retry once at <code>tools.py:659-677</code></li>
+          <li>Most blips invisible to orchestrator</li>
+        </ul>
+      </div>
+      <div class="drift-side native">
+        <h4>Native path <span class="pill pill-bad">Degraded</span></h4>
+        <ul>
+          <li>SDK propagates ProcessError up to the orchestrator session</li>
+          <li>No automatic retry layer; depends on whether the SDK itself retries internally for that error class</li>
+          <li>If session tears down, cold-revive recovers on next operator action — but UX is "rx-flow died, click retry" instead of "transparent recover"</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="drift-card">
+    <div class="drift-header">
+      <h3>D7. Permanent subprocess error (OOM, claude CLI missing, malformed prompt)</h3>
+      <span class="pill pill-warn">Rare, surfaces as bug</span>
+    </div>
+    <div class="drift-body">
+      <div class="drift-side mcp">
+        <h4>MCP path <span class="pill pill-good">Handled with envelope</span></h4>
+        <ul>
+          <li>Classified as non-transient → <code>build_subprocess_failure_envelope(...)</code></li>
+          <li>Envelope: <code>{status: failed, step_name, error, stderr_tail, raw: None}</code></li>
+          <li>Orchestrator branches on <code>status == "failed"</code> — never sees raw exception</li>
+        </ul>
+      </div>
+      <div class="drift-side native">
+        <h4>Native path <span class="pill pill-bad">Session teardown</span></h4>
+        <ul>
+          <li>SubagentStop hook fires post-hoc with transcript path, but cannot return a synthetic tool_result to the parent</li>
+          <li>Parent session typically dies — recovery via cold-revive (re-spawn from operator action)</li>
+          <li>Loses the clean "expert failed, route to HITL" branching the orchestrator currently has</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="drift-card">
+    <div class="drift-header">
+      <h3>D8. Expert subprocess hangs (no progress, no exit)</h3>
+      <span class="pill pill-info">Edge case</span>
+    </div>
+    <div class="drift-body">
+      <div class="drift-side mcp">
+        <h4>MCP path <span class="pill pill-warn">Bounded by SDK timeout</span></h4>
+        <ul>
+          <li>SDK's max_turns + per-call timeout caps wall-clock</li>
+          <li>On timeout: ProcessError → classified → retry or envelope</li>
+        </ul>
+      </div>
+      <div class="drift-side native">
+        <h4>Native path <span class="pill pill-warn">Bounded by SDK timeout</span></h4>
+        <ul>
+          <li>Same SDK-level timeout applies</li>
+          <li>Session may receive a tool_result with timeout indication, or session may tear down depending on SDK internals</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h2>Orchestrator-side drift (independent of dispatch path)</h2>
+
+  <div class="drift-card">
+    <div class="drift-header">
+      <h3>D9. Orchestrator builds wrong input shape for an expert</h3>
+      <span class="pill pill-info">Real today</span>
+    </div>
+    <p style="font-size: 13px; color: var(--text2); margin-bottom: 0;">e.g., the case earlier today: orchestrator passed <code>insurance_matched: false + ncpdp_insurance: {...}</code> but billing's input schema required <code>insurance_id</code>.</p>
+    <div class="drift-body">
+      <div class="drift-side mcp">
+        <h4>MCP path <span class="pill pill-good">Caught at dispatcher</span></h4>
+        <ul>
+          <li>Pydantic <code>ValidationError</code> at <code>tools.py:734</code> BEFORE spawn</li>
+          <li>Wasted-spawn cost = 0; error returned synchronously to the orchestrator's tool_result</li>
+          <li>Orchestrator can re-attempt with corrected input on the next turn</li>
+        </ul>
+      </div>
+      <div class="drift-side native">
+        <h4>Native path <span class="pill pill-warn">PreToolUse hook</span></h4>
+        <ul>
+          <li>Hook can intercept Agent tool_use, validate input against expert's input schema, return <code>permissionDecision: "deny"</code> with reason</li>
+          <li>Orchestrator sees deny + reason in tool_result; same self-correction loop as MCP</li>
+          <li>Equivalent if the hook is wired correctly — this gap closes cleanly</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DECISION ============ -->
+<section class="section" id="decision">
+  <h1>Decision matrix</h1>
+  <p class="lede">When to keep MCP, when to flip to Native, when to run both.</p>
+
+  <h2>If reliability matters more than simplicity</h2>
+  <div class="card mcp">
+    <h3><span class="pill pill-mcp">Keep MCP</span> — current state</h3>
+    <p>The MCP path's automatic transient retry + automatic schema-drift retry + typed fallback envelope are real reliability features. On a flaky network or under intermittent rate-limit pressure, they hide blips that the native path would expose. In a clinical workflow where an expert failure can stall an rx, "transparent recover" is worth the LoC overhead.</p>
+    <p><strong>Keep MCP if:</strong> production reliability is the #1 priority and you don't have observability to measure subprocess crash rates yet.</p>
+  </div>
+
+  <h2>If simplicity matters more, or you want sibling parity</h2>
+  <div class="card native">
+    <h3><span class="pill pill-native">Flip to Native</span> — Part D execution</h3>
+    <p>~−400 net LoC. 4 hops → 1 hop. Matches the <code>openaiagentssdk</code> sibling pattern. PreToolUse hook + PostToolUse hook can rebuild input/output validation. The retry losses are real but bounded — most production drift is schema-shape drift, which the hook still catches; the LLM-driven re-invoke is slower than the auto-retry but typically works.</p>
+    <p><strong>Flip if:</strong> you've measured subprocess crash rates and they're &lt;1% over a representative window, AND you have telemetry to spot regressions if they appear.</p>
+  </div>
+
+  <h2>If you want to measure first</h2>
+  <div class="card warn">
+    <h3><span class="pill pill-warn">Run both behind a feature flag</span> — recommended</h3>
+    <p>One PR adds a config flag <code>agi.dispatch_mode = "mcp" | "native"</code>. Default <code>mcp</code>. Run a fraction of sessions on <code>native</code>. Compare:</p>
+    <ul>
+      <li>Subprocess crash rate on each path (already trace-able via <code>SubagentStop</code> + existing audit)</li>
+      <li>Schema-drift rate (count <code>ValidationError</code> events on MCP; count PostToolUse-mutation events on native)</li>
+      <li>Mean turns-to-recover after drift (MCP = always 2, native = LLM-dependent)</li>
+      <li>End-to-end rx-flow success rate</li>
+    </ul>
+    <p>After 1–2 weeks of data, decide. If native holds: delete <code>invoke_expert</code> + retry helpers + the flag (the cleanup is one more PR). If native degrades: keep MCP, document the experiment, and the native wiring stays dormant for a future attempt.</p>
+  </div>
+
+  <h2>What this means for the in-flight branch</h2>
+  <ol>
+    <li><strong>Don't bundle</strong> MCP-removal with the in-flight ExpertRegistry / 2.x PRs. Let those land clean.</li>
+    <li><strong>Land the cheap wins</strong> independent of the path decision: prefer <code>restish carelink &lt;verb&gt;</code> for any new domain access in experts; never add a new in-repo MCP server without a documented reason. Add this as a standing rule in <code>CLAUDE.md</code>.</li>
+    <li><strong>Add the dispatch-mode flag</strong> as its own PR after PR 2.x lands. It's a 1-line config + a 5-line if/else in <code>service.py::_build_options</code>. Cheap to add, expensive to forget.</li>
+    <li><strong>Defer the deletion</strong> until the data is in. The dormant native wiring is ~20 LoC and keeps the option open at zero ongoing cost.</li>
+  </ol>
+
+  <hr class="sep">
+  <p style="color: var(--text3); font-size: 12px;">Generated 2026-04-27 from branch <code>feature/ai-orchestration-with-domain-agents</code>. File:line citations are accurate at HEAD; if these files have moved, <code>git log -p &lt;file&gt;</code> + grep for the symbol name.</p>
+</section>
+
+<footer>
+  CareLink AGI · Option B walkthrough · 2026-04-27
+</footer>
+
+</main>
+
+<script>
+  // Top-level tab switching
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === tab));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  // Dispatch sub-tabs
+  document.querySelectorAll('.subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pane = btn.dataset.pane;
+      const bar = btn.parentElement;
+      bar.querySelectorAll('.subtab-btn').forEach(b => b.classList.toggle('active', b === btn));
+      const section = btn.closest('.section');
+      section.querySelectorAll('.subtab-pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + pane));
+    });
+  });
+
+  // ---- Walkthrough interactivity ----
+  const stepCards = Array.from(document.querySelectorAll('#steps .step-card'));
+  const progressBar = document.getElementById('progress-bar');
+  const filterAll = document.getElementById('filter-all');
+  const filterDiverge = document.getElementById('filter-diverge');
+  const expandAllBtn = document.getElementById('expand-all');
+  const collapseAllBtn = document.getElementById('collapse-all');
+  const countAll = document.getElementById('count-all');
+  const countDiverge = document.getElementById('count-diverge');
+
+  if (stepCards.length && progressBar) {
+    // Build progress dots
+    stepCards.forEach(card => {
+      const num = card.dataset.step;
+      const kind = card.dataset.kind;
+      const dot = document.createElement('div');
+      dot.className = 'progress-dot ' + kind;
+      dot.textContent = num;
+      dot.title = (kind === 'same' ? 'Same on both paths' : 'Diverges') + ' — click to jump';
+      dot.addEventListener('click', () => {
+        // Make sure card is visible (clear filter if hidden), then scroll + open
+        if (card.classList.contains('hidden')) {
+          filterAll.click();
+        }
+        if (!card.classList.contains('open')) card.classList.add('open');
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.querySelectorAll('.progress-dot').forEach(d => d.classList.toggle('active', d === dot));
+      });
+      progressBar.appendChild(dot);
+    });
+
+    // Counts
+    const totalCount = stepCards.length;
+    const divergeCount = stepCards.filter(c => c.dataset.kind === 'diverge').length;
+    if (countAll) countAll.textContent = totalCount;
+    if (countDiverge) countDiverge.textContent = divergeCount;
+
+    // Initial state — "Only diverging" is active
+    stepCards.forEach(c => { if (c.dataset.kind === 'same') c.classList.add('hidden'); });
+
+    // Filter buttons
+    filterAll.addEventListener('click', () => {
+      filterAll.classList.add('active');
+      filterDiverge.classList.remove('active');
+      stepCards.forEach(c => c.classList.remove('hidden'));
+    });
+    filterDiverge.addEventListener('click', () => {
+      filterDiverge.classList.add('active');
+      filterAll.classList.remove('active');
+      stepCards.forEach(c => c.classList.toggle('hidden', c.dataset.kind === 'same'));
+    });
+
+    // Expand / collapse all
+    expandAllBtn.addEventListener('click', () => {
+      stepCards.forEach(c => { if (!c.classList.contains('hidden')) c.classList.add('open'); });
+    });
+    collapseAllBtn.addEventListener('click', () => {
+      stepCards.forEach(c => c.classList.remove('open'));
+    });
+
+    // Helper: sync diagram + progress-bar highlight to currently-open step
+    const syncHighlight = (num, isOpen) => {
+      document.querySelectorAll('.progress-dot').forEach(d => {
+        d.classList.toggle('active', d.textContent === num && isOpen);
+      });
+      document.querySelectorAll('.topo-node').forEach(n => {
+        n.classList.toggle('active', n.dataset.step === num && isOpen);
+      });
+    };
+
+    // Click step head to toggle
+    stepCards.forEach(card => {
+      const head = card.querySelector('.step-head');
+      head.addEventListener('click', () => {
+        card.classList.toggle('open');
+        const num = card.dataset.step;
+        syncHighlight(num, card.classList.contains('open'));
+      });
+    });
+
+    // Click topology node to jump to + open the matching step card
+    document.querySelectorAll('.topo-node').forEach(node => {
+      node.addEventListener('click', () => {
+        const num = node.dataset.step;
+        const card = document.querySelector('.step-card[data-step="' + num + '"]');
+        if (!card) return;
+        if (card.classList.contains('hidden')) {
+          filterAll.click();
+        }
+        card.classList.add('open');
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        syncHighlight(num, true);
+      });
+    });
+  }
+</script>
+
+</body>
+</html>
