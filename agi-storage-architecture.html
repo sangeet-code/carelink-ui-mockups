@@ -331,6 +331,8 @@
   <button data-tab="gcsfuse">GCS FUSE Deep Dive</button>
   <button data-tab="lifecycle">Lifecycle Flow</button>
   <button data-tab="cost">Cost & Migration</button>
+  <button data-tab="cloudrun">Cloud Run Worker Pools</button>
+  <button data-tab="playbook">Deployment Playbook</button>
 </nav>
 
 <main>
@@ -1408,6 +1410,621 @@ if workspace_file.size &gt; snapshot_bytes:
     <li><strong>Per-org GCS bucket isolation cost</strong> — is one bucket-per-org cleaner than path-prefix-per-org? Bucket-per-org gives natural IAM boundaries but adds management overhead. Path-prefix is simpler.</li>
     <li><strong>Filestore Enterprise IOPs at peak</strong> — 5K sessions × 50 ops/sec average = 250K IOPs/sec total. Filestore Enterprise tier is rated for higher; verify our specific share size aligns.</li>
   </ol>
+</section>
+
+<!-- ================================================ CLOUD RUN -->
+<section class="panel" data-panel="cloudrun">
+  <h2>Cloud Run worker pools — operational deep dive</h2>
+  <p>Worker pools went GA in 2026 as the Cloud Run primitive for long-running, pull-based, non-HTTP workloads. They're a meaningfully different shape than Cloud Run services — different timeout model, different scaling primitive, different cost calculation. This tab is the operational reference: where each knob lives, what each ceiling means, when we'd push past it.</p>
+
+  <div class="callout">
+    <strong>Verdict:</strong> sufficient for our planned workload through ~10x scale. The 32 GiB per-instance memory cap is the operative ceiling but doesn't pinch — we scale wider, not deeper. Compute (8 vCPU) is far above what we'll use. No request-timeout problem (worker pools don't have one).
+  </div>
+
+  <h3>The five timeout knobs</h3>
+  <p>Worker pools have a meaningfully different shape than Cloud Run services here. The famous "60-min request timeout" doesn't apply.</p>
+
+  <table>
+    <tr><th>#</th><th>Timeout</th><th>Cloud Run services</th><th>Cloud Run worker pools</th></tr>
+    <tr><td>1</td><td>Request timeout</td><td>Hard cap (default 5 min, max <strong>60 min</strong>)</td><td><strong>N/A</strong> — pools are pull-based, not request-driven</td></tr>
+    <tr><td>2</td><td>Container startup probe timeout</td><td>Configurable per deployment</td><td>Same — applies during instance bring-up</td></tr>
+    <tr><td>3</td><td>SIGTERM → SIGKILL grace period</td><td>Default 10s, configurable</td><td>Same — <strong>load-bearing for our drain-on-scale-down</strong></td></tr>
+    <tr><td>4</td><td>Instance lifetime</td><td>Effectively unbounded; rotates on deploy</td><td>Same — instances run continuously until deploy/scale-down/infra-recycle</td></tr>
+    <tr><td>5</td><td>VPC + NFS mount timeouts</td><td>Default ~30s for connector; NFS retry-bound</td><td>Same</td></tr>
+  </table>
+
+  <p><strong>The big architectural difference</strong>: Cloud Run services have the famous 60-minute hard request cap. Worker pools don't have that — they're not serving requests, they're processing pulled work. Our orchestrator subprocess can run for hours or days inside a single worker pool instance with no request-shaped ceiling cutting it off mid-flight.</p>
+
+  <h4>What can still kill a long-running orchestrator</h4>
+  <ul>
+    <li>Deploy of new revision (replicas drained one at a time, SIGTERM grace applies)</li>
+    <li>Infrastructure-side recycling (Google rotates underlying VMs periodically, ~weekly typical)</li>
+    <li>Instance crash (OOM, segfault)</li>
+    <li>Manual scale-down</li>
+  </ul>
+  <p>For all of these, our session-recovery model (lease + cold-revive on a different replica via shared Filestore) handles it cleanly. The instance dies; the session resumes elsewhere.</p>
+
+  <h3>Where each knob is configured</h3>
+
+  <h4>1. Container startup probe</h4>
+  <pre>gcloud run worker-pools update agi-orchestrator-pool \
+  --startup-probe-period-seconds=10 \
+  --startup-probe-failure-threshold=10 \
+  --startup-probe-timeout-seconds=30</pre>
+
+  <h4>2. SIGTERM grace period (recommended: 300s)</h4>
+  <p>Default is <strong>10 seconds</strong>, which is too aggressive for our workflow — finalize_session needs time to run the memory merger + audit flush + workspace teardown. Recommended: <strong>300s (5 min)</strong> so a graceful drain can finalize in-flight sessions without losing memory writes.</p>
+  <pre>gcloud run worker-pools update agi-orchestrator-pool \
+  --termination-grace-period=300s</pre>
+
+  <h4>3. Instance memory + CPU + execution environment</h4>
+  <pre>gcloud run worker-pools update agi-orchestrator-pool \
+  --memory=32Gi \
+  --cpu=8 \
+  --execution-environment=gen2</pre>
+  <p>The <code>--execution-environment=gen2</code> flag is critical — gen1 uses gVisor (more restrictive, fewer syscalls); gen2 uses a microVM (full Linux). For our subprocess-heavy workload, <strong>gen2 is required</strong>.</p>
+
+  <h4>4. Scaling</h4>
+  <pre>gcloud run worker-pools update agi-orchestrator-pool \
+  --min-instances=2 \
+  --max-instances=50</pre>
+  <p>Worker pools don't have "request concurrency" the way services do. Our orchestrator-per-session pattern means each instance hosts N sessions; we control N at the application layer (via the lease + per-replica capacity check).</p>
+
+  <h4>5. Volume mounts (Filestore + GCS FUSE)</h4>
+  <pre>gcloud run worker-pools update agi-orchestrator-pool \
+  --add-volume=name=workspace-fs,type=nfs,location=10.0.0.5:/workspace \
+  --add-volume-mount=volume=workspace-fs,mount-path=/var/lib/carelink/agi/workspace \
+  --add-volume=name=skills,type=cloud-storage,bucket=carelink-skills-prod \
+  --add-volume-mount=volume=skills,mount-path=/mnt/skills</pre>
+  <p>Cloud Run "Cloud Storage volumes" are GCS FUSE under the hood — GCP just rebrands them.</p>
+  <p><strong>Required NFS mount option for fast cold start</strong>: pass <code>--volume-options=tcp</code> on the NFS volume or your mount adds ~3s on cold start (default mount tries other transports first).</p>
+
+  <h4>Terraform equivalent (sketch)</h4>
+  <pre>resource "google_cloud_run_v2_worker_pool" "agi_orchestrator" {
+  name     = "agi-orchestrator-pool"
+  location = "us-central1"
+
+  template {
+    scaling {
+      min_instance_count = 2
+      max_instance_count = 50
+    }
+    termination_grace_period = "300s"
+
+    containers {
+      image = "us-central1-docker.pkg.dev/carelink-prod/agi/orchestrator:${var.image_tag}"
+
+      resources {
+        limits = {
+          memory = "32Gi"
+          cpu    = "8"
+        }
+      }
+
+      startup_probe {
+        period_seconds    = 10
+        failure_threshold = 10
+        timeout_seconds   = 30
+        tcp_socket {
+          port = 8080
+        }
+      }
+
+      volume_mounts {
+        name       = "workspace-fs"
+        mount_path = "/var/lib/carelink/agi/workspace"
+      }
+      volume_mounts {
+        name       = "skills"
+        mount_path = "/mnt/skills"
+      }
+    }
+
+    volumes {
+      name = "workspace-fs"
+      nfs {
+        server = google_filestore_instance.workspace.networks[0].ip_addresses[0]
+        path   = "/workspace"
+      }
+    }
+    volumes {
+      name = "skills"
+      gcs {
+        bucket    = google_storage_bucket.skills.name
+        read_only = true
+      }
+    }
+
+    vpc_access {
+      connector = google_vpc_access_connector.agi.id
+      egress    = "PRIVATE_RANGES_ONLY"
+    }
+
+    service_account = google_service_account.agi_orchestrator.email
+
+    execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
+  }
+}</pre>
+
+  <h3>Memory ceiling: 32 GiB per instance</h3>
+
+  <h4>Per-instance density math</h4>
+  <table>
+    <tr><th>Component</th><th>RAM</th></tr>
+    <tr><td>Orchestrator subprocess (Claude CLI, Node)</td><td>50-150 MB</td></tr>
+    <tr><td>Active expert subprocess (when running)</td><td>50-150 MB</td></tr>
+    <tr><td>Workspace tmpfs (skills/agents/proposals/transcripts)</td><td>5-50 MB</td></tr>
+    <tr><td>Container baseline (Python runtime, libs)</td><td>~200 MB total</td></tr>
+    <tr><td><strong>Per-session peak</strong></td><td><strong>150-300 MB</strong></td></tr>
+  </table>
+  <p>Sessions per instance ceiling: <code>(32 GiB - 200 MB baseline) / 250 MB per session ≈ 130</code>. We'd cap at <strong>100/instance</strong> for headroom.</p>
+
+  <h4>Three ways the ceiling actually bites</h4>
+
+  <p><strong>(1) OOM kills are not graceful.</strong> When an instance hits its memory limit, the kernel SIGKILLs the highest-RSS process. There is no SIGTERM. There is no graceful drain. Whatever orchestrator/expert was on the wrong end loses its in-flight work.</p>
+  <p>For us this means: a single session that grows beyond expectation can take down its sibling sessions on the same instance. Mitigations:</p>
+  <ul>
+    <li>Per-session memory cap enforced in application layer (kill orchestrator if it exceeds 500 MB)</li>
+    <li>Conservative session/instance density (100, not 150)</li>
+    <li>Watchdog that detects ballooning sessions and migrates them via lease handoff before they OOM</li>
+  </ul>
+
+  <p><strong>(2) Tmpfs counts against memory.</strong> Cloud Run's per-instance ephemeral disk is in-memory tmpfs. That includes anything we write outside the mounted volumes. If skills get baked into the container image and copied per-session into ephemeral disk, 100 MB per session × 100 sessions = 10 GB just in tmpfs. <strong>This is why GCS FUSE for skills is a real perf + cost win — keeps skills out of tmpfs entirely.</strong></p>
+
+  <p><strong>(3) Buffered transcript writes count too.</strong> The SDK's transcript JSONL eventually gets fsynced to Filestore (which doesn't count against instance memory) but the buffered-but-not-yet-fsynced content does. Hundreds of writes per turn means kilobytes of buffer per session at any moment — small but multiplies.</p>
+
+  <h4>What 32 GiB doesn't let us do</h4>
+  <ul>
+    <li>Run >130 sessions on one instance (forced to scale wider, which is fine)</li>
+    <li>Run a single huge orchestrator with massive context (fine for us — sessions are bounded)</li>
+    <li>Cache large reference data in-process (mitigated by GCS FUSE for skills)</li>
+  </ul>
+
+  <h3>Compute ceiling: 8 vCPU per instance</h3>
+  <p>Less interesting than memory because our workload is mostly idle CPU.</p>
+
+  <h4>Per-session CPU profile</h4>
+  <p>Our orchestrator is mostly waiting on the LLM (Anthropic API) or the database (restish backend). Real CPU work happens in bursts:</p>
+  <ul>
+    <li>JSON parsing of LLM responses (~10-50ms)</li>
+    <li>Pydantic validation of expert outputs (~5-20ms)</li>
+    <li>restish CLI startup (Go binary cold start, ~50-100ms)</li>
+    <li>skill execution (Python runtime spin-up, ~50-200ms when applicable)</li>
+  </ul>
+  <p>Per-session steady-state CPU: <code>&lt;0.05 vCPU</code> average, with bursts to 0.5-1 vCPU during LLM-response processing. 100 sessions × 0.05 vCPU avg = 5 vCPU steady-state. Comfortable on 8 vCPU. Bursts can briefly saturate but Cloud Run "always-on CPU" mode handles this.</p>
+
+  <h4>Three ways the compute ceiling bites</h4>
+  <ol>
+    <li><strong>Always-on CPU is required for worker pools</strong> — no request boundaries to tie CPU allocation to. Pricing factors this in (always-on is ~2x request-time pricing per vCPU-hr). Our cost estimates already use the always-on rate.</li>
+    <li><strong>Burstable, not sustained.</strong> Cloud Run gives you up to 8 vCPU but doesn't guarantee sustained availability. Under cluster pressure, a "noisy neighbor" instance could see throttling. Mitigation: keep utilization below 70% per instance.</li>
+    <li><strong>No NUMA / CPU pinning.</strong> GKE lets you pin pods to specific cores or NUMA nodes for deterministic perf. Cloud Run doesn't expose this. For most workloads this doesn't matter; for memory-bandwidth-sensitive workloads it can.</li>
+  </ol>
+
+  <h3>Hard limits cheat sheet</h3>
+  <table>
+    <tr><th>Resource</th><th>Limit</th><th>Notes</th></tr>
+    <tr><td>Per-instance RAM</td><td><strong>32 GiB</strong></td><td>Hard. Bigger needs GKE or VMs.</td></tr>
+    <tr><td>Per-instance vCPU</td><td><strong>8 vCPU</strong></td><td>Hard.</td></tr>
+    <tr><td>Per-instance ephemeral disk</td><td>Counts against RAM</td><td>Tmpfs. Small.</td></tr>
+    <tr><td>File descriptors</td><td>~25,000</td><td>Across container + children.</td></tr>
+    <tr><td>Max instances per pool</td><td>1,000 per region (raisable)</td><td>Quota request via GCP support.</td></tr>
+    <tr><td>VPC connector throughput</td><td>1-3 Gbps depending on machine type</td><td>Configurable.</td></tr>
+    <tr><td>Container image size</td><td>32 GB max</td><td>Soft — pull time dominates anyway.</td></tr>
+    <tr><td>Concurrent runtime sec</td><td>Unbounded</td><td>No request timeout for pools.</td></tr>
+  </table>
+
+  <h3>Reconsideration thresholds</h3>
+  <table>
+    <tr><th>Signal</th><th>Move to</th></tr>
+    <tr><td>Per-session RAM grows past 500 MB consistently</td><td>GKE with bigger nodes</td></tr>
+    <tr><td>>50K concurrent active sessions sustained</td><td>Multi-region Cloud Run OR GKE federation</td></tr>
+    <tr><td>Need privileged operations (Docker-in-Docker, custom kernel modules)</td><td>GKE or self-hosted</td></tr>
+    <tr><td>Need per-tenant strict compute isolation (some HIPAA-strict customer demands single-tenant)</td><td>GKE per-tenant cluster or self-hosted</td></tr>
+    <tr><td>Need GPU for in-sandbox model inference</td><td>GKE with GPU pools or specialized vendor</td></tr>
+  </table>
+  <p>None apply today. We'd reconsider once any one of them shows up as a real signal.</p>
+
+  <h3>What to verify against current GCP docs</h3>
+  <p>Worker pools went GA in 2026; some specifics may have shifted at or after launch:</p>
+  <ol>
+    <li>Exact list of timeout knobs and their defaults for worker pools (vs services)</li>
+    <li>Whether 32 GiB is still the gen2 ceiling or if larger sizes have been added</li>
+    <li>Whether <code>--volume-options=tcp</code> is still required to avoid the NFS cold-start penalty (this was true at launch)</li>
+    <li>How instance lifetime "rotation" works — i.e., how often Google force-recycles a long-running instance under us, and what advance notice the SIGTERM gives</li>
+    <li>Whether HIPAA BAA explicitly names worker pools as in-scope (separate addendum to the Cloud Run BAA may or may not be needed)</li>
+  </ol>
+</section>
+
+<!-- ================================================ DEPLOYMENT PLAYBOOK -->
+<section class="panel" data-panel="playbook">
+  <h2>Deployment playbook — from current code to running in production</h2>
+  <p>The operational steps to take what exists in <code>carelink-pms/carelink/agi/</code> today and ship it as a Cloud Run worker pool deployment. Concrete file paths, gcloud commands, IAM permissions, and a 5-day shipping plan.</p>
+
+  <h3>Current state vs target state</h3>
+
+  <svg class="topology-svg" viewBox="0 0 1080 460" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="d-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+        <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+      </marker>
+    </defs>
+
+    <text x="270" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#57606a">CURRENT STATE</text>
+    <text x="810" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#1a7f37">TARGET STATE</text>
+
+    <!-- CURRENT (left side) -->
+    <rect x="40" y="50" width="460" height="50" rx="6" fill="#fff8e6" stroke="#bf8700" stroke-width="2"/>
+    <text x="270" y="72" text-anchor="middle" font-size="13" font-weight="600" fill="#bf8700">Browser (Next.js)</text>
+    <text x="270" y="88" text-anchor="middle" font-size="10.5" fill="#bf8700">no change</text>
+
+    <path d="M 270 105 L 270 125" stroke="#57606a" stroke-width="1.5" marker-end="url(#d-arr)"/>
+
+    <rect x="40" y="130" width="460" height="100" rx="6" fill="#dde7f5" stroke="#0550ae" stroke-width="2"/>
+    <text x="270" y="152" text-anchor="middle" font-size="13" font-weight="600" fill="#0550ae">Backend Cloud Run service (single)</text>
+    <text x="60" y="172" font-size="11" fill="#0550ae">• HTTP routers (FastAPI)</text>
+    <text x="60" y="188" font-size="11" fill="#0550ae">• AGIService runs IN-PROCESS</text>
+    <text x="60" y="204" font-size="11" fill="#0550ae">• Spawns SDK clients via subprocess</text>
+    <text x="60" y="220" font-size="11" fill="#0550ae">• cl._agi_clients dict (process-local)</text>
+
+    <path d="M 270 235 L 270 265" stroke="#57606a" stroke-width="1.5" marker-end="url(#d-arr)"/>
+
+    <rect x="40" y="270" width="220" height="80" rx="6" fill="#f1f3f5" stroke="#57606a" stroke-width="2"/>
+    <text x="150" y="292" text-anchor="middle" font-size="12" font-weight="600" fill="#57606a">Local /tmp workspace</text>
+    <text x="60" y="312" font-size="10.5" fill="#57606a">• /tmp/agi-workspace/</text>
+    <text x="60" y="326" font-size="10.5" fill="#57606a">• Per-machine, ephemeral</text>
+    <text x="60" y="340" font-size="10.5" fill="#57606a">• Lost on instance restart</text>
+
+    <rect x="280" y="270" width="220" height="80" rx="6" fill="#fafafa" stroke="#8c959f" stroke-width="2" stroke-dasharray="4,3"/>
+    <text x="390" y="292" text-anchor="middle" font-size="12" font-weight="600" fill="#57606a">Memory: aspirational</text>
+    <text x="300" y="312" font-size="10.5" fill="#57606a">• Created at session start</text>
+    <text x="300" y="326" font-size="10.5" fill="#57606a">• rmtree at session end</text>
+    <text x="300" y="340" font-size="10.5" fill="#57606a">• NEVER persisted</text>
+
+    <text x="270" y="380" text-anchor="middle" font-size="11" fill="#cf222e" font-weight="600">↑ Single instance: no cold-revive across replicas, no shared state</text>
+    <text x="270" y="396" text-anchor="middle" font-size="11" fill="#cf222e">↑ Memories don't persist; sessions pinned to one process</text>
+
+    <!-- Arrow between -->
+    <text x="540" y="220" font-size="36" fill="#57606a">→</text>
+
+    <!-- TARGET (right side) -->
+    <rect x="580" y="50" width="460" height="50" rx="6" fill="#fff8e6" stroke="#bf8700" stroke-width="2"/>
+    <text x="810" y="72" text-anchor="middle" font-size="13" font-weight="600" fill="#bf8700">Browser (Next.js)</text>
+    <text x="810" y="88" text-anchor="middle" font-size="10.5" fill="#bf8700">no change</text>
+
+    <path d="M 810 105 L 810 125" stroke="#57606a" stroke-width="1.5" marker-end="url(#d-arr)"/>
+
+    <rect x="580" y="130" width="220" height="100" rx="6" fill="#dde7f5" stroke="#0550ae" stroke-width="2"/>
+    <text x="690" y="152" text-anchor="middle" font-size="12" font-weight="600" fill="#0550ae">Backend Cloud Run</text>
+    <text x="690" y="168" text-anchor="middle" font-size="10.5" fill="#0550ae">SERVICE (HTTP-bound)</text>
+    <text x="600" y="188" font-size="10.5" fill="#0550ae">• HTTP routing</text>
+    <text x="600" y="202" font-size="10.5" fill="#0550ae">• Org middleware</text>
+    <text x="600" y="216" font-size="10.5" fill="#0550ae">• Lease coordination</text>
+
+    <rect x="820" y="130" width="220" height="100" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+    <text x="930" y="152" text-anchor="middle" font-size="12" font-weight="600" fill="#8250df">AGI Cloud Run</text>
+    <text x="930" y="168" text-anchor="middle" font-size="10.5" fill="#8250df">WORKER POOL</text>
+    <text x="840" y="188" font-size="10.5" fill="#8250df">• Hosts orchestrator</text>
+    <text x="840" y="202" font-size="10.5" fill="#8250df">  subprocesses</text>
+    <text x="840" y="216" font-size="10.5" fill="#8250df">• Mounts shared FS</text>
+
+    <path d="M 690 235 L 690 265" stroke="#57606a" stroke-width="1.5" marker-end="url(#d-arr)"/>
+    <path d="M 930 235 L 930 265" stroke="#57606a" stroke-width="1.5" marker-end="url(#d-arr)"/>
+
+    <rect x="580" y="270" width="220" height="80" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+    <text x="690" y="292" text-anchor="middle" font-size="12" font-weight="600" fill="#0969da">Filestore (NFS RWX)</text>
+    <text x="600" y="312" font-size="10.5" fill="#0969da">• /workspace/&lt;org&gt;/&lt;sid&gt;/</text>
+    <text x="600" y="326" font-size="10.5" fill="#0969da">• Mounted on both</text>
+    <text x="600" y="340" font-size="10.5" fill="#0969da">• Cold-revive enabled</text>
+
+    <rect x="820" y="270" width="220" height="80" rx="6" fill="#dafbe1" stroke="#1a7f37" stroke-width="2"/>
+    <text x="930" y="292" text-anchor="middle" font-size="12" font-weight="600" fill="#1a7f37">GCS canonical memory</text>
+    <text x="840" y="312" font-size="10.5" fill="#1a7f37">• Per-org bucket prefix</text>
+    <text x="840" y="326" font-size="10.5" fill="#1a7f37">• Persistent across</text>
+    <text x="840" y="340" font-size="10.5" fill="#1a7f37">  sessions + replicas</text>
+
+    <text x="810" y="380" text-anchor="middle" font-size="11" fill="#1a7f37" font-weight="600">↑ Storage decoupled from compute. Both Cloud Run units can scale independently.</text>
+    <text x="810" y="396" text-anchor="middle" font-size="11" fill="#1a7f37">↑ Cold-revive works across any worker pool replica. Memory persists.</text>
+  </svg>
+
+  <h3>What stays the same</h3>
+  <ul>
+    <li>The frontend (no API contract changes)</li>
+    <li>The backend HTTP routes (<code>POST /sessions</code>, <code>POST /messages</code>, etc.)</li>
+    <li>The expert MD files (<code>carelink-pms/carelink/agi/agents/*.md</code>)</li>
+    <li>The contracts (<code>carelink-pms/carelink/agi/contracts/rx_flow.py</code>)</li>
+    <li>The MCP tool implementations (<code>tools.py</code>)</li>
+    <li>Inngest cold-revive functions (already wired)</li>
+  </ul>
+
+  <h3>What changes</h3>
+  <ol>
+    <li><strong>Split the backend</strong>: HTTP-bound bits stay in the Cloud Run service; orchestrator-bound bits move to a worker pool.</li>
+    <li><strong>Replace <code>cl._agi_clients</code> dict with lease-routed RPC</strong>: backend service holds the lease registry; worker pool replicas register on bring-up; backend dispatches "drive this session" jobs to whichever replica holds the lease.</li>
+    <li><strong>Move workspace from <code>/tmp</code> to Filestore mount</strong>: <code>config.py</code> <code>workspace_base</code> changes from <code>/tmp/agi-workspace</code> to <code>/var/lib/carelink/agi/workspace</code> (or wherever Filestore is mounted).</li>
+    <li><strong>Add memory selector + merger</strong>: at session start, pull from GCS canonical (NEW). At session end, merge back to GCS canonical (NEW).</li>
+    <li><strong>New deployment artifact</strong>: container image for the worker pool (different from the backend service image).</li>
+  </ol>
+
+  <h3>The two container images</h3>
+
+  <h4>Image 1: <code>carelink-backend</code> (existing — minor changes)</h4>
+  <pre># carelink-backend/Dockerfile (sketch — adjust to your existing)
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install carelink-pms (editable) + carelink-backend
+COPY carelink-pms /app/carelink-pms
+COPY carelink-backend /app/carelink-backend
+
+RUN pip install -e /app/carelink-pms
+RUN pip install -e /app/carelink-backend
+
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]</pre>
+
+  <h4>Image 2: <code>carelink-agi-worker</code> (NEW)</h4>
+  <pre># carelink-agi-worker/Dockerfile
+FROM python:3.12-slim
+
+# Node 20 for Claude Agent SDK CLI
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs
+
+# Go for restish CLI (or COPY from a builder stage)
+RUN curl -fsSL https://github.com/danielgtaylor/restish/releases/download/v0.20.0/restish-linux-amd64.tar.gz \
+    | tar -xz -C /usr/local/bin/
+
+# Future: Gemini SDK, additional CLIs
+
+# claude-agent-sdk via npm
+RUN npm install -g @anthropic-ai/claude-agent-sdk
+
+WORKDIR /app
+
+# Copy carelink-pms (editable install for AGI service)
+COPY carelink-pms /app/carelink-pms
+RUN pip install -e /app/carelink-pms
+
+# Copy worker pool entrypoint
+COPY carelink-agi-worker/entrypoint.py /app/entrypoint.py
+
+# Healthcheck endpoint (required by Cloud Run worker pools)
+EXPOSE 8080
+CMD ["python", "/app/entrypoint.py"]</pre>
+
+  <p>The worker pool entrypoint is a long-running Python process that:</p>
+  <ol>
+    <li>Registers itself with the backend service (lease registry) on startup</li>
+    <li>Heartbeats to the backend every ~15s</li>
+    <li>Listens for "drive this session" jobs (via internal HTTP, or pub/sub, or pull-queue)</li>
+    <li>Spawns orchestrator subprocesses for assigned sessions</li>
+    <li>Drains gracefully on SIGTERM</li>
+  </ol>
+
+  <h3>The IAM matrix</h3>
+  <table>
+    <tr><th>Service account</th><th>Role assignments</th><th>Why</th></tr>
+    <tr><td><code>carelink-backend@</code></td><td><code>roles/cloudsql.client</code><br><code>roles/secretmanager.secretAccessor</code><br><code>roles/run.invoker</code> on agi-worker pool (for internal RPC)</td><td>Existing backend; gain ability to dispatch to worker pool</td></tr>
+    <tr><td><code>carelink-agi-worker@</code></td><td><code>roles/storage.objectAdmin</code> on canonical bucket<br><code>roles/storage.objectViewer</code> on skills bucket<br><code>roles/secretmanager.secretAccessor</code><br><code>roles/file.editor</code> on Filestore<br><code>roles/cloudsql.client</code> for org DB lookups</td><td>NEW. Mounts Filestore + GCS, mints internal bearer tokens</td></tr>
+    <tr><td><code>inngest-cold-revive@</code></td><td>Same as <code>carelink-agi-worker@</code></td><td>Cold-revive functions need workspace + canonical access too</td></tr>
+  </table>
+
+  <h3>Networking</h3>
+  <ul>
+    <li><strong>VPC</strong>: backend service + worker pool + Filestore all live in the same VPC. Backend can RPC into worker pool via internal DNS.</li>
+    <li><strong>VPC connector</strong>: required for both Cloud Run services that need to reach Filestore (which is VPC-only).</li>
+    <li><strong>Cloud NAT</strong>: required for outbound to Anthropic API (Vertex AI is via private endpoint; if using direct API, NAT for egress).</li>
+    <li><strong>Egress allowlist</strong>: configure on the worker pool to restrict outbound to only what experts need (Anthropic API, restish backend, GCS). Egress controls live in the VPC firewall.</li>
+  </ul>
+  <pre>gcloud compute networks vpc-access connectors create agi-worker-connector \
+  --region=us-central1 \
+  --network=carelink-vpc \
+  --range=10.8.0.0/28 \
+  --machine-type=e2-standard-4
+
+gcloud run worker-pools update agi-orchestrator-pool \
+  --vpc-connector=agi-worker-connector \
+  --vpc-egress=private-ranges-only</pre>
+
+  <h3>Storage setup</h3>
+
+  <h4>Filestore (per-region)</h4>
+  <pre>gcloud filestore instances create carelink-agi-workspace \
+  --tier=ENTERPRISE \
+  --file-share=name=workspace,capacity=2.5TiB \
+  --network=name=carelink-vpc \
+  --region=us-central1</pre>
+
+  <h4>GCS buckets (one per role, per region)</h4>
+  <pre># Canonical memory — per-org prefixed
+gsutil mb -l us-central1 -b on gs://carelink-agi-canonical-prod/
+gsutil lifecycle set lifecycle-canonical.json gs://carelink-agi-canonical-prod/
+
+# Skills bundle — read-only via FUSE mount
+gsutil mb -l us-central1 -b on gs://carelink-agi-skills-prod/
+
+# Transcripts — long-term archive
+gsutil mb -l us-central1 -b on gs://carelink-agi-transcripts-prod/
+gsutil lifecycle set lifecycle-transcripts.json gs://carelink-agi-transcripts-prod/</pre>
+
+  <h4><code>lifecycle-canonical.json</code> — auto-tier + TTL</h4>
+  <pre>{
+  "lifecycle": {
+    "rule": [
+      {
+        "action": {"type": "SetStorageClass", "storageClass": "COLDLINE"},
+        "condition": {"age": 30, "matchesStorageClass": ["STANDARD"]}
+      },
+      {
+        "action": {"type": "Delete"},
+        "condition": {"age": 2555}
+      }
+    ]
+  }
+}</pre>
+  <p>30 days → Coldline. 7 years → delete (HIPAA-aligned compliance retention).</p>
+
+  <h3>Secret management</h3>
+  <p>Three secrets the worker pool needs:</p>
+  <table>
+    <tr><th>Secret</th><th>Purpose</th><th>Source</th></tr>
+    <tr><td><code>agi-internal-jwt-key</code></td><td>HS256 secret for minting per-session bearer tokens (matches backend)</td><td>Random 64-byte hex; rotate periodically</td></tr>
+    <tr><td><code>anthropic-api-key</code> or <code>vertex-credentials</code></td><td>Anthropic API access</td><td>From Anthropic console / GCP Vertex IAM</td></tr>
+    <tr><td><code>permit-io-api-key</code></td><td>RBAC projection</td><td>From Permit.io</td></tr>
+  </table>
+
+  <pre>gcloud secrets create agi-internal-jwt-key \
+  --replication-policy=automatic
+echo -n "$(openssl rand -hex 64)" | gcloud secrets versions add agi-internal-jwt-key --data-file=-
+
+# Bind to worker pool service account
+gcloud secrets add-iam-policy-binding agi-internal-jwt-key \
+  --member=serviceAccount:carelink-agi-worker@carelink-prod.iam.gserviceaccount.com \
+  --role=roles/secretmanager.secretAccessor</pre>
+
+  <p>Mount as env var in the worker pool config:</p>
+  <pre>gcloud run worker-pools update agi-orchestrator-pool \
+  --update-secrets=AGI_INTERNAL_JWT_KEY=agi-internal-jwt-key:latest</pre>
+
+  <h3>Code changes required (concrete file paths)</h3>
+  <table>
+    <tr><th>File</th><th>Change</th></tr>
+    <tr><td><code>carelink-pms/carelink/agi/config.py</code></td><td>Change <code>workspace_base</code> default from <code>/tmp/agi-workspace</code> to env-var-driven (<code>AGI_WORKSPACE_BASE</code>) so dev = <code>/tmp/...</code> and prod = <code>/var/lib/carelink/agi/workspace</code></td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/sessions/store.py</code></td><td>Add lease columns to <code>AGISession</code>: <code>lease_holder_instance_id</code>, <code>lease_holder_machine_id</code>, <code>lease_acquired_at</code>, <code>lease_expires_at</code></td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/sessions/lease.py</code> (NEW)</td><td>DB-backed lease primitive — acquire, heartbeat, force-take-over, release</td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/memory/store.py</code> (NEW)</td><td>GCS canonical memory R/W — per-org bucket prefix, if-generation-match writes</td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/memory/selector.py</code> (NEW)</td><td>Memory selector — workflow + role + pharmacy + context manifest → projection set</td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/memory/merger.py</code> (NEW)</td><td>Session-end merger — diff workspace vs manifest, append to canonical</td></tr>
+    <tr><td><code>carelink-backend/app/routers/agi.py</code></td><td>Replace in-process <code>cl._agi_clients</code> dict with lease-routed RPC dispatcher</td></tr>
+    <tr><td><code>carelink-agi-worker/entrypoint.py</code> (NEW)</td><td>Worker pool entrypoint — registration, heartbeat, job loop</td></tr>
+    <tr><td><code>carelink-agi-worker/Dockerfile</code> (NEW)</td><td>New container image for the worker pool</td></tr>
+    <tr><td><code>terraform/agi/main.tf</code> (NEW)</td><td>Terraform for worker pool + Filestore + GCS buckets + IAM</td></tr>
+  </table>
+
+  <h3>5-day shipping plan</h3>
+  <p>Concrete day-by-day for getting the first worker pool revision live with at least one rx-flow agent running through it.</p>
+
+  <h4>Day 1 — Storage layer</h4>
+  <ul>
+    <li>Provision Filestore Enterprise instance in us-central1</li>
+    <li>Create GCS buckets: canonical, skills, transcripts</li>
+    <li>Apply Object Lifecycle policies (30d → Coldline, 7yr delete)</li>
+    <li>Upload skills tree to <code>gs://carelink-agi-skills-prod/v1/</code></li>
+    <li>Bootstrap canonical memory dir structure: <code>gs://carelink-agi-canonical-prod/&lt;org&gt;/{org/{tools,drugs}, pharmacy/&lt;P&gt;/{patients,prescribers,insurance}}/</code></li>
+    <li>IAM: create <code>carelink-agi-worker@</code> service account, bind storage roles</li>
+    <li>Verify from a test Compute Engine VM: can mount Filestore, can read/write GCS</li>
+  </ul>
+
+  <h4>Day 2 — Container + entrypoint</h4>
+  <ul>
+    <li>Write <code>carelink-agi-worker/Dockerfile</code> with Node + Go restish + Python + carelink-pms</li>
+    <li>Write minimal entrypoint that registers with backend, heartbeats, and sleeps (no orchestrator yet)</li>
+    <li>Build + push to Artifact Registry: <code>us-central1-docker.pkg.dev/carelink-prod/agi/orchestrator:v0.1.0</code></li>
+    <li>Smoke test: pull + run the image locally with mock env vars</li>
+  </ul>
+
+  <h4>Day 3 — Worker pool deployment</h4>
+  <ul>
+    <li>Create Terraform module for worker pool + VPC connector + secret bindings</li>
+    <li>Deploy initial revision with min_instances=1, max_instances=3</li>
+    <li>Verify: instance starts, mounts Filestore, mounts GCS skills, registers with backend</li>
+    <li>Wire SIGTERM handler in entrypoint (drain gracefully on signal)</li>
+    <li>Run a no-op job through it to verify end-to-end registration + heartbeat + drain</li>
+  </ul>
+
+  <h4>Day 4 — Memory layer + lease</h4>
+  <ul>
+    <li>Implement <code>memory/store.py</code> + <code>memory/selector.py</code> + <code>memory/merger.py</code></li>
+    <li>Implement <code>sessions/lease.py</code> with DB column migrations</li>
+    <li>Update <code>config.py</code> to read <code>AGI_WORKSPACE_BASE</code> from env</li>
+    <li>Wire memory snapshot at session start + merge at session end</li>
+    <li>Update worker pool entrypoint to claim lease, drive sessions, release lease</li>
+    <li>Backend service: replace <code>_agi_clients</code> dispatch with lease-routed RPC to worker pool</li>
+  </ul>
+
+  <h4>Day 5 — Run rx-flow end-to-end + observability</h4>
+  <ul>
+    <li>Run rx-flow against the worker pool with a real session (test pharmacy, test patient)</li>
+    <li>Verify: workspace created on Filestore, memory snapshot pulled from GCS, session runs to completion, merger writes to canonical</li>
+    <li>Wire Cloud Logging structured logs (<code>logger_prefix=carelink.agi.worker.&lt;sid&gt;</code>)</li>
+    <li>Wire Cloud Monitoring metrics: active session count, memory cap usage per instance, lease acquire latency</li>
+    <li>Set up alerts: instance memory >80%, instance count > expected, lease auto-expiration > N/min</li>
+    <li>Run cold-revive test: kill worker pool replica mid-session, verify another replica picks up via Inngest</li>
+    <li>Run take-over test: simulate two clients claiming same session, verify lease arbitration</li>
+  </ul>
+
+  <h3>Day 6+ (production hardening — out of scope of the 5-day plan)</h3>
+  <ul>
+    <li>Multi-region replica deployment</li>
+    <li>Per-org Filestore sharding (if scale demands)</li>
+    <li>Canary deployments via Cloud Run revision tags</li>
+    <li>Disaster recovery runbook (restore from GCS snapshot)</li>
+    <li>HIPAA BAA verification with GCP account team</li>
+    <li>Per-tenant audit log export to BigQuery</li>
+    <li>Automatic memory TTL sweeper as Inngest cron</li>
+  </ul>
+
+  <h3>Observability hooks (the ones to wire on Day 5, not later)</h3>
+  <table>
+    <tr><th>Signal</th><th>Where</th><th>Why</th></tr>
+    <tr><td>Per-instance RAM usage</td><td>Cloud Monitoring</td><td>Catch OOM-kill blast radius before it happens</td></tr>
+    <tr><td>Active sessions per instance</td><td>Custom metric, periodic emit</td><td>Validate density assumptions; catch leaks</td></tr>
+    <tr><td>Session creation latency p50/p99</td><td>Custom metric</td><td>Watch for skills-copy regression; FUSE cache cold ratio</td></tr>
+    <tr><td>Memory snapshot read latency</td><td>Custom metric on memory_selector</td><td>GCS API cold-read tail</td></tr>
+    <tr><td>Memory merger write latency + retry count</td><td>Custom metric</td><td>Catch if-generation-match contention spikes</td></tr>
+    <tr><td>Lease acquire failures</td><td>Audit log</td><td>Detect hot-spot replicas, dispatch bugs</td></tr>
+    <tr><td>Cold-revive trigger rate</td><td>Audit log</td><td>Watch for instance-instability patterns</td></tr>
+    <tr><td>Subprocess crash rate by expert</td><td>Stderr capture (already wired)</td><td>Catch SDK or expert-specific issues</td></tr>
+  </table>
+
+  <h3>Local development story</h3>
+  <p>Devs need to test the worker pool flow before push. The simplest setup:</p>
+  <ol>
+    <li>Local Filestore equivalent: NFS server in Docker, or just mount a local dir at <code>/var/lib/carelink/agi/workspace</code></li>
+    <li>Local GCS equivalent: <code>fake-gcs-server</code> in Docker, or use real GCS dev bucket with personal credentials</li>
+    <li>Run backend service locally (existing pattern, no change)</li>
+    <li>Run worker pool entrypoint as a regular Python process pointing at local Filestore + dev GCS bucket</li>
+    <li>Hit the backend; sessions dispatch to local worker; full flow works without any cloud deploy</li>
+  </ol>
+
+  <pre># dev-env/docker-compose.yml (sketch)
+services:
+  fake-gcs:
+    image: fsouza/fake-gcs-server
+    ports: ["4443:4443"]
+    command: -scheme http
+  postgres:
+    image: postgres:16
+    ports: ["5433:5432"]
+  # backend + worker pool run locally as separate processes
+  # mount local workspace dir at /var/lib/carelink/agi/workspace</pre>
+
+  <h3>Deployment risk register (what could go wrong on the way to prod)</h3>
+  <table>
+    <tr><th>Risk</th><th>Mitigation</th></tr>
+    <tr><td>Filestore mount latency spikes during cold-revive</td><td>Use <code>--volume-options=tcp</code>; pre-warm mounts on instance start</td></tr>
+    <tr><td>OOM-kill takes out healthy sessions on the same instance</td><td>Enforce per-session memory cap in app layer; conservative density (100 not 130)</td></tr>
+    <tr><td>GCS canonical contention on if-generation-match retries</td><td>Per-org bucket prefix sharding; retry with exponential backoff capped at 3 attempts</td></tr>
+    <tr><td>Skills FUSE cache miss storm on replica scale-up</td><td>Larger metadata + content cache config; pre-fetch list at instance start</td></tr>
+    <tr><td>Lease arbitration race during high churn</td><td>DB-level <code>UPDATE WHERE expires_at &lt; now() OR holder = self</code> serializes; loser gets 409</td></tr>
+    <tr><td>Worker pool revision deploy drains in-flight sessions</td><td>SIGTERM grace 300s + memory merger runs in finalize → all in-flight writes preserved</td></tr>
+    <tr><td>Backend → worker pool RPC partition</td><td>Lease auto-expires after 60s; sessions cold-park; Inngest revives</td></tr>
+  </table>
+
+  <h3>What "deployed and useful" looks like</h3>
+  <p>On the day this is "deployed and useful for our currently-working agents":</p>
+  <ul>
+    <li>An operator clicks "start rx-flow" in the browser</li>
+    <li>Backend creates a session row, dispatches to a worker pool replica</li>
+    <li>Worker pool replica: prepares workspace on Filestore, pulls memory snapshot from GCS, spawns Claude SDK orchestrator</li>
+    <li>Orchestrator runs through the 8 rx-flow experts (existing MDs, no changes)</li>
+    <li>Memories accumulate in workspace during session</li>
+    <li>HITL hits → cold-park → Inngest revive on a possibly-different replica → continues</li>
+    <li>Session finalizes → memory merger writes to GCS canonical → workspace rmtree'd</li>
+    <li>Next rx-flow session at the same pharmacy reads the previous session's memories from canonical</li>
+  </ul>
+  <p>That's the milestone. Everything else is iteration.</p>
 </section>
 
 <div class="footer-note">
