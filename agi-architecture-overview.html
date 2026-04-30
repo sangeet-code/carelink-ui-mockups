@@ -1,0 +1,2623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CareLink AGI — Multi-Tenancy Architecture (2026-04-28)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --bg-code: #f6f8fa;
+    --border: #d0d7de;
+    --border-strong: #afb8c1;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --text-faint: #8c959f;
+    --platform: #57606a;
+    --org: #0969da;
+    --pharmacy: #1a7f37;
+    --user: #bf8700;
+    --session: #8250df;
+    --warn: #cf222e;
+    --info: #0969da;
+    --code-text: #24292f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.55;
+    font-size: 15px;
+  }
+  header {
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 32px 20px;
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  header .meta {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  header .intent {
+    margin-top: 12px;
+    color: var(--text);
+    max-width: 780px;
+  }
+  nav.tabs {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  nav.tabs button {
+    background: transparent;
+    border: 0;
+    padding: 14px 18px;
+    font-size: 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active {
+    color: var(--text);
+    border-bottom-color: var(--org);
+  }
+  main {
+    padding: 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  section.panel {
+    display: none;
+    animation: fadein 0.2s ease;
+  }
+  section.panel.active { display: block; }
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  h2 { font-size: 20px; margin: 0 0 16px; font-weight: 600; }
+  h3 { font-size: 16px; margin: 24px 0 10px; font-weight: 600; }
+  h4 { font-size: 14px; margin: 18px 0 8px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  p { margin: 0 0 12px; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--bg-code);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--code-text);
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--code-text);
+  }
+  pre code { background: transparent; padding: 0; font-size: inherit; }
+  .scope-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 16px 0 24px;
+  }
+  .scope-row {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+  }
+  .scope-row:last-child { border-bottom: 0; }
+  .scope-row:hover { background: var(--bg-alt); }
+  .scope-row.active { background: var(--bg-alt); }
+  .scope-row .scope-label {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    margin-right: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .scope-row.platform .scope-label { background: var(--platform); }
+  .scope-row.org .scope-label { background: var(--org); }
+  .scope-row.pharmacy .scope-label { background: var(--pharmacy); }
+  .scope-row.user .scope-label { background: var(--user); }
+  .scope-row.session .scope-label { background: var(--session); }
+  .scope-row .scope-headline {
+    font-weight: 600;
+    margin-right: 10px;
+  }
+  .scope-row .scope-tagline {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .scope-row .scope-detail {
+    display: none;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    font-size: 13.5px;
+  }
+  .scope-row.active .scope-detail { display: block; }
+  .scope-row .scope-detail ul { margin: 8px 0; padding-left: 20px; }
+  .scope-row .scope-detail li { margin: 4px 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+    font-size: 13.5px;
+  }
+  table th, table td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table th {
+    background: var(--bg-alt);
+    font-weight: 600;
+  }
+  .matrix-grid {
+    display: grid;
+    grid-template-columns: 200px repeat(8, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 12px;
+    margin: 16px 0;
+  }
+  .matrix-grid > div {
+    background: white;
+    padding: 8px 10px;
+    text-align: center;
+  }
+  .matrix-grid > .row-header {
+    text-align: left;
+    font-weight: 600;
+    background: var(--bg-alt);
+  }
+  .matrix-grid > .col-header {
+    background: var(--bg-alt);
+    font-weight: 600;
+    font-size: 11px;
+  }
+  .matrix-grid > .allow { background: #dafbe1; color: #0a3622; font-weight: 600; }
+  .matrix-grid > .deny { background: #ffebe9; color: #82071e; }
+  .matrix-grid > .hitl { background: #fff8c5; color: #4d2d00; font-weight: 600; }
+  .role-filter {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0;
+    flex-wrap: wrap;
+  }
+  .role-filter button {
+    padding: 6px 14px;
+    border: 1px solid var(--border-strong);
+    background: white;
+    border-radius: 16px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .role-filter button.active {
+    background: var(--org);
+    color: white;
+    border-color: var(--org);
+  }
+  .lifecycle {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 16px 0;
+  }
+  .lifecycle-header {
+    background: var(--bg-alt);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .lifecycle-header h3 { margin: 0; }
+  .lifecycle-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .lifecycle-controls button {
+    padding: 5px 12px;
+    border: 1px solid var(--border-strong);
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .lifecycle-controls button:hover:not(:disabled) { background: var(--bg-alt); }
+  .lifecycle-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .lifecycle-step-counter {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 0 8px;
+  }
+  .lifecycle-body {
+    padding: 24px;
+    min-height: 360px;
+  }
+  .lifecycle-step {
+    display: none;
+  }
+  .lifecycle-step.active { display: block; }
+  .lifecycle-step .step-num {
+    display: inline-block;
+    background: var(--session);
+    color: white;
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+    text-align: center;
+    border-radius: 16px;
+    font-weight: 600;
+    margin-right: 12px;
+  }
+  .lifecycle-step .step-title {
+    font-weight: 600;
+    font-size: 16px;
+    display: inline;
+  }
+  .lifecycle-step .step-actor {
+    display: inline-block;
+    margin-left: 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 2px 8px;
+    background: var(--bg-alt);
+    border-radius: 4px;
+  }
+  .lifecycle-step .step-body {
+    margin-top: 14px;
+    padding-left: 44px;
+  }
+  .scope-pill {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: white;
+    margin-right: 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .scope-pill.platform { background: var(--platform); }
+  .scope-pill.org { background: var(--org); }
+  .scope-pill.pharmacy { background: var(--pharmacy); }
+  .scope-pill.user { background: var(--user); }
+  .scope-pill.session { background: var(--session); }
+  .topology-diagram {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    background: var(--bg-alt);
+    margin: 16px 0;
+  }
+  .topology-platform {
+    background: white;
+    border: 2px solid var(--platform);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+  }
+  .topology-platform .label {
+    font-size: 11px;
+    color: var(--platform);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .topology-orgs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .topology-org {
+    background: white;
+    border: 2px solid var(--org);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .topology-org .label {
+    font-size: 11px;
+    color: var(--org);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .topology-org .name { font-weight: 600; margin-bottom: 8px; }
+  .topology-org .meta { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+  .topology-pharmacies {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .topology-pharmacy {
+    background: #f0fff4;
+    border-left: 3px solid var(--pharmacy);
+    padding: 6px 10px;
+    font-size: 12.5px;
+    border-radius: 0 4px 4px 0;
+  }
+  .topology-pharmacy .ph-label {
+    font-size: 10px;
+    color: var(--pharmacy);
+    font-weight: 600;
+  }
+  .org-shared {
+    background: #f6f8fa;
+    border: 1px dashed var(--border-strong);
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    margin-top: 8px;
+    color: var(--text-muted);
+  }
+  .fs-tree {
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 12.5px;
+    background: var(--bg-code);
+    padding: 14px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    line-height: 1.7;
+  }
+  .fs-tree .fs-org { color: var(--org); font-weight: 600; }
+  .fs-tree .fs-pharm { color: var(--pharmacy); font-weight: 600; }
+  .fs-tree .fs-comment { color: var(--text-muted); font-style: italic; }
+  .callout {
+    border-left: 4px solid var(--info);
+    background: #ddf4ff;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 14px;
+  }
+  .callout.warn {
+    border-left-color: var(--warn);
+    background: #ffebe9;
+  }
+  .callout strong { font-weight: 600; }
+  .layer-stack {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 16px 0;
+  }
+  .layer {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    background: white;
+    transition: background 0.15s;
+  }
+  .layer:last-child { border-bottom: 0; }
+  .layer:hover { background: var(--bg-alt); }
+  .layer.active { background: var(--bg-alt); }
+  .layer .layer-num {
+    display: inline-block;
+    background: var(--org);
+    color: white;
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    text-align: center;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 10px;
+  }
+  .layer .layer-title { font-weight: 600; }
+  .layer .layer-where { color: var(--text-muted); font-size: 13px; margin-left: 8px; }
+  .layer-detail {
+    display: none;
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: white;
+    border-radius: 4px;
+    border: 1px dashed var(--border);
+    font-size: 13.5px;
+  }
+  .layer.active .layer-detail { display: block; }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 16px 0;
+  }
+  @media (max-width: 800px) {
+    .two-col { grid-template-columns: 1fr; }
+    .matrix-grid { font-size: 11px; }
+  }
+  .glossary-tip {
+    border-bottom: 1px dashed var(--text-muted);
+    cursor: help;
+    position: relative;
+  }
+  .glossary-tip:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    background: var(--text);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: normal;
+    width: 280px;
+    z-index: 100;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+  .arrow-down {
+    text-align: center;
+    color: var(--text-faint);
+    margin: 4px 0;
+    font-size: 14px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    margin-right: 4px;
+    color: var(--text-muted);
+  }
+  .footer-note {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  /* ===== Swimlane diagram ===== */
+  .swimlane-container {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    padding: 16px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+  .swimlane-svg { width: 100%; max-width: 920px; height: auto; display: block; }
+  .swim-step { transition: opacity 0.2s; cursor: pointer; }
+  .swim-step.dim { opacity: 0.18; }
+  .swim-step.active .step-badge { stroke: #0d1117; stroke-width: 2; }
+  .swim-step.active .swim-arrow { stroke-width: 2.5; }
+  .swim-step.active .swim-node { stroke-width: 3; r: 11; }
+  .swim-step.active .swim-label { font-weight: 700; }
+  .swim-step:hover .step-badge { filter: brightness(1.1); }
+
+  .step-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 16px 0 8px;
+    align-items: center;
+  }
+  .step-pills .pills-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-right: 8px;
+  }
+  .step-pills button {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    transition: all 0.15s;
+  }
+  .step-pills button:hover { background: var(--bg-alt); }
+  .step-pills button.active {
+    background: var(--session);
+    color: white;
+    border-color: var(--session);
+  }
+  .step-pills .step-pills-nav {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: 12px;
+  }
+  .step-pills .step-pills-nav button {
+    width: auto;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .step-detail-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    background: var(--bg-alt);
+    margin-top: 4px;
+    min-height: 120px;
+  }
+  .step-detail-card .step-detail-content { display: none; }
+  .step-detail-card .step-detail-content.active { display: block; }
+  .step-detail-card h4 {
+    margin: 0 0 8px;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .step-detail-card .step-actor-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    font-size: 11px;
+  }
+  .step-detail-card .actor-tag {
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: white;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .step-detail-card ul { margin: 6px 0; padding-left: 22px; font-size: 13.5px; }
+  .step-detail-card li { margin: 3px 0; }
+  .step-detail-card code { font-size: 12px; }
+
+  /* ===== Code map (module diagram) ===== */
+  .codemap-svg {
+    width: 100%;
+    max-width: 1000px;
+    height: auto;
+    display: block;
+    margin: 16px auto;
+  }
+  .codemap-container {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    padding: 24px 16px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+  .module-box { cursor: pointer; transition: all 0.15s; }
+  .module-box:hover .module-rect { filter: brightness(1.04); }
+  .module-box.active .module-rect { stroke-width: 3; }
+  .module-box.dim { opacity: 0.3; }
+  .module-rect.new { fill: #dafbe1; stroke: #1a7f37; }
+  .module-rect.extend { fill: #ddf4ff; stroke: #0969da; }
+  .module-rect.existing { fill: #f6f8fa; stroke: #57606a; }
+  .module-rect.external { fill: #fff8c5; stroke: #bf8700; stroke-dasharray: 4,3; }
+  .module-label { font-size: 13px; font-weight: 600; fill: var(--text); }
+  .module-sublabel { font-size: 10.5px; fill: var(--text-muted); }
+  .module-arrow { stroke: var(--text-muted); stroke-width: 1.5; fill: none; }
+  .module-arrow.highlight { stroke: var(--org); stroke-width: 2.5; }
+  .codemap-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg-alt);
+    border-radius: 4px;
+  }
+  .codemap-legend .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .codemap-legend .legend-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid;
+  }
+  .codemap-legend .legend-swatch.new { background: #dafbe1; border-color: #1a7f37; }
+  .codemap-legend .legend-swatch.extend { background: #ddf4ff; border-color: #0969da; }
+  .codemap-legend .legend-swatch.existing { background: #f6f8fa; border-color: #57606a; }
+  .codemap-legend .legend-swatch.external { background: #fff8c5; border-color: #bf8700; border-style: dashed; }
+
+  .module-detail-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 18px;
+    background: var(--bg-alt);
+    margin-top: 12px;
+    min-height: 100px;
+  }
+  .module-detail-card .module-detail-content { display: none; }
+  .module-detail-card .module-detail-content.active { display: block; }
+
+  /* ===== Data flow tab ===== */
+  .dataflow-subtabs {
+    display: flex;
+    gap: 4px;
+    margin: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .dataflow-subtabs button {
+    padding: 10px 16px;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 13.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .dataflow-subtabs button:hover { color: var(--text); }
+  .dataflow-subtabs button.active {
+    color: var(--text);
+    border-bottom-color: var(--session);
+  }
+  .dataflow-subpanel { display: none; }
+  .dataflow-subpanel.active { display: block; animation: fadein 0.2s; }
+  .dataflow-svg {
+    width: 100%;
+    max-width: 1080px;
+    height: auto;
+    display: block;
+    margin: 16px auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    padding: 16px;
+  }
+  .flow-stage { cursor: pointer; transition: all 0.15s; }
+  .flow-stage:hover .flow-stage-rect { filter: brightness(1.05); }
+  .flow-stage-rect {
+    fill: white;
+    stroke-width: 2;
+  }
+  .flow-stage-rect.input { stroke: var(--user); fill: #fff8e6; }
+  .flow-stage-rect.process { stroke: var(--org); fill: #ddf4ff; }
+  .flow-stage-rect.store { stroke: var(--platform); fill: #f6f8fa; }
+  .flow-stage-rect.output { stroke: var(--pharmacy); fill: #dafbe1; }
+  .flow-stage-rect.gate { stroke: var(--warn); fill: #ffebe9; }
+  .flow-stage-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    fill: var(--text);
+  }
+  .flow-stage-sublabel {
+    font-size: 10.5px;
+    fill: var(--text-muted);
+  }
+  .flow-arrow {
+    stroke: var(--text-muted);
+    stroke-width: 1.8;
+    fill: none;
+  }
+  .flow-arrow-label {
+    font-size: 11px;
+    fill: var(--text-muted);
+  }
+  .flow-detail-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 18px;
+    background: var(--bg-alt);
+    margin-top: 12px;
+  }
+  .flow-detail-card .flow-detail-content { display: none; }
+  .flow-detail-card .flow-detail-content.active { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CareLink AGI — Multi-Tenancy Architecture</h1>
+  <div class="meta">Reference: 2026-04-28 design synthesis. Click tabs to navigate. Click rows / layers / steps to expand.</div>
+  <div class="intent">A coherent picture of access control, agents, memories, workflows, and HITL across <strong>Platform → Org → Pharmacy → User → Session</strong>. Designed to be opened in a browser with a coworker; nothing here is committed to code yet.</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="overview" class="active">Overview</button>
+  <button data-tab="tenancy">Tenancy</button>
+  <button data-tab="workflows">Workflows</button>
+  <button data-tab="access">Access Control</button>
+  <button data-tab="memory">Memory</button>
+  <button data-tab="lifecycle">Session Lifecycle</button>
+  <button data-tab="hitl">HITL</button>
+  <button data-tab="codemap">Code Map</button>
+  <button data-tab="dataflow">Data Flow</button>
+  <button data-tab="open">Open Questions</button>
+</nav>
+
+<main>
+
+<!-- ============================================================ OVERVIEW -->
+<section class="panel active" data-panel="overview">
+  <h2>Five-scope hierarchy</h2>
+  <p>Everything in the system has a primary scope. Lower scopes inherit from higher ones; lower scopes cannot see across to siblings of their parent. Click a row to expand.</p>
+
+  <div class="scope-stack" id="scope-stack">
+    <div class="scope-row platform" data-scope="platform">
+      <span class="scope-label">Platform</span>
+      <span class="scope-headline">CareLink itself</span>
+      <span class="scope-tagline">code, defaults, catalog of agents/workflows/skills</span>
+      <div class="scope-detail">
+        <p>The codebase that runs everywhere. Sealed and versioned at deploy time.</p>
+        <ul>
+          <li><strong>Workflow definitions</strong>: rx-flow, claims-flow, chat (YAML manifests)</li>
+          <li><strong>Expert MD catalog</strong>: 8+ scoped expert markdowns under <code>carelink/agi/agents/</code></li>
+          <li><strong>Skill library</strong>: bundled SKILL.md files</li>
+          <li><strong>Default role × verb permission templates</strong></li>
+          <li><strong>Restish CLI binary + skills binaries</strong></li>
+        </ul>
+        <p style="color: var(--text-muted); font-size: 13px;">All orgs run the same platform code at any given deploy. Per-org behavior comes from configuration, not from forking the platform.</p>
+      </div>
+    </div>
+
+    <div class="scope-row org" data-scope="org">
+      <span class="scope-label">Org</span>
+      <span class="scope-headline">A tenant — its own DB, FS root, GCS bucket</span>
+      <span class="scope-tagline">structurally sealed from other orgs</span>
+      <div class="scope-detail">
+        <p>The unit of physical data isolation. <strong>Each org has its own database</strong>; cross-org queries are physically impossible.</p>
+        <ul>
+          <li><strong>Pharmacies</strong> under it (1 to N)</li>
+          <li><strong>Employee roster</strong> (users via WorkOS)</li>
+          <li><strong>Workflow allow-list</strong>: which platform workflows this org can run</li>
+          <li><strong>Permission overrides</strong>: org-level tweaks to default role × verb templates</li>
+          <li><strong>Org-shared memories</strong>: <code>tools/</code>, <code>drugs/</code> — readable by any pharmacy in this org</li>
+          <li><strong>Audit log</strong> (org slice — fan-out to a global audit warehouse is a future concern)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="scope-row pharmacy" data-scope="pharmacy">
+      <span class="scope-label">Pharmacy</span>
+      <span class="scope-headline">PHI boundary inside an org</span>
+      <span class="scope-tagline">policy-enforced isolation between sibling pharmacies</span>
+      <div class="scope-detail">
+        <p>Where PHI lives. A user's role is <strong>per-pharmacy</strong>, not per-org — Carol can be admin at P1 and pharmacist at P2 in the same org.</p>
+        <ul>
+          <li><strong>Pharmacy config</strong>: NPI, NCPDP id, address, tax data</li>
+          <li><strong>User assignments + per-user roles AT THIS PHARMACY</strong></li>
+          <li><strong>Pharmacy-scoped memories</strong>: <code>patients/</code>, <code>prescribers/</code>, <code>insurance/</code></li>
+          <li><strong>Pharmacy-level workflow customization</strong> (approval thresholds, disabled experts)</li>
+          <li><strong>Pending HITL approvals queue</strong>: any qualified user at this pharmacy can pick up</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="scope-row user" data-scope="user">
+      <span class="scope-label">User</span>
+      <span class="scope-headline">An identity acting at a pharmacy</span>
+      <span class="scope-tagline">PharmacyStaff many-to-many; per-pharmacy roles</span>
+      <div class="scope-detail">
+        <p>The actor. A user might be a member of multiple pharmacies in the same org, with different roles in each.</p>
+        <ul>
+          <li><strong>WorkOS sub</strong> (subject)</li>
+          <li><strong>PharmacyStaff memberships</strong> (many-to-many): potentially multiple pharmacies</li>
+          <li><strong>Per-pharmacy roles</strong>: e.g. admin@P1, pharmacist@P2, technician@P3</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="scope-row session" data-scope="session">
+      <span class="scope-label">Session</span>
+      <span class="scope-headline">A workflow instance — one user, one pharmacy, one workflow</span>
+      <span class="scope-tagline">pinned at creation; cannot change scope mid-flight</span>
+      <div class="scope-detail">
+        <p>A live AGI run. Bound at creation to a single (org, pharmacy, user, workflow) tuple. Nothing in this tuple changes for the session's lifetime.</p>
+        <ul>
+          <li><strong>Lease</strong>: single-writer lock so two laptops can't drive the same session simultaneously</li>
+          <li><strong>Workspace</strong>: scratch FS partition at <code>/var/lib/carelink/agi/workspace/&lt;org&gt;/&lt;pharmacy&gt;/&lt;sid&gt;/</code></li>
+          <li><strong>Memory snapshot</strong>: read-side projection of canonical memories at session start</li>
+          <li><strong>Live SDK orchestrator + active experts</strong></li>
+          <li><strong>Audit events</strong>: tool_use, lease_acquired, permission_check, memory_write, approval_decided…</li>
+          <li><strong>HITL state</strong>: pending questions + pending approvals (durable in DB)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h3>Why this hierarchy</h3>
+  <p>The architecture has <strong>two boundary types</strong>:</p>
+  <table>
+    <tr><th>Boundary</th><th>Mechanism</th><th>What it protects</th></tr>
+    <tr><td><strong>Org</strong> (structural)</td><td>Separate DB, separate FS root, separate GCS bucket</td><td>Cross-org PHI/data leakage is physically impossible</td></tr>
+    <tr><td><strong>Pharmacy</strong> (policy)</td><td>Read-side scoping at session start + Permit.io enforcement at API layer</td><td>Cross-pharmacy PHI within same org</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ TENANCY -->
+<section class="panel" data-panel="tenancy">
+  <h2>Tenancy model — DB-per-org</h2>
+  <p>One platform, N orgs, each org has its own physical database, filesystem root, and GCS bucket. Pharmacies are entities within an org's DB.</p>
+
+  <div class="topology-diagram">
+    <div class="topology-platform">
+      <div class="label">Platform (shared)</div>
+      <div><strong>Control plane DB</strong> — maps <code>org_id → conn_string, fs_root, gcs_bucket, status</code></div>
+      <div style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">Org-routing middleware reads this on every request, caches per-org.</div>
+    </div>
+    <div style="text-align: center; color: var(--text-faint); margin: 6px 0; font-size: 13px;">↓ org routing middleware (JWT.org_id → connection)</div>
+    <div class="topology-orgs">
+      <div class="topology-org">
+        <div class="label">Org X</div>
+        <div class="name">Acme Pharmacy Group</div>
+        <div class="meta">DB: <code>orgX_db</code><br>FS: <code>/var/lib/carelink/agi/orgx/</code><br>GCS: <code>gs://orgx-carelink/</code></div>
+        <div class="topology-pharmacies">
+          <div class="topology-pharmacy"><div class="ph-label">Pharmacy</div>P1 — Downtown<br><span style="color: var(--text-muted); font-size: 11px;">5 employees, 5 laptops</span></div>
+          <div class="topology-pharmacy"><div class="ph-label">Pharmacy</div>P2 — Westside<br><span style="color: var(--text-muted); font-size: 11px;">3 employees, 2 laptops</span></div>
+          <div class="topology-pharmacy"><div class="ph-label">Pharmacy</div>P3 — Specialty<br><span style="color: var(--text-muted); font-size: 11px;">12 employees, 8 laptops</span></div>
+        </div>
+        <div class="org-shared">+ org-shared <code>tools/</code>, <code>drugs/</code></div>
+      </div>
+      <div class="topology-org">
+        <div class="label">Org Y</div>
+        <div class="name">Bayside Independent</div>
+        <div class="meta">DB: <code>orgY_db</code><br>FS: <code>/var/lib/carelink/agi/orgy/</code><br>GCS: <code>gs://orgy-carelink/</code></div>
+        <div class="topology-pharmacies">
+          <div class="topology-pharmacy"><div class="ph-label">Pharmacy</div>P1 — Main St<br><span style="color: var(--text-muted); font-size: 11px;">2 employees</span></div>
+        </div>
+        <div class="org-shared">+ org-shared <code>tools/</code>, <code>drugs/</code></div>
+      </div>
+      <div class="topology-org">
+        <div class="label">Org Z</div>
+        <div class="name">Citadel Pharmacy LLC</div>
+        <div class="meta">DB: <code>orgZ_db</code><br>FS: <code>/var/lib/carelink/agi/orgz/</code><br>GCS: <code>gs://orgz-carelink/</code></div>
+        <div class="topology-pharmacies">
+          <div class="topology-pharmacy"><div class="ph-label">Pharmacy</div>P1 — North<br><span style="color: var(--text-muted); font-size: 11px;">4 employees</span></div>
+          <div class="topology-pharmacy"><div class="ph-label">Pharmacy</div>P2 — South<br><span style="color: var(--text-muted); font-size: 11px;">4 employees</span></div>
+        </div>
+        <div class="org-shared">+ org-shared <code>tools/</code>, <code>drugs/</code></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Connection routing flow</h3>
+  <pre>Request ──▶ JWT { sub, org_id, exp }
+            │
+            ▼
+        Org-routing middleware
+            │
+            ├─▶ Lookup control plane: org_id → conn_string  (cached 5min)
+            │
+            ▼
+        Inject org-scoped DB Session into request context
+            │
+            ▼
+        Existing routers (agi.py, etc.) — no awareness of which org</pre>
+
+  <h3>What makes the org boundary structural</h3>
+  <ul>
+    <li>The DB connection itself is org-bound — a SQL injection in OrgX cannot reach OrgY's data.</li>
+    <li>FS paths are partitioned per org — no shared filesystem mount escape.</li>
+    <li>GCS buckets are per-org — IAM policies restrict cross-org access.</li>
+    <li>Backup/restore is per-org — clean tenant lifecycle.</li>
+  </ul>
+
+  <div class="callout">
+    <strong>Cost of this shape</strong>: schema migrations fan out across N databases (alembic per-org). Connection pools per-org. Backup jobs per-org. Cross-org analytics needs an explicit pipeline. These are operational realities of DB-per-tenant — not unique to AGI, but worth budgeting.
+  </div>
+
+  <div class="callout warn">
+    <strong>What we lose</strong>: cross-org learning. Org X and Org Y both rediscover the same FDB API quirks independently. Today's plan: <strong>option A — accept it</strong>. Future <strong>option B</strong> (CareLink-curated platform priors) is on the roadmap, not in v1.
+  </div>
+</section>
+
+<!-- ============================================================ WORKFLOWS -->
+<section class="panel" data-panel="workflows">
+  <h2>Workflows as first-class entities</h2>
+  <p>Today the runtime is rx-flow-specific. To extend to multiple workflows + AI-assisted chats, <strong>workflow becomes a top-level entity</strong> the way expert is today. A workflow is a manifest declaring orchestrator + experts + memory scope + HITL policy.</p>
+
+  <h3>Three workflow examples</h3>
+
+  <h4>rx-flow.yaml</h4>
+  <pre>id: rx-flow
+description: "New prescription intake → fulfillment"
+orchestrator_prompt: rx-flow-orchestrator.md
+experts:
+  - rx-flow-intake
+  - rx-flow-data-entry
+  - rx-flow-clinical-checklist
+  - rx-flow-dur
+  - rx-flow-billing
+  - rx-flow-fulfillment
+  - rx-flow-shipping
+  - rx-flow-rejection-classifier
+required_roles_to_start: [pharmacist, technician, admin]
+memory_scope:
+  read:  [tools, drugs, patients, prescribers, insurance]
+  write: [tools, drugs, patients, prescribers, insurance]
+hitl_approval_required_for_verbs:
+  submit-claim:    [pharmacist, billing_admin, admin]
+  reverse-claim:   [pharmacist, admin]
+  update-pt:       [pharmacist, technician, admin]</pre>
+
+  <h4>chat.yaml — the AI assistant</h4>
+  <pre>id: chat
+description: "Open-ended AI assistant chat"
+orchestrator_prompt: chat-orchestrator.md
+experts: []                              # orchestrator answers directly
+required_roles_to_start: [admin, pharmacist, technician, assistant]
+memory_scope:
+  read:  [tools, drugs]                  # safer default — no PHI
+  write: []                              # chat doesn't write memories
+hitl_approval_required_for_verbs: {}     # read-only domain</pre>
+
+  <h4>claims-flow.yaml — future</h4>
+  <pre>id: claims-flow
+description: "Medical billing claim preparation + submission"
+orchestrator_prompt: claims-flow-orchestrator.md
+experts:
+  - claims-prep
+  - claims-payer-resolution
+  - claims-denial-classifier
+  - rx-flow-billing                      # ← shared with rx-flow!
+required_roles_to_start: [billing_admin, pharmacist, admin]
+memory_scope:
+  read:  [tools, drugs, insurance, patients]
+  write: [tools, drugs, insurance]       # no patient/prescriber writes
+hitl_approval_required_for_verbs:
+  submit-medical-claim:    [billing_admin, admin]
+  resubmit-medical-claim:  [billing_admin, admin]</pre>
+
+  <h3>Workflow lifecycle</h3>
+  <table>
+    <tr><th>Phase</th><th>Where</th><th>What happens</th></tr>
+    <tr><td>Define</td><td><span class="scope-pill platform">Platform</span></td><td>YAML committed to repo + orchestrator prompt MD + expert MD references</td></tr>
+    <tr><td>Enable</td><td><span class="scope-pill org">Org</span></td><td>Org admin flips workflow on/off in their org's settings</td></tr>
+    <tr><td>Override</td><td><span class="scope-pill org">Org</span> + <span class="scope-pill pharmacy">Pharmacy</span></td><td>Optional tweaks (disable an expert; raise approval thresholds; add custom role mapping)</td></tr>
+    <tr><td>Instantiate</td><td><span class="scope-pill session">Session</span></td><td>User picks workflow → system resolves config → spawns session</td></tr>
+    <tr><td>Pin version</td><td><span class="scope-pill session">Session</span></td><td>Session row records the workflow version used; mid-flight upgrades don't surprise</td></tr>
+  </table>
+
+  <h3>Adding a new workflow becomes data, not code</h3>
+  <ol>
+    <li>Drop <code>workflows/my-new-flow.yaml</code></li>
+    <li>Write <code>workflows/orchestrator_prompts/my-new-flow.md</code></li>
+    <li>Reference existing experts (or add new MDs)</li>
+    <li>Org admin enables the workflow</li>
+    <li>Frontend lists it from <code>GET /workflows</code></li>
+  </ol>
+  <p>No router changes. No frontend rebuild. No expert refactoring. The dispatcher already handles the abstract case once "workflow" is the data type.</p>
+</section>
+
+<!-- ============================================================ ACCESS CONTROL -->
+<section class="panel" data-panel="access">
+  <h2>Access control — six layers, one source of truth</h2>
+  <p>Permit.io owns the canonical role × verb policy. The AGI service projects from it for fail-fast denials at six points. Click any layer to expand.</p>
+
+  <div class="layer-stack" id="layer-stack">
+    <div class="layer" data-layer="0">
+      <span class="layer-num">0</span>
+      <span class="layer-title">Org reachable</span>
+      <span class="layer-where">connection routing middleware</span>
+      <div class="layer-detail">JWT carries <code>org_id</code> → control plane DB lookup → if unknown, 404. Cross-org access is impossible because there's no connection to follow.</div>
+    </div>
+    <div class="layer" data-layer="1">
+      <span class="layer-num">1</span>
+      <span class="layer-title">User authenticated</span>
+      <span class="layer-where">WorkOS at API gateway</span>
+      <div class="layer-detail">Standard WorkOS JWT validation. JWKS verification, expiry check, audience claim. Already in place.</div>
+    </div>
+    <div class="layer" data-layer="2">
+      <span class="layer-num">2</span>
+      <span class="layer-title">Workflow startable</span>
+      <span class="layer-where">session creation handler</span>
+      <div class="layer-detail">
+        Three checks at <code>POST /sessions</code>:
+        <ol>
+          <li>Org X has workflow W enabled in org settings</li>
+          <li>User role at pharmacy P intersects <code>workflow.required_roles_to_start</code></li>
+          <li>User is in PharmacyStaff for P</li>
+        </ol>
+      </div>
+    </div>
+    <div class="layer" data-layer="3">
+      <span class="layer-num">3</span>
+      <span class="layer-title">Expert invocable</span>
+      <span class="layer-where">filter at session start; enforce at MCP boundary</span>
+      <div class="layer-detail">
+        Workflow's expert list filtered to those the invoker can use. Permit.io rule: <code>(actor, role@P, expert) → allow|deny</code>. Filtered set determines what the orchestrator sees in its <code>invoke_expert</code> enum.
+      </div>
+    </div>
+    <div class="layer" data-layer="4">
+      <span class="layer-num">4</span>
+      <span class="layer-title">Restish verb permitted</span>
+      <span class="layer-where">PreToolUse hook on Bash</span>
+      <div class="layer-detail">
+        Today's <code>restish_guard.py</code> extended. On every <code>restish carelink &lt;verb&gt; ...</code> call, project against the role × verb matrix. On deny: typed envelope <code>{"status": "permission_denied", "verb": "...", "reason": "..."}</code> instead of running the command. Audit-logged.
+      </div>
+    </div>
+    <div class="layer" data-layer="5">
+      <span class="layer-num">5</span>
+      <span class="layer-title">HITL approver authorized</span>
+      <span class="layer-where">approval-decide endpoint</span>
+      <div class="layer-detail">
+        Approver's <code>pharmacy_id == approval.pharmacy_id</code>, AND approver's roles ∩ <code>approval.required_roles ≠ ∅</code>. Logs both initiator and approver in audit event.
+      </div>
+    </div>
+    <div class="layer" data-layer="6">
+      <span class="layer-num">6</span>
+      <span class="layer-title">Backend RBAC (authoritative)</span>
+      <span class="layer-where">existing Permit.io enforcement at endpoint</span>
+      <div class="layer-detail">
+        Layers 0-5 are <strong>defense-in-depth and fail-fast</strong>. Layer 6 is the single source of truth — Permit.io ABAC policy on the backend re-validates the actual restish call. If 0-5 are bypassed by a bug, 6 still holds.
+      </div>
+    </div>
+  </div>
+
+  <h3>Role × verb matrix viewer</h3>
+  <p>Click a role to highlight its permitted verbs.</p>
+  <div class="role-filter" id="role-filter">
+    <button data-role="admin" class="active">Admin</button>
+    <button data-role="pharmacist">Pharmacist</button>
+    <button data-role="billing_admin">Billing Admin</button>
+    <button data-role="technician">Technician</button>
+    <button data-role="assistant">Assistant</button>
+  </div>
+  <div class="matrix-grid" id="matrix-grid">
+    <div></div>
+    <div class="col-header">list-pt</div>
+    <div class="col-header">create-pt</div>
+    <div class="col-header">update-pt</div>
+    <div class="col-header">submit-claim</div>
+    <div class="col-header">reverse-claim</div>
+    <div class="col-header">submit-medical-claim</div>
+    <div class="col-header">void-shipment</div>
+    <div class="col-header">create-rx</div>
+    <!-- Admin -->
+    <div class="row-header" data-row="admin">Admin</div>
+    <div class="cell allow" data-row="admin">allow</div>
+    <div class="cell allow" data-row="admin">allow</div>
+    <div class="cell allow" data-row="admin">allow</div>
+    <div class="cell allow" data-row="admin">allow</div>
+    <div class="cell allow" data-row="admin">allow</div>
+    <div class="cell allow" data-row="admin">allow</div>
+    <div class="cell allow" data-row="admin">allow</div>
+    <div class="cell allow" data-row="admin">allow</div>
+    <!-- Pharmacist -->
+    <div class="row-header" data-row="pharmacist">Pharmacist</div>
+    <div class="cell allow" data-row="pharmacist">allow</div>
+    <div class="cell allow" data-row="pharmacist">allow</div>
+    <div class="cell allow" data-row="pharmacist">allow</div>
+    <div class="cell allow" data-row="pharmacist">allow</div>
+    <div class="cell hitl" data-row="pharmacist">HITL</div>
+    <div class="cell deny" data-row="pharmacist">deny</div>
+    <div class="cell allow" data-row="pharmacist">allow</div>
+    <div class="cell allow" data-row="pharmacist">allow</div>
+    <!-- Billing Admin -->
+    <div class="row-header" data-row="billing_admin">Billing Admin</div>
+    <div class="cell allow" data-row="billing_admin">allow</div>
+    <div class="cell deny" data-row="billing_admin">deny</div>
+    <div class="cell deny" data-row="billing_admin">deny</div>
+    <div class="cell allow" data-row="billing_admin">allow</div>
+    <div class="cell allow" data-row="billing_admin">allow</div>
+    <div class="cell allow" data-row="billing_admin">allow</div>
+    <div class="cell deny" data-row="billing_admin">deny</div>
+    <div class="cell deny" data-row="billing_admin">deny</div>
+    <!-- Technician -->
+    <div class="row-header" data-row="technician">Technician</div>
+    <div class="cell allow" data-row="technician">allow</div>
+    <div class="cell hitl" data-row="technician">HITL</div>
+    <div class="cell allow" data-row="technician">allow</div>
+    <div class="cell hitl" data-row="technician">HITL</div>
+    <div class="cell deny" data-row="technician">deny</div>
+    <div class="cell deny" data-row="technician">deny</div>
+    <div class="cell hitl" data-row="technician">HITL</div>
+    <div class="cell allow" data-row="technician">allow</div>
+    <!-- Assistant -->
+    <div class="row-header" data-row="assistant">Assistant</div>
+    <div class="cell allow" data-row="assistant">allow</div>
+    <div class="cell deny" data-row="assistant">deny</div>
+    <div class="cell deny" data-row="assistant">deny</div>
+    <div class="cell deny" data-row="assistant">deny</div>
+    <div class="cell deny" data-row="assistant">deny</div>
+    <div class="cell deny" data-row="assistant">deny</div>
+    <div class="cell deny" data-row="assistant">deny</div>
+    <div class="cell deny" data-row="assistant">deny</div>
+  </div>
+  <p style="font-size: 12.5px; color: var(--text-muted);">
+    <span class="pill" style="background: #dafbe1; color: #0a3622;">allow</span> = direct execute |
+    <span class="pill" style="background: #fff8c5; color: #4d2d00;">HITL</span> = parked, requires higher-role approval |
+    <span class="pill" style="background: #ffebe9; color: #82071e;">deny</span> = never permitted for this role
+  </p>
+
+  <div class="callout">
+    <strong>The matrix is data, not code.</strong> Lives in Permit.io as resource × action policy. AGI projects a slice at session start (cached per-session) for fail-fast checks. Changes don't require a deploy.
+  </div>
+</section>
+
+<!-- ============================================================ MEMORY -->
+<section class="panel" data-panel="memory">
+  <h2>Memory layer — bucket scope, append-only, TTL</h2>
+  <p>Memory is the cross-session learning store. Today every session creates an empty <code>memories/</code> dir and deletes it at end — <strong>no persistence happens</strong>. The proposed design makes the memories real, scoped per-pharmacy, and time-bounded.</p>
+
+  <h3>Filesystem layout (per org)</h3>
+  <div class="fs-tree">
+/var/lib/carelink/agi/<br>
+├── workspace/<span class="fs-org">&lt;org_id&gt;</span>/<span class="fs-pharm">&lt;pharmacy_id&gt;</span>/&lt;session_id&gt;/   <span class="fs-comment"># ephemeral</span><br>
+└── memory/<span class="fs-org">&lt;org_id&gt;</span>/<br>
+&nbsp;&nbsp;&nbsp; ├── org/                                            <span class="fs-comment"># shared by all pharmacies in this org</span><br>
+&nbsp;&nbsp;&nbsp; │&nbsp;&nbsp; ├── tools/&lt;verb&gt;.md                           <span class="fs-comment"># e.g. list-patients.md</span><br>
+&nbsp;&nbsp;&nbsp; │&nbsp;&nbsp; └── drugs/&lt;ndc&gt;.md                             <span class="fs-comment"># e.g. 00378-0123-45.md</span><br>
+&nbsp;&nbsp;&nbsp; └── pharmacy/<span class="fs-pharm">&lt;pharmacy_id&gt;</span>/                          <span class="fs-comment"># PHI scope</span><br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ├── patients/&lt;patient_id&gt;.md<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ├── prescribers/&lt;npi&gt;.md<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; └── insurance/&lt;bin_pcn&gt;.md
+  </div>
+
+  <h3>Read-side projection at session start</h3>
+  <ol>
+    <li>Compute <code>(workflow.memory_scope.read, pharmacy_id, role)</code></li>
+    <li>Walk the canonical store, copy matching keys into <code>workspace/memories/</code></li>
+    <li>Write a manifest at <code>workspace/.memory-manifest.json</code> recording: keys included, keys excluded by role, snapshot timestamp</li>
+    <li>The manifest IS the audit record (one event at session start, no per-read overhead)</li>
+  </ol>
+
+  <h3>Append-only writes via merge step</h3>
+  <p>The expert writes freely to its workspace <code>memories/</code>. At session end, a merge step:</p>
+  <ol>
+    <li>Diffs each modified file vs the snapshot manifest</li>
+    <li>Extracts the operator's added content (everything past the snapshotted byte range)</li>
+    <li>Wraps it in a signed entry block</li>
+    <li><strong>Appends</strong> to the canonical file (<code>open(path, 'a')</code>) — never overwrites</li>
+  </ol>
+
+  <h4>Sample memory file</h4>
+  <pre>$ cat /var/lib/carelink/agi/memory/orgX/pharmacy/P1/patients/patient-9c.md
+
+&lt;!-- entry: 2026-04-28T14:02Z actor=alice role=technician session=8f3a... --&gt;
+Patient routinely provides DOB transposed (1984 vs 1948). Confirmed via ID
+twice. Verify on every intake.
+&lt;!-- /entry --&gt;
+
+&lt;!-- entry: 2026-04-25T09:11Z actor=bob role=pharmacist session=2d1e... --&gt;
+Name on insurance card omits hyphen ("Smith Jones" vs "Smith-Jones").
+Always strip hyphen for claim submission.
+&lt;!-- /entry --&gt;</pre>
+
+  <h3>TTL sweeper (14 days)</h3>
+  <p>Inngest cron every 6h walks the memory tree per-org:</p>
+  <ul>
+    <li>Parses entries (regex on <code>&lt;!-- entry: ... --&gt;</code>)</li>
+    <li>Drops entries older than 14d</li>
+    <li>If a file becomes empty: deletes it</li>
+    <li>Otherwise: rewrites with surviving entries + a <code>&lt;!-- swept: ... --&gt;</code> marker at top</li>
+    <li>Audit event: <code>memory_swept</code> per pharmacy with files_pruned, entries_pruned counts</li>
+  </ul>
+
+  <h3>Bucket scope summary</h3>
+  <table>
+    <tr><th>Bucket</th><th>Storage</th><th>Read by</th><th>Written by</th><th>TTL</th></tr>
+    <tr><td><code>tools/&lt;verb&gt;</code></td><td><span class="scope-pill org">Org</span> shared</td><td>Any session in org</td><td>Any session in org</td><td>14d</td></tr>
+    <tr><td><code>drugs/&lt;ndc&gt;</code></td><td><span class="scope-pill org">Org</span> shared</td><td>Any session in org</td><td>Any session in org</td><td>14d</td></tr>
+    <tr><td><code>patients/&lt;pid&gt;</code></td><td><span class="scope-pill pharmacy">Pharmacy</span> scoped</td><td>Sessions at pharmacy P</td><td>Sessions at pharmacy P</td><td>14d</td></tr>
+    <tr><td><code>prescribers/&lt;npi&gt;</code></td><td><span class="scope-pill pharmacy">Pharmacy</span> scoped</td><td>Sessions at pharmacy P</td><td>Sessions at pharmacy P</td><td>14d</td></tr>
+    <tr><td><code>insurance/&lt;bin_pcn&gt;</code></td><td><span class="scope-pill pharmacy">Pharmacy</span> scoped</td><td>Sessions at pharmacy P</td><td>Sessions at pharmacy P</td><td>14d</td></tr>
+  </table>
+
+  <div class="callout warn">
+    <strong>Today's reality</strong>: every expert MD references <code>memories/</code> as if it persists. The code path doesn't preserve it — workspace is rmtree'd at session end. The "cross-run learning" feature is currently aspirational. <em>Implementing this is the load-bearing piece of the memory design.</em>
+  </div>
+</section>
+
+<!-- ============================================================ LIFECYCLE -->
+<section class="panel" data-panel="lifecycle">
+  <h2>End-to-end session lifecycle</h2>
+  <p><strong>Setup:</strong> OrgX has 3 pharmacies. <strong>Alice</strong> is technician @ P1. <strong>Bob</strong> is pharmacist @ P1. Alice starts rx-flow, hits a <code>submit-claim</code> she can't approve, walks away. Bob picks it up from his laptop.</p>
+  <p style="font-size: 13px; color: var(--text-muted);">The five lanes are the actors. Each numbered node is a step. Click any step pill below or use ← → arrow keys.</p>
+
+  <div class="swimlane-container">
+    <svg class="swimlane-svg" viewBox="0 0 920 770" xmlns="http://www.w3.org/2000/svg" id="swimlane-svg">
+      <defs>
+        <marker id="arrow-grey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+        </marker>
+        <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#0969da"/>
+        </marker>
+        <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#8250df"/>
+        </marker>
+      </defs>
+
+      <!-- Lane headers -->
+      <g class="lane-headers">
+        <rect x="12" y="12" width="160" height="40" fill="#fff8e6" stroke="#bf8700" stroke-width="1.5" rx="4"/>
+        <text x="92" y="37" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bf8700">Alice / Laptop 1</text>
+
+        <rect x="196" y="12" width="160" height="40" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5" rx="4"/>
+        <text x="276" y="37" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0969da">Backend</text>
+
+        <rect x="380" y="12" width="160" height="40" fill="#fbf0ff" stroke="#8250df" stroke-width="1.5" rx="4"/>
+        <text x="460" y="37" text-anchor="middle" font-size="12.5" font-weight="600" fill="#8250df">SDK Runtime</text>
+
+        <rect x="564" y="12" width="160" height="40" fill="#f1f3f5" stroke="#57606a" stroke-width="1.5" rx="4"/>
+        <text x="644" y="37" text-anchor="middle" font-size="12.5" font-weight="600" fill="#57606a">Storage / Inngest</text>
+
+        <rect x="748" y="12" width="160" height="40" fill="#dcffe4" stroke="#1a7f37" stroke-width="1.5" rx="4"/>
+        <text x="828" y="37" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1a7f37">Bob / Laptop 3</text>
+      </g>
+
+      <!-- Lane vertical guidelines -->
+      <line x1="92" y1="60" x2="92" y2="760" stroke="#d0d7de" stroke-dasharray="3,4"/>
+      <line x1="276" y1="60" x2="276" y2="760" stroke="#d0d7de" stroke-dasharray="3,4"/>
+      <line x1="460" y1="60" x2="460" y2="760" stroke="#d0d7de" stroke-dasharray="3,4"/>
+      <line x1="644" y1="60" x2="644" y2="760" stroke="#d0d7de" stroke-dasharray="3,4"/>
+      <line x1="828" y1="60" x2="828" y2="760" stroke="#d0d7de" stroke-dasharray="3,4"/>
+
+      <!-- Step 1: Alice → Backend (POST /sessions) -->
+      <g class="swim-step" data-step="1">
+        <line class="swim-arrow" x1="104" y1="100" x2="264" y2="100" stroke="#0969da" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
+        <text class="swim-label" x="184" y="92" text-anchor="middle" font-size="11" fill="#0969da">POST /sessions</text>
+        <circle class="swim-node" cx="92" cy="100" r="9" fill="#bf8700" stroke="white" stroke-width="2"/>
+        <circle class="swim-node" cx="276" cy="100" r="9" fill="#0969da" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="100" r="13" fill="#8250df"/>
+        <text x="40" y="104" text-anchor="middle" fill="white" font-size="11" font-weight="700">1</text>
+      </g>
+
+      <!-- Step 2: Backend internal (org routing) -->
+      <g class="swim-step" data-step="2">
+        <text class="swim-label" x="276" y="142" text-anchor="middle" font-size="11" fill="#0969da">org routing</text>
+        <circle class="swim-node" cx="276" cy="158" r="9" fill="#0969da" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="158" r="13" fill="#8250df"/>
+        <text x="40" y="162" text-anchor="middle" fill="white" font-size="11" font-weight="700">2</text>
+      </g>
+
+      <!-- Step 3: Backend internal (access checks) -->
+      <g class="swim-step" data-step="3">
+        <text class="swim-label" x="276" y="200" text-anchor="middle" font-size="11" fill="#0969da">access checks</text>
+        <circle class="swim-node" cx="276" cy="216" r="9" fill="#0969da" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="216" r="13" fill="#8250df"/>
+        <text x="40" y="220" text-anchor="middle" fill="white" font-size="11" font-weight="700">3</text>
+      </g>
+
+      <!-- Step 4: Backend → Storage (memory snapshot) -->
+      <g class="swim-step" data-step="4">
+        <line class="swim-arrow" x1="288" y1="274" x2="632" y2="274" stroke="#57606a" stroke-width="1.8" marker-end="url(#arrow-grey)"/>
+        <text class="swim-label" x="460" y="266" text-anchor="middle" font-size="11" fill="#57606a">memory snapshot + workspace</text>
+        <circle class="swim-node" cx="276" cy="274" r="9" fill="#0969da" stroke="white" stroke-width="2"/>
+        <circle class="swim-node" cx="644" cy="274" r="9" fill="#57606a" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="274" r="13" fill="#8250df"/>
+        <text x="40" y="278" text-anchor="middle" fill="white" font-size="11" font-weight="700">4</text>
+      </g>
+
+      <!-- Step 5: Backend → Storage (lease) -->
+      <g class="swim-step" data-step="5">
+        <line class="swim-arrow" x1="288" y1="332" x2="632" y2="332" stroke="#57606a" stroke-width="1.8" marker-end="url(#arrow-grey)"/>
+        <text class="swim-label" x="460" y="324" text-anchor="middle" font-size="11" fill="#57606a">lease_acquired (laptop_1)</text>
+        <circle class="swim-node" cx="276" cy="332" r="9" fill="#0969da" stroke="white" stroke-width="2"/>
+        <circle class="swim-node" cx="644" cy="332" r="9" fill="#57606a" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="332" r="13" fill="#8250df"/>
+        <text x="40" y="336" text-anchor="middle" fill="white" font-size="11" font-weight="700">5</text>
+      </g>
+
+      <!-- Step 6: Backend ↔ SDK (orchestrator runs) -->
+      <g class="swim-step" data-step="6">
+        <line class="swim-arrow" x1="288" y1="385" x2="448" y2="385" stroke="#8250df" stroke-width="1.8" marker-end="url(#arrow-purple)"/>
+        <line class="swim-arrow" x1="448" y1="395" x2="288" y2="395" stroke="#8250df" stroke-width="1.8" marker-end="url(#arrow-purple)"/>
+        <text class="swim-label" x="368" y="378" text-anchor="middle" font-size="11" fill="#8250df">orchestrator ↔ experts</text>
+        <circle class="swim-node" cx="276" cy="390" r="9" fill="#0969da" stroke="white" stroke-width="2"/>
+        <circle class="swim-node" cx="460" cy="390" r="9" fill="#8250df" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="390" r="13" fill="#8250df"/>
+        <text x="40" y="394" text-anchor="middle" fill="white" font-size="11" font-weight="700">6</text>
+      </g>
+
+      <!-- Step 7: SDK internal (billing wants submit-claim) -->
+      <g class="swim-step" data-step="7">
+        <text class="swim-label" x="460" y="434" text-anchor="middle" font-size="11" fill="#8250df">submit-claim → hook denies</text>
+        <circle class="swim-node" cx="460" cy="450" r="9" fill="#cf222e" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="450" r="13" fill="#8250df"/>
+        <text x="40" y="454" text-anchor="middle" fill="white" font-size="11" font-weight="700">7</text>
+      </g>
+
+      <!-- Step 8: SDK → Storage (parked approval) -->
+      <g class="swim-step" data-step="8">
+        <line class="swim-arrow" x1="472" y1="508" x2="632" y2="508" stroke="#57606a" stroke-width="1.8" marker-end="url(#arrow-grey)"/>
+        <text class="swim-label" x="552" y="500" text-anchor="middle" font-size="11" fill="#57606a">park approval row</text>
+        <circle class="swim-node" cx="460" cy="508" r="9" fill="#8250df" stroke="white" stroke-width="2"/>
+        <circle class="swim-node" cx="644" cy="508" r="9" fill="#57606a" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="508" r="13" fill="#8250df"/>
+        <text x="40" y="512" text-anchor="middle" fill="white" font-size="11" font-weight="700">8</text>
+      </g>
+
+      <!-- Step 9: SDK terminates, Storage updated -->
+      <g class="swim-step" data-step="9">
+        <line class="swim-arrow" x1="472" y1="566" x2="632" y2="566" stroke="#57606a" stroke-width="1.8" marker-end="url(#arrow-grey)"/>
+        <text class="swim-label" x="552" y="558" text-anchor="middle" font-size="11" fill="#57606a">cold-park; lease released</text>
+        <circle class="swim-node" cx="460" cy="566" r="9" fill="#cf222e" stroke="white" stroke-width="2"/>
+        <text x="460" y="570" text-anchor="middle" fill="white" font-size="11" font-weight="700">×</text>
+        <circle class="swim-node" cx="644" cy="566" r="9" fill="#57606a" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="566" r="13" fill="#8250df"/>
+        <text x="40" y="570" text-anchor="middle" fill="white" font-size="11" font-weight="700">9</text>
+      </g>
+
+      <!-- Step 10: Bob → Backend (lists pending approvals) -->
+      <g class="swim-step" data-step="10">
+        <line class="swim-arrow" x1="816" y1="618" x2="288" y2="618" stroke="#1a7f37" stroke-width="1.8" marker-end="url(#arrow-grey)"/>
+        <text class="swim-label" x="552" y="610" text-anchor="middle" font-size="11" fill="#1a7f37">GET /pharmacies/P1/approvals</text>
+        <circle class="swim-node" cx="828" cy="618" r="9" fill="#1a7f37" stroke="white" stroke-width="2"/>
+        <circle class="swim-node" cx="276" cy="618" r="9" fill="#0969da" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="618" r="13" fill="#8250df"/>
+        <text x="40" y="622" text-anchor="middle" fill="white" font-size="11" font-weight="700">10</text>
+      </g>
+
+      <!-- Step 11: Backend → Storage (decide, role check, dispatch Inngest) -->
+      <g class="swim-step" data-step="11">
+        <line class="swim-arrow" x1="816" y1="666" x2="288" y2="666" stroke="#1a7f37" stroke-width="1.8" marker-end="url(#arrow-grey)"/>
+        <line class="swim-arrow" x1="288" y1="676" x2="632" y2="676" stroke="#57606a" stroke-width="1.8" marker-end="url(#arrow-grey)"/>
+        <text class="swim-label" x="460" y="658" text-anchor="middle" font-size="11" fill="#57606a">decide + role check + dispatch Inngest</text>
+        <circle class="swim-node" cx="828" cy="671" r="9" fill="#1a7f37" stroke="white" stroke-width="2"/>
+        <circle class="swim-node" cx="276" cy="671" r="9" fill="#0969da" stroke="white" stroke-width="2"/>
+        <circle class="swim-node" cx="644" cy="671" r="9" fill="#57606a" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="671" r="13" fill="#8250df"/>
+        <text x="40" y="675" text-anchor="middle" fill="white" font-size="11" font-weight="700">11</text>
+      </g>
+
+      <!-- Step 12: Storage (Inngest) → SDK (cold revive) -->
+      <g class="swim-step" data-step="12">
+        <line class="swim-arrow" x1="632" y1="717" x2="472" y2="717" stroke="#8250df" stroke-width="1.8" marker-end="url(#arrow-purple)"/>
+        <text class="swim-label" x="552" y="709" text-anchor="middle" font-size="11" fill="#8250df">Inngest cold-revive: resume</text>
+        <circle class="swim-node" cx="644" cy="717" r="9" fill="#57606a" stroke="white" stroke-width="2"/>
+        <circle class="swim-node" cx="460" cy="717" r="9" fill="#8250df" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="717" r="13" fill="#8250df"/>
+        <text x="40" y="721" text-anchor="middle" fill="white" font-size="11" font-weight="700">12</text>
+      </g>
+
+      <!-- Step 13: SDK → Storage (memory merge, finalize) -->
+      <g class="swim-step" data-step="13">
+        <line class="swim-arrow" x1="472" y1="755" x2="632" y2="755" stroke="#57606a" stroke-width="1.8" marker-end="url(#arrow-grey)"/>
+        <text class="swim-label" x="552" y="747" text-anchor="middle" font-size="11" fill="#57606a">finalize: merge memory, audit, cleanup</text>
+        <circle class="swim-node" cx="460" cy="755" r="9" fill="#8250df" stroke="white" stroke-width="2"/>
+        <circle class="swim-node" cx="644" cy="755" r="9" fill="#57606a" stroke="white" stroke-width="2"/>
+        <circle class="step-badge" cx="40" cy="755" r="13" fill="#8250df"/>
+        <text x="40" y="759" text-anchor="middle" fill="white" font-size="11" font-weight="700">13</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="step-pills" id="step-pills">
+    <span class="pills-label">Step:</span>
+    <button data-step="1" class="active">1</button>
+    <button data-step="2">2</button>
+    <button data-step="3">3</button>
+    <button data-step="4">4</button>
+    <button data-step="5">5</button>
+    <button data-step="6">6</button>
+    <button data-step="7">7</button>
+    <button data-step="8">8</button>
+    <button data-step="9">9</button>
+    <button data-step="10">10</button>
+    <button data-step="11">11</button>
+    <button data-step="12">12</button>
+    <button data-step="13">13</button>
+    <span class="step-pills-nav">
+      <button id="lifecycle-prev" disabled>← Prev</button>
+      <button id="lifecycle-next">Next →</button>
+    </span>
+  </div>
+
+  <div class="step-detail-card" id="step-detail-card">
+    <div class="step-detail-content active" data-step="1">
+      <h4>Step 1 — Alice opens her laptop and starts a session</h4>
+      <div class="step-actor-row">
+        <span class="actor-tag" style="background: #bf8700;">Alice</span>
+        <span class="actor-tag" style="background: #0969da;">Backend</span>
+      </div>
+      <p>Frontend posts <code>POST /sessions</code> with <code>{ workflow: "rx-flow", pharmacy_id: "P1", context: {...} }</code>. Bearer is Alice's WorkOS JWT.</p>
+    </div>
+    <div class="step-detail-content" data-step="2">
+      <h4>Step 2 — Org routing middleware resolves the DB</h4>
+      <div class="step-actor-row"><span class="actor-tag" style="background: #0969da;">Backend</span></div>
+      <p>JWT claim <code>org_id=X</code> → control plane lookup → resolves <code>orgX_db</code> connection. CareLink instance scoped to OrgX is injected into the request context.</p>
+    </div>
+    <div class="step-detail-content" data-step="3">
+      <h4>Step 3 — Session creation runs all access checks</h4>
+      <div class="step-actor-row"><span class="actor-tag" style="background: #0969da;">Backend</span></div>
+      <ul>
+        <li>OrgX has rx-flow enabled in workflow allow-list</li>
+        <li>Alice's role at P1 is technician → ∈ <code>workflow.required_roles_to_start</code></li>
+        <li>Permit.io projects: Alice's <code>permitted_verbs</code> = {list-pt, get-pt, list-drug, ...} — no <code>submit-claim</code></li>
+        <li>Workflow's experts filtered to {intake, data-entry, clinical-checklist, dur, billing}</li>
+        <li>Billing expert can run in HITL-required mode (parks <code>submit-claim</code>, asks an approver)</li>
+      </ul>
+    </div>
+    <div class="step-detail-content" data-step="4">
+      <h4>Step 4 — Memory snapshot projects the workspace</h4>
+      <div class="step-actor-row">
+        <span class="actor-tag" style="background: #0969da;">Backend</span>
+        <span class="actor-tag" style="background: #57606a;">Storage</span>
+      </div>
+      <p>Backend reads canonical memory store + creates ephemeral workspace.</p>
+      <ul>
+        <li>Copies <code>/memory/orgX/org/{tools,drugs}/*</code> (org-shared)</li>
+        <li>Copies <code>/memory/orgX/pharmacy/P1/{patients,prescribers,insurance}/*</code> (PHI scope)</li>
+        <li>Writes <code>workspace/.memory-manifest.json</code> with key list + timestamps</li>
+        <li>Audit event: <code>memory_snapshot</code></li>
+      </ul>
+    </div>
+    <div class="step-detail-content" data-step="5">
+      <h4>Step 5 — Lease acquired by Alice's machine</h4>
+      <div class="step-actor-row">
+        <span class="actor-tag" style="background: #0969da;">Backend</span>
+        <span class="actor-tag" style="background: #57606a;">Storage</span>
+      </div>
+      <p>Workspace at <code>/var/lib/carelink/agi/workspace/orgX/P1/&lt;sid&gt;/</code>. Lease columns set: <code>holder_machine_id=laptop_1</code>, <code>holder_actor_id=alice</code>, <code>expires_at=now+60s</code>. Frontend starts heartbeat (extends lease every 15s).</p>
+    </div>
+    <div class="step-detail-content" data-step="6">
+      <h4>Step 6 — Orchestrator runs through scoped experts</h4>
+      <div class="step-actor-row">
+        <span class="actor-tag" style="background: #0969da;">Backend</span>
+        <span class="actor-tag" style="background: #8250df;">SDK</span>
+      </div>
+      <p>intake → data-entry → clinical-checklist → dur → billing. Each expert's <code>PreToolUse</code> hook (<code>restish_guard</code>) checks each call: in expert allowlist AND in Alice's <code>permitted_verbs</code>. Reads succeed; writes that don't require approval succeed.</p>
+    </div>
+    <div class="step-detail-content" data-step="7">
+      <h4>Step 7 — Billing expert wants submit-claim, hook denies</h4>
+      <div class="step-actor-row"><span class="actor-tag" style="background: #8250df;">SDK</span></div>
+      <p>Expert generates <code>restish carelink submit-claim --rx-id=...</code>. PreToolUse hook checks Alice's permitted_verbs:</p>
+      <ul>
+        <li><code>submit-claim</code> requires HITL approval for technician role</li>
+        <li>Hook decision: park it (don't execute, don't deny outright)</li>
+      </ul>
+    </div>
+    <div class="step-detail-content" data-step="8">
+      <h4>Step 8 — Approval row written, hot window starts</h4>
+      <div class="step-actor-row">
+        <span class="actor-tag" style="background: #8250df;">SDK</span>
+        <span class="actor-tag" style="background: #57606a;">Storage</span>
+      </div>
+      <p>DB row inserted into <code>agi_pending_approvals</code>:</p>
+      <pre style="font-size: 11.5px; padding: 8px;">{
+  verb: "submit-claim",
+  initiator: "alice",
+  pharmacy_id: "P1",
+  required_roles: ["pharmacist", "billing_admin", "admin"],
+  session_id, command, ts
+}</pre>
+      <p>Hot path waits 60s for decision. Audit event: <code>approval_requested</code>.</p>
+    </div>
+    <div class="step-detail-content" data-step="9">
+      <h4>Step 9 — Alice walks away, cold-park</h4>
+      <div class="step-actor-row">
+        <span class="actor-tag" style="background: #8250df;">SDK</span>
+        <span class="actor-tag" style="background: #57606a;">Storage</span>
+      </div>
+      <p>Hot window elapses. SDK subprocess exits cleanly via <code>continue_=False, stopReason=...</code>. Session status flips to <code>waiting_cold</code>. Lease released (heartbeat stopped). Audit event: <code>lease_released</code>.</p>
+    </div>
+    <div class="step-detail-content" data-step="10">
+      <h4>Step 10 — Bob picks up at his laptop</h4>
+      <div class="step-actor-row">
+        <span class="actor-tag" style="background: #1a7f37;">Bob</span>
+        <span class="actor-tag" style="background: #0969da;">Backend</span>
+      </div>
+      <p>Bob opens "Pending Approvals" tab for P1 on a different laptop. Frontend hits <code>GET /pharmacies/P1/approvals</code>. Sees Alice's pending <code>submit-claim</code> in the queue. Clicks "Approve."</p>
+    </div>
+    <div class="step-detail-content" data-step="11">
+      <h4>Step 11 — Approval-decide runs the role check</h4>
+      <div class="step-actor-row">
+        <span class="actor-tag" style="background: #1a7f37;">Bob</span>
+        <span class="actor-tag" style="background: #0969da;">Backend</span>
+        <span class="actor-tag" style="background: #57606a;">Storage</span>
+      </div>
+      <p><code>POST /pharmacies/P1/approvals/{aid}/decide</code> with Bob's bearer.</p>
+      <ul>
+        <li>Decoded JWT — Bob is in OrgX</li>
+        <li>Bob's <code>pharmacy_id == approval.pharmacy_id</code> (both P1)</li>
+        <li>Bob's roles {pharmacist} ∩ required {pharmacist, billing_admin, admin} ≠ ∅</li>
+      </ul>
+      <p>DB write: <code>{decided_by: bob, decided_at: now, decision: approve}</code>. Audit event: <code>approval_decided</code> with <strong>both</strong> initiator (Alice) and approver (Bob). Inngest event dispatched: <code>agi/cold_approval_requested</code>.</p>
+    </div>
+    <div class="step-detail-content" data-step="12">
+      <h4>Step 12 — Inngest cold-revive executes the parked command</h4>
+      <div class="step-actor-row">
+        <span class="actor-tag" style="background: #57606a;">Inngest</span>
+        <span class="actor-tag" style="background: #8250df;">SDK</span>
+      </div>
+      <ul>
+        <li>Reads OrgX DB → finds session, finds approval, reads workspace path from <code>extra_data["workspace"]</code></li>
+        <li>Workspace lives on shared FS — Inngest worker reads it regardless of replica</li>
+        <li>Acquires lease (<code>force=true</code> since prior lease released)</li>
+        <li>Executes <code>submit-claim</code> via <code>asyncio.create_subprocess_shell</code> with a freshly minted bearer</li>
+        <li>Spawns new SDK client with <code>resume=session_id</code> + synthetic user-turn carrying real <code>tool_result</code></li>
+      </ul>
+    </div>
+    <div class="step-detail-content" data-step="13">
+      <h4>Step 13 — Session resumes, completes, and merges memories</h4>
+      <div class="step-actor-row">
+        <span class="actor-tag" style="background: #8250df;">SDK</span>
+        <span class="actor-tag" style="background: #57606a;">Storage</span>
+      </div>
+      <p>Orchestrator sees <code>submit-claim</code> succeeded. Continues to fulfillment, shipping. On <code>finalize_session</code>:</p>
+      <ul>
+        <li>Memory merge: workspace <code>memories/</code> diff appended to canonical store with <code>&lt;!-- entry: actor=alice ... --&gt;</code> blocks</li>
+        <li>Audit events flushed (including the alice→bob approval handoff trail)</li>
+        <li>Workspace <code>rmtree</code>'d</li>
+        <li>Lease released</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout">
+    Every cross-cutting concern composes cleanly. <strong>No special-case logic for "this happened across two machines"</strong> — that's the default behavior of the architecture.
+  </div>
+</section>
+
+<!-- ============================================================ HITL -->
+<section class="panel" data-panel="hitl">
+  <h2>HITL — pharmacy-queue model</h2>
+  <p>HITL approvals and questions are <strong>workflow-agnostic</strong>. The protocol is shared. Surfacing them at pharmacy level (rather than session level) makes cross-machine handoff trivial.</p>
+
+  <h3>The pharmacy approval queue</h3>
+  <pre>┌──────────────────────────────────────────────────────────┐
+│  Pharmacy P1 — Pending Approvals                         │
+│  (visible to any qualified user at this pharmacy)        │
+├──────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────┐  ┌────────────────────┐ │
+│  │ rx-flow session             │  │ claims-flow session│ │
+│  │ wants submit-claim          │  │ wants              │ │
+│  │ initiator: Alice (tech)     │  │ submit-medical-... │ │
+│  │ required_roles:             │  │ initiator: Bob (t) │ │
+│  │  {pharm, billing, admin}    │  │ required_roles:    │ │
+│  └─────────────────────────────┘  │  {billing, admin}  │ │
+│                                   └────────────────────┘ │
+└──────────────────────────────────────────────────────────┘
+                          ↓
+              Both rows in same DB table:
+              agi_pending_approvals (per org)
+                  keyed by pharmacy_id
+
+       Decided by any user at this pharmacy whose
+       roles match the row's required_roles set.</pre>
+
+  <h3>Hot vs cold path — same outcome, different timing</h3>
+  <table>
+    <tr><th>Path</th><th>When</th><th>Mechanism</th></tr>
+    <tr>
+      <td><strong>Hot</strong></td>
+      <td>Approver decides within 60s</td>
+      <td>In-memory <code>ToolApprovalGate.wait_for_decision_or_timeout</code> resolves directly. SDK subprocess never exits. Session continues immediately.</td>
+    </tr>
+    <tr>
+      <td><strong>Cold</strong></td>
+      <td>Hot window elapses, decision arrives later</td>
+      <td>Subprocess exits. Status = <code>waiting_cold</code>. When approver decides, Inngest <code>func_cold_approval_drain</code> reads DB, executes the parked command, spawns fresh SDK client with <code>resume=session_id</code>, injects synthetic <code>tool_result</code>.</td>
+    </tr>
+  </table>
+
+  <h3>Audit trail captures both actors</h3>
+  <pre>{
+  "event": "approval_decided",
+  "approval_id": "a-7f2e...",
+  "session_id": "s-8f3a...",
+  "pharmacy_id": "P1",
+  "workflow": "rx-flow",
+
+  "initiator": {
+    "actor_id": "alice@orgX.io",
+    "role": "technician",
+    "machine_id": "laptop_1"
+  },
+
+  "approver": {
+    "actor_id": "bob@orgX.io",
+    "role": "pharmacist",
+    "machine_id": "laptop_3"
+  },
+
+  "verb": "submit-claim",
+  "command_summary": "restish carelink submit-claim --rx-id=...",
+  "decision": "approve",
+  "required_roles": ["pharmacist", "billing_admin", "admin"],
+  "approver_role_check": "passed",
+  "ts": "2026-04-28T14:14:30Z"
+}</pre>
+
+  <h3>Why pharmacy queue beats session queue</h3>
+  <ul>
+    <li><strong>Cross-machine "for free"</strong> — any qualified user at the pharmacy sees the approval, regardless of which machine the originating session ran on.</li>
+    <li><strong>Workflow-agnostic</strong> — same UI surface for rx-flow, claims-flow, and any future workflow.</li>
+    <li><strong>Compliance-friendly</strong> — clear separation of duties: initiator and approver are different roles, both audited.</li>
+    <li><strong>Resilient to lease handoff</strong> — Alice's machine doesn't need to be running for approval to land.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ CODE MAP -->
+<section class="panel" data-panel="codemap">
+  <h2>Module map — new vs extend vs existing</h2>
+  <p>Click any module to highlight its dependencies. Color codes the lifecycle status.</p>
+
+  <div class="codemap-container">
+    <svg class="codemap-svg" viewBox="0 0 920 540" xmlns="http://www.w3.org/2000/svg" id="codemap-svg">
+      <defs>
+        <marker id="cm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+        </marker>
+        <marker id="cm-arrow-hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#0969da"/>
+        </marker>
+      </defs>
+
+      <!-- Row labels -->
+      <text x="10" y="40" font-size="10.5" font-weight="600" fill="#8c959f" text-transform="uppercase">HTTP</text>
+      <text x="10" y="125" font-size="10.5" font-weight="600" fill="#8c959f">ORCHESTRATION</text>
+      <text x="10" y="215" font-size="10.5" font-weight="600" fill="#8c959f">NEW SERVICES</text>
+      <text x="10" y="325" font-size="10.5" font-weight="600" fill="#8c959f">EXISTING</text>
+      <text x="10" y="435" font-size="10.5" font-weight="600" fill="#8c959f">EXTERNAL</text>
+
+      <!-- Default arrows (drawn first, under boxes) -->
+      <g class="cm-arrows">
+        <!-- routers/agi.py → workflows/selector -->
+        <path class="module-arrow" d="M 460 60 Q 460 90 280 110" data-from="routers" data-to="workflows-selector" marker-end="url(#cm-arrow)"/>
+        <!-- routers/agi.py → service.py -->
+        <path class="module-arrow" d="M 480 60 Q 530 90 660 110" data-from="routers" data-to="service" marker-end="url(#cm-arrow)"/>
+        <!-- routers/agi.py → hitl/approvals_resource -->
+        <path class="module-arrow" d="M 500 60 Q 550 130 540 200" data-from="routers" data-to="hitl-approvals" marker-end="url(#cm-arrow)"/>
+        <!-- workflows/selector → workflows/registry -->
+        <path class="module-arrow" d="M 220 160 Q 180 180 90 200" data-from="workflows-selector" data-to="workflows-registry" marker-end="url(#cm-arrow)"/>
+        <!-- workflows/selector → permissions/projector -->
+        <path class="module-arrow" d="M 240 160 Q 240 180 240 200" data-from="workflows-selector" data-to="permissions" marker-end="url(#cm-arrow)"/>
+        <!-- workflows/selector → memory/store -->
+        <path class="module-arrow" d="M 260 160 Q 320 180 380 200" data-from="workflows-selector" data-to="memory" marker-end="url(#cm-arrow)"/>
+        <!-- service.py → sessions/lease -->
+        <path class="module-arrow" d="M 660 160 Q 700 180 740 200" data-from="service" data-to="sessions-lease" marker-end="url(#cm-arrow)"/>
+        <!-- service.py → hitl/approvals_resource -->
+        <path class="module-arrow" d="M 660 160 Q 600 180 540 200" data-from="service" data-to="hitl-approvals" marker-end="url(#cm-arrow)"/>
+        <!-- service.py → memory/store -->
+        <path class="module-arrow" d="M 660 160 Q 520 180 400 200" data-from="service" data-to="memory" marker-end="url(#cm-arrow)"/>
+        <!-- service.py → tools.py -->
+        <path class="module-arrow" d="M 700 160 Q 700 240 320 310" data-from="service" data-to="tools" marker-end="url(#cm-arrow)"/>
+        <!-- service.py → agents/registry -->
+        <path class="module-arrow" d="M 660 160 Q 540 240 170 310" data-from="service" data-to="agents-registry" marker-end="url(#cm-arrow)"/>
+        <!-- service.py → drain -->
+        <path class="module-arrow" d="M 720 160 Q 720 240 510 310" data-from="service" data-to="drain" marker-end="url(#cm-arrow)"/>
+
+        <!-- permissions → Permit.io -->
+        <path class="module-arrow" d="M 240 250 Q 200 300 90 410" data-from="permissions" data-to="permit-io" marker-end="url(#cm-arrow)"/>
+        <!-- memory → Shared FS -->
+        <path class="module-arrow" d="M 400 250 Q 400 320 400 410" data-from="memory" data-to="shared-fs" marker-end="url(#cm-arrow)"/>
+        <!-- sessions/lease → Org DB -->
+        <path class="module-arrow" d="M 740 250 Q 660 330 560 410" data-from="sessions-lease" data-to="org-db" marker-end="url(#cm-arrow)"/>
+        <!-- hitl/approvals → Org DB -->
+        <path class="module-arrow" d="M 540 250 Q 550 330 560 410" data-from="hitl-approvals" data-to="org-db" marker-end="url(#cm-arrow)"/>
+        <!-- hitl/approvals → Inngest -->
+        <path class="module-arrow" d="M 560 250 Q 400 330 240 410" data-from="hitl-approvals" data-to="inngest" marker-end="url(#cm-arrow)"/>
+        <!-- tools.py → contracts -->
+        <path class="module-arrow" d="M 320 360 Q 450 380 660 410" data-from="tools" data-to="org-db" marker-end="url(#cm-arrow)"/>
+        <!-- tools → contracts/rx_flow (existing) -->
+        <path class="module-arrow" d="M 360 360 Q 540 380 700 360" data-from="tools" data-to="contracts" marker-end="url(#cm-arrow)"/>
+        <!-- agents/registry depends on contracts -->
+        <path class="module-arrow" d="M 200 360 Q 450 380 660 360" data-from="agents-registry" data-to="contracts" marker-end="url(#cm-arrow)"/>
+        <!-- workflows/registry → agents/registry -->
+        <path class="module-arrow" d="M 90 250 Q 100 300 170 310" data-from="workflows-registry" data-to="agents-registry" marker-end="url(#cm-arrow)"/>
+        <!-- drain → org-db -->
+        <path class="module-arrow" d="M 510 360 Q 520 380 540 410" data-from="drain" data-to="org-db" marker-end="url(#cm-arrow)"/>
+        <!-- drain → GCS -->
+        <path class="module-arrow" d="M 530 360 Q 600 380 720 410" data-from="drain" data-to="gcs" marker-end="url(#cm-arrow)"/>
+      </g>
+
+      <!-- HTTP layer -->
+      <g class="module-box" data-module="routers">
+        <rect class="module-rect extend" x="395" y="20" width="160" height="42" rx="6"/>
+        <text class="module-label" x="475" y="38" text-anchor="middle">routers/agi.py</text>
+        <text class="module-sublabel" x="475" y="54" text-anchor="middle">extend (HTTP surface)</text>
+      </g>
+
+      <!-- Orchestration -->
+      <g class="module-box" data-module="workflows-selector">
+        <rect class="module-rect new" x="160" y="110" width="160" height="48" rx="6"/>
+        <text class="module-label" x="240" y="130" text-anchor="middle">workflows/selector</text>
+        <text class="module-sublabel" x="240" y="148" text-anchor="middle">workflow + invoker → session</text>
+      </g>
+      <g class="module-box" data-module="service">
+        <rect class="module-rect extend" x="580" y="110" width="160" height="48" rx="6"/>
+        <text class="module-label" x="660" y="130" text-anchor="middle">service.py</text>
+        <text class="module-sublabel" x="660" y="148" text-anchor="middle">thin orchestrator</text>
+      </g>
+
+      <!-- NEW services row -->
+      <g class="module-box" data-module="workflows-registry">
+        <rect class="module-rect new" x="20" y="200" width="140" height="50" rx="6"/>
+        <text class="module-label" x="90" y="221" text-anchor="middle">workflows/registry</text>
+        <text class="module-sublabel" x="90" y="237" text-anchor="middle">YAML loader + validator</text>
+      </g>
+      <g class="module-box" data-module="permissions">
+        <rect class="module-rect new" x="170" y="200" width="140" height="50" rx="6"/>
+        <text class="module-label" x="240" y="221" text-anchor="middle">permissions/</text>
+        <text class="module-sublabel" x="240" y="237" text-anchor="middle">projector + matrix</text>
+      </g>
+      <g class="module-box" data-module="memory">
+        <rect class="module-rect new" x="320" y="200" width="160" height="50" rx="6"/>
+        <text class="module-label" x="400" y="221" text-anchor="middle">memory/</text>
+        <text class="module-sublabel" x="400" y="237" text-anchor="middle">selector + merger + ttl</text>
+      </g>
+      <g class="module-box" data-module="hitl-approvals">
+        <rect class="module-rect new" x="490" y="200" width="160" height="50" rx="6"/>
+        <text class="module-label" x="570" y="221" text-anchor="middle">hitl/</text>
+        <text class="module-sublabel" x="570" y="237" text-anchor="middle">approvals + question gates</text>
+      </g>
+      <g class="module-box" data-module="sessions-lease">
+        <rect class="module-rect new" x="660" y="200" width="160" height="50" rx="6"/>
+        <text class="module-label" x="740" y="221" text-anchor="middle">sessions/lease</text>
+        <text class="module-sublabel" x="740" y="237" text-anchor="middle">single-writer + take-over</text>
+      </g>
+
+      <!-- Existing modules row -->
+      <g class="module-box" data-module="agents-registry">
+        <rect class="module-rect existing" x="100" y="310" width="140" height="48" rx="6"/>
+        <text class="module-label" x="170" y="330" text-anchor="middle">agents/registry</text>
+        <text class="module-sublabel" x="170" y="346" text-anchor="middle">expert MD loader</text>
+      </g>
+      <g class="module-box" data-module="tools">
+        <rect class="module-rect existing" x="250" y="310" width="140" height="48" rx="6"/>
+        <text class="module-label" x="320" y="330" text-anchor="middle">tools.py</text>
+        <text class="module-sublabel" x="320" y="346" text-anchor="middle">invoke_expert MCP</text>
+      </g>
+      <g class="module-box" data-module="drain">
+        <rect class="module-rect existing" x="430" y="310" width="140" height="48" rx="6"/>
+        <text class="module-label" x="500" y="330" text-anchor="middle">drain.py</text>
+        <text class="module-sublabel" x="500" y="346" text-anchor="middle">SDK message loop</text>
+      </g>
+      <g class="module-box" data-module="contracts">
+        <rect class="module-rect existing" x="610" y="310" width="180" height="48" rx="6"/>
+        <text class="module-label" x="700" y="330" text-anchor="middle">contracts/rx_flow</text>
+        <text class="module-sublabel" x="700" y="346" text-anchor="middle">Pydantic typed I/O</text>
+      </g>
+
+      <!-- External / data -->
+      <g class="module-box" data-module="permit-io">
+        <rect class="module-rect external" x="20" y="410" width="140" height="48" rx="6"/>
+        <text class="module-label" x="90" y="430" text-anchor="middle">Permit.io</text>
+        <text class="module-sublabel" x="90" y="446" text-anchor="middle">RBAC source of truth</text>
+      </g>
+      <g class="module-box" data-module="inngest">
+        <rect class="module-rect external" x="170" y="410" width="140" height="48" rx="6"/>
+        <text class="module-label" x="240" y="430" text-anchor="middle">Inngest</text>
+        <text class="module-sublabel" x="240" y="446" text-anchor="middle">cold-revive durability</text>
+      </g>
+      <g class="module-box" data-module="shared-fs">
+        <rect class="module-rect external" x="320" y="410" width="160" height="48" rx="6"/>
+        <text class="module-label" x="400" y="430" text-anchor="middle">Shared FS</text>
+        <text class="module-sublabel" x="400" y="446" text-anchor="middle">workspace + memory</text>
+      </g>
+      <g class="module-box" data-module="org-db">
+        <rect class="module-rect external" x="490" y="410" width="140" height="48" rx="6"/>
+        <text class="module-label" x="560" y="430" text-anchor="middle">Org DB (per org)</text>
+        <text class="module-sublabel" x="560" y="446" text-anchor="middle">sessions, audit, approvals</text>
+      </g>
+      <g class="module-box" data-module="gcs">
+        <rect class="module-rect external" x="660" y="410" width="140" height="48" rx="6"/>
+        <text class="module-label" x="730" y="430" text-anchor="middle">GCS (per org)</text>
+        <text class="module-sublabel" x="730" y="446" text-anchor="middle">transcripts + skills</text>
+      </g>
+
+      <!-- Legend annotations -->
+      <text x="10" y="510" font-size="11" fill="#8c959f" font-style="italic">Click any module to highlight its dependencies. Click again to clear.</text>
+    </svg>
+
+    <div class="codemap-legend">
+      <div class="legend-item"><span class="legend-swatch new"></span>New module — does not exist today</div>
+      <div class="legend-item"><span class="legend-swatch extend"></span>Extends existing — adds new endpoints / behavior</div>
+      <div class="legend-item"><span class="legend-swatch existing"></span>Existing — kept as-is or refactored slightly</div>
+      <div class="legend-item"><span class="legend-swatch external"></span>External / data layer</div>
+    </div>
+  </div>
+
+  <div class="module-detail-card" id="module-detail-card">
+    <div class="module-detail-content active" data-module="default">
+      <h4>Click a module above for details</h4>
+      <p style="color: var(--text-muted); margin: 0;">Selecting a module highlights its dependencies (incoming and outgoing arrows) and dims the rest. Click the same module again or any other module to switch.</p>
+    </div>
+    <div class="module-detail-content" data-module="routers">
+      <h4>routers/agi.py — extend</h4>
+      <p>HTTP surface. Already exists at 1,675 LoC. Extends with: org-routing middleware (delegated), workflow-listing endpoints, pharmacy-scoped approvals endpoints, lease endpoints. Logic stays thin — delegates to service.py and the new modules.</p>
+    </div>
+    <div class="module-detail-content" data-module="workflows-selector">
+      <h4>workflows/selector — NEW</h4>
+      <p>Resolves <em>(workflow_id, invoker, pharmacy_id)</em> into a fully-projected session config: which experts are enabled, which memory keys to copy, which approval policies apply, what orchestrator prompt to use. Called once at session creation. Pure function — consumes registry + projector + memory store + sessions/lease.</p>
+    </div>
+    <div class="module-detail-content" data-module="service">
+      <h4>service.py — extend (thinning)</h4>
+      <p>Today: 2,011 LoC god class holding everything. Target: ~500-700 LoC orchestrator that delegates to modules. <code>resume_with_answer</code> + <code>resume_with_approval_result</code> collapse to a single <code>resume_with_synthetic_turn</code> (~200 LoC saved). System-prompt construction moves to workflows/. Memory snapshot logic moves to memory/. Lease logic moves to sessions/lease.</p>
+    </div>
+    <div class="module-detail-content" data-module="workflows-registry">
+      <h4>workflows/registry — NEW</h4>
+      <p>Loads + validates YAML manifests under <code>workflows/definitions/</code>. Validates: every referenced expert exists in agents/registry; every referenced restish verb is known; required_roles are valid; orchestrator prompt MD exists. Idempotent — same YAML, same registry state.</p>
+    </div>
+    <div class="module-detail-content" data-module="permissions">
+      <h4>permissions/ — NEW</h4>
+      <p>Three files: <code>projector.py</code> (Permit.io → InvokerContext), <code>matrix.py</code> (role × verb data shape with org overrides), <code>audit.py</code> (writes permission-check events). Cached projection per session; refresh on Permit.io change events.</p>
+    </div>
+    <div class="module-detail-content" data-module="memory">
+      <h4>memory/ — NEW</h4>
+      <p>Four files: <code>store.py</code> (org/pharmacy path resolution), <code>selector.py</code> (workflow + role + pharmacy → keys to snapshot), <code>merger.py</code> (workspace diff → canonical append-only entry), <code>ttl.py</code> (Inngest cron sweeper). Implements the two-tier model: canonical store + per-session projection.</p>
+    </div>
+    <div class="module-detail-content" data-module="hitl-approvals">
+      <h4>hitl/ — extracted from hooks.py + extended</h4>
+      <p>Today's <code>UserQuestionGate</code> + <code>ToolApprovalGate</code> moved here. NEW: <code>approvals_resource.py</code> exposes pharmacy-scoped approval queue as a queryable HTTP resource. Decide endpoint runs role check; audits both initiator and approver.</p>
+    </div>
+    <div class="module-detail-content" data-module="sessions-lease">
+      <h4>sessions/lease.py — NEW</h4>
+      <p>Single-writer DB-backed lease with heartbeat (15s extend, 60s expiry). Acquire, force-take-over, release flows. Replaces today's in-memory <code>cl._agi_clients</code> dict. Foundation for multi-replica deploy.</p>
+    </div>
+    <div class="module-detail-content" data-module="agents-registry">
+      <h4>agents/registry — existing</h4>
+      <p>Already at 442 LoC. 4 surviving validation gates. Will be invoked by workflows/registry to verify expert references, but otherwise unchanged.</p>
+    </div>
+    <div class="module-detail-content" data-module="tools">
+      <h4>tools.py — existing</h4>
+      <p>1,173 LoC. Holds <code>invoke_expert</code> MCP tool, <code>_spawn_expert_agent</code>, retry layers. Per the Phase D spike, these stay canonical; the dormant <code>agents=</code> wiring at <code>service.py:1680-1691</code> can be deleted (-65 LoC).</p>
+    </div>
+    <div class="module-detail-content" data-module="drain">
+      <h4>drain.py — existing</h4>
+      <p>285 LoC. Shared headless <code>receive_response()</code> driver for live + cold-revive paths. Used by Option A asyncio task, Option C Inngest function, and the live-turn SSE pump.</p>
+    </div>
+    <div class="module-detail-content" data-module="contracts">
+      <h4>contracts/rx_flow.py — existing</h4>
+      <p>908 LoC, 16 typed I/O contracts. Output side deliberately loose. Stays as the source of truth for expert I/O. New workflows declare their own contracts file when their experts have new contract shapes.</p>
+    </div>
+    <div class="module-detail-content" data-module="permit-io">
+      <h4>Permit.io — external (existing)</h4>
+      <p>Source of truth for role × verb policy. AGI calls via SDK at session start to project permissions. Already in use for endpoint-layer RBAC.</p>
+    </div>
+    <div class="module-detail-content" data-module="inngest">
+      <h4>Inngest — external (existing)</h4>
+      <p>Durable function runtime. Today hosts <code>func_cold_revive_drain</code> + <code>func_cold_approval_drain</code>. Will additionally host the memory TTL sweeper cron.</p>
+    </div>
+    <div class="module-detail-content" data-module="shared-fs">
+      <h4>Shared FS — NEW infrastructure</h4>
+      <p>Mount point on every backend replica. Holds workspace tmpdirs + canonical memory store. Per-org root partitions. Recommended substrate: GCP Filestore (managed NFS).</p>
+    </div>
+    <div class="module-detail-content" data-module="org-db">
+      <h4>Org DB — per-tenant</h4>
+      <p>One DB per org. Holds <code>agi_sessions</code> (with new lease columns), <code>agi_pending_approvals</code> (NEW), audit events, permission overrides. Resolved by org-routing middleware from JWT claim.</p>
+    </div>
+    <div class="module-detail-content" data-module="gcs">
+      <h4>GCS — per-tenant</h4>
+      <p>One bucket prefix per org. Holds finalized transcripts, skill bodies, skill proposals. Already in use today.</p>
+    </div>
+  </div>
+
+  <h3>Suggested sequencing</h3>
+  <ol>
+    <li><strong>Workflows-as-first-class</strong> (foundation; everything downstream slots in)</li>
+    <li><strong>Permissions projector + matrix</strong> (largest immediate security gain)</li>
+    <li><strong>Pharmacy-level approvals resource</strong> (unblocks cross-machine HITL)</li>
+    <li><strong>Memory canonical store + merger + TTL</strong> (turns aspirational MD prose into real cross-run learning)</li>
+    <li><strong>Session lease + shared FS migration</strong> (unblocks multi-replica deploy)</li>
+    <li><strong>service.py decomposition</strong> (retroactively cleans up as logic moves out)</li>
+  </ol>
+</section>
+
+<!-- ============================================================ DATA FLOW -->
+<section class="panel" data-panel="dataflow">
+  <h2>Data flow — four perspectives</h2>
+  <p>Same architecture, four lenses. Click any stage to see what it produces and consumes. Toggle the views below to see how a single user interaction propagates through the system.</p>
+
+  <div class="dataflow-subtabs" id="dataflow-subtabs">
+    <button data-flow="request" class="active">Request flow</button>
+    <button data-flow="memory">Memory flow</button>
+    <button data-flow="permission">Permission flow</button>
+    <button data-flow="audit">Audit flow</button>
+  </div>
+
+  <!-- Request flow -->
+  <div class="dataflow-subpanel active" data-flow-panel="request">
+    <h3>Request flow — what happens when Alice clicks "start session"</h3>
+    <svg class="dataflow-svg" viewBox="0 0 1080 380" xmlns="http://www.w3.org/2000/svg" id="flow-request-svg">
+      <defs>
+        <marker id="df-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+        </marker>
+      </defs>
+
+      <!-- Stage 1: Browser -->
+      <g class="flow-stage" data-stage="r1">
+        <rect class="flow-stage-rect input" x="20" y="40" width="140" height="60" rx="6"/>
+        <text class="flow-stage-label" x="90" y="62" text-anchor="middle">Browser</text>
+        <text class="flow-stage-sublabel" x="90" y="78" text-anchor="middle">JWT in Authorization</text>
+        <text class="flow-stage-sublabel" x="90" y="92" text-anchor="middle">header</text>
+      </g>
+      <path class="flow-arrow" d="M 165 70 L 215 70" marker-end="url(#df-arrow)"/>
+      <text class="flow-arrow-label" x="190" y="62" text-anchor="middle">POST /sessions</text>
+
+      <!-- Stage 2: Org routing -->
+      <g class="flow-stage" data-stage="r2">
+        <rect class="flow-stage-rect process" x="220" y="40" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="300" y="62" text-anchor="middle">Org routing</text>
+        <text class="flow-stage-sublabel" x="300" y="78" text-anchor="middle">JWT.org_id →</text>
+        <text class="flow-stage-sublabel" x="300" y="92" text-anchor="middle">conn string</text>
+      </g>
+      <path class="flow-arrow" d="M 385 70 L 435 70" marker-end="url(#df-arrow)"/>
+
+      <!-- Stage 3: Auth + actor -->
+      <g class="flow-stage" data-stage="r3">
+        <rect class="flow-stage-rect process" x="440" y="40" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="520" y="62" text-anchor="middle">Auth + actor</text>
+        <text class="flow-stage-sublabel" x="520" y="78" text-anchor="middle">WorkOS validate</text>
+        <text class="flow-stage-sublabel" x="520" y="92" text-anchor="middle">→ actor_id</text>
+      </g>
+      <path class="flow-arrow" d="M 605 70 L 655 70" marker-end="url(#df-arrow)"/>
+
+      <!-- Stage 4: Workflow selector -->
+      <g class="flow-stage" data-stage="r4">
+        <rect class="flow-stage-rect process" x="660" y="40" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="740" y="62" text-anchor="middle">Workflow selector</text>
+        <text class="flow-stage-sublabel" x="740" y="78" text-anchor="middle">5 access checks</text>
+        <text class="flow-stage-sublabel" x="740" y="92" text-anchor="middle">→ session config</text>
+      </g>
+      <path class="flow-arrow" d="M 825 70 L 875 70" marker-end="url(#df-arrow)"/>
+
+      <!-- Stage 5: SDK spawn -->
+      <g class="flow-stage" data-stage="r5">
+        <rect class="flow-stage-rect output" x="880" y="40" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="960" y="62" text-anchor="middle">SDK orchestrator</text>
+        <text class="flow-stage-sublabel" x="960" y="78" text-anchor="middle">spawned with scoped</text>
+        <text class="flow-stage-sublabel" x="960" y="92" text-anchor="middle">tools + agents</text>
+      </g>
+
+      <!-- Down arrow -->
+      <path class="flow-arrow" d="M 960 105 L 960 145" marker-end="url(#df-arrow)"/>
+
+      <!-- Row 2: Stage 6 -->
+      <g class="flow-stage" data-stage="r6">
+        <rect class="flow-stage-rect process" x="880" y="150" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="960" y="172" text-anchor="middle">Expert subprocess</text>
+        <text class="flow-stage-sublabel" x="960" y="188" text-anchor="middle">spawn via</text>
+        <text class="flow-stage-sublabel" x="960" y="202" text-anchor="middle">invoke_expert MCP</text>
+      </g>
+      <path class="flow-arrow" d="M 875 180 L 825 180" marker-end="url(#df-arrow)"/>
+
+      <!-- Stage 7: PreToolUse -->
+      <g class="flow-stage" data-stage="r7">
+        <rect class="flow-stage-rect gate" x="660" y="150" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="740" y="172" text-anchor="middle">restish_guard</text>
+        <text class="flow-stage-sublabel" x="740" y="188" text-anchor="middle">PreToolUse hook</text>
+        <text class="flow-stage-sublabel" x="740" y="202" text-anchor="middle">role × verb check</text>
+      </g>
+      <path class="flow-arrow" d="M 655 180 L 605 180" marker-end="url(#df-arrow)"/>
+
+      <!-- Stage 8: Bash exec -->
+      <g class="flow-stage" data-stage="r8">
+        <rect class="flow-stage-rect process" x="440" y="150" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="520" y="172" text-anchor="middle">Bash exec</text>
+        <text class="flow-stage-sublabel" x="520" y="188" text-anchor="middle">restish carelink</text>
+        <text class="flow-stage-sublabel" x="520" y="202" text-anchor="middle">&lt;verb&gt;</text>
+      </g>
+      <path class="flow-arrow" d="M 435 180 L 385 180" marker-end="url(#df-arrow)"/>
+
+      <!-- Stage 9: Backend RBAC -->
+      <g class="flow-stage" data-stage="r9">
+        <rect class="flow-stage-rect gate" x="220" y="150" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="300" y="172" text-anchor="middle">Backend RBAC</text>
+        <text class="flow-stage-sublabel" x="300" y="188" text-anchor="middle">Permit.io ABAC</text>
+        <text class="flow-stage-sublabel" x="300" y="202" text-anchor="middle">authoritative</text>
+      </g>
+      <path class="flow-arrow" d="M 215 180 L 165 180" marker-end="url(#df-arrow)"/>
+
+      <!-- Stage 10: API endpoint -->
+      <g class="flow-stage" data-stage="r10">
+        <rect class="flow-stage-rect store" x="20" y="150" width="140" height="60" rx="6"/>
+        <text class="flow-stage-label" x="90" y="172" text-anchor="middle">CareLink API</text>
+        <text class="flow-stage-sublabel" x="90" y="188" text-anchor="middle">handles request,</text>
+        <text class="flow-stage-sublabel" x="90" y="202" text-anchor="middle">writes Org DB</text>
+      </g>
+
+      <!-- Down arrow continuing -->
+      <path class="flow-arrow" d="M 90 215 L 90 255" marker-end="url(#df-arrow)"/>
+
+      <!-- Stage 11: SSE response back -->
+      <g class="flow-stage" data-stage="r11">
+        <rect class="flow-stage-rect output" x="20" y="260" width="140" height="60" rx="6"/>
+        <text class="flow-stage-label" x="90" y="282" text-anchor="middle">SSE stream</text>
+        <text class="flow-stage-sublabel" x="90" y="298" text-anchor="middle">tool_result back to</text>
+        <text class="flow-stage-sublabel" x="90" y="312" text-anchor="middle">orchestrator + UI</text>
+      </g>
+    </svg>
+
+    <div class="flow-detail-card" id="flow-request-detail">
+      <div class="flow-detail-content active" data-stage="default">
+        <h4>Request flow at a glance</h4>
+        <p>Click any stage above for details. The flow runs left-to-right top row (request goes in, session spawns), then right-to-left bottom row (a single restish call gates through 4 layers and hits the backend), then down to the SSE response.</p>
+      </div>
+      <div class="flow-detail-content" data-stage="r1"><h4>Browser</h4><p>Frontend holds Alice's WorkOS JWT (short-lived). Every API call carries it in the <code>Authorization</code> header. Browser knows the workflow_id + pharmacy_id from the session-creation form.</p></div>
+      <div class="flow-detail-content" data-stage="r2"><h4>Org routing middleware</h4><p>Reads <code>org_id</code> from JWT claim, looks up the control plane DB for that org's connection string, fs root, GCS bucket. Cached 5min. Injects org-scoped DB Session into request context. Unknown <code>org_id</code> → 404.</p></div>
+      <div class="flow-detail-content" data-stage="r3"><h4>Auth + actor resolution</h4><p>Existing WorkOS JWKS validation. Extracts <code>actor_id</code> (subject). Verifies expiry + audience. Standard FastAPI dependency.</p></div>
+      <div class="flow-detail-content" data-stage="r4"><h4>Workflow selector</h4><p>Five checks: org has workflow enabled, user role at pharmacy intersects required_roles, user is in PharmacyStaff, Permit.io projects permitted_verbs, expert set filtered. Produces a fully-resolved session config: pinned experts, memory snapshot keys, approval policies.</p></div>
+      <div class="flow-detail-content" data-stage="r5"><h4>SDK orchestrator</h4><p>Spawned with the projected scope: <code>allowed_tools</code> narrowed, <code>agents</code> dict containing only permitted experts, system prompt rendered from workflow's orchestrator_prompt template, workspace mounted with memory snapshot.</p></div>
+      <div class="flow-detail-content" data-stage="r6"><h4>Expert subprocess</h4><p>Orchestrator's LLM emits <code>invoke_expert(billing, payload)</code>. MCP tool spawns expert subprocess with its own scoped tool list. Each expert is a one-shot Claude SDK <code>query()</code> with the expert's MD body as system prompt.</p></div>
+      <div class="flow-detail-content" data-stage="r7"><h4>restish_guard PreToolUse hook</h4><p>Fires on every Bash invocation inside the expert. Two checks: (a) command verb in expert's allowed_restish_commands, (b) verb in invoker's permitted_verbs (with HITL routing if approval required). Deny → typed envelope; HITL → park.</p></div>
+      <div class="flow-detail-content" data-stage="r8"><h4>Bash exec</h4><p>Approved restish call runs in the workspace with HOME redirected, bearer token from <code>workspace/.config/restish/apis.json</code>. Output captured, returned as tool_result to the expert.</p></div>
+      <div class="flow-detail-content" data-stage="r9"><h4>Backend RBAC (authoritative)</h4><p>Permit.io ABAC at the endpoint. Verifies the bearer's subject can perform <code>action × resource</code> with the request's resource attributes (e.g., <code>pharmacy_id</code>). This is the single source of truth — even if AGI's projection is stale, this is correct.</p></div>
+      <div class="flow-detail-content" data-stage="r10"><h4>CareLink API endpoint</h4><p>Standard FastAPI route. Reads/writes the Org DB. The connection injected by org-routing middleware ensures cross-org isolation.</p></div>
+      <div class="flow-detail-content" data-stage="r11"><h4>SSE stream back</h4><p>Tool result flows back through the SDK to the orchestrator, which produces the next assistant turn. Streamed via SSE to the frontend. UI renders ChatThread blocks: tool_use, tool_result, expert_output_card, etc.</p></div>
+    </div>
+  </div>
+
+  <!-- Memory flow -->
+  <div class="dataflow-subpanel" data-flow-panel="memory">
+    <h3>Memory flow — canonical → snapshot → write → merge</h3>
+    <svg class="dataflow-svg" viewBox="0 0 1080 360" xmlns="http://www.w3.org/2000/svg" id="flow-memory-svg">
+      <!-- Top row: Session start -->
+      <text x="20" y="30" font-size="11.5" font-weight="600" fill="#8c959f">SESSION START</text>
+
+      <g class="flow-stage" data-stage="m1">
+        <rect class="flow-stage-rect store" x="20" y="50" width="160" height="70" rx="6"/>
+        <text class="flow-stage-label" x="100" y="74" text-anchor="middle">Canonical store</text>
+        <text class="flow-stage-sublabel" x="100" y="90" text-anchor="middle">/memory/&lt;org&gt;/...</text>
+        <text class="flow-stage-sublabel" x="100" y="106" text-anchor="middle">append-only entries</text>
+      </g>
+      <path class="flow-arrow" d="M 185 85 L 235 85" marker-end="url(#df-arrow)"/>
+      <text class="flow-arrow-label" x="210" y="76" text-anchor="middle">read</text>
+
+      <g class="flow-stage" data-stage="m2">
+        <rect class="flow-stage-rect process" x="240" y="50" width="180" height="70" rx="6"/>
+        <text class="flow-stage-label" x="330" y="74" text-anchor="middle">Memory selector</text>
+        <text class="flow-stage-sublabel" x="330" y="90" text-anchor="middle">workflow.scope ∩</text>
+        <text class="flow-stage-sublabel" x="330" y="106" text-anchor="middle">role × pharmacy</text>
+      </g>
+      <path class="flow-arrow" d="M 425 85 L 475 85" marker-end="url(#df-arrow)"/>
+      <text class="flow-arrow-label" x="450" y="76" text-anchor="middle">copy</text>
+
+      <g class="flow-stage" data-stage="m3">
+        <rect class="flow-stage-rect output" x="480" y="50" width="180" height="70" rx="6"/>
+        <text class="flow-stage-label" x="570" y="74" text-anchor="middle">Workspace memories/</text>
+        <text class="flow-stage-sublabel" x="570" y="90" text-anchor="middle">+ .memory-manifest.json</text>
+        <text class="flow-stage-sublabel" x="570" y="106" text-anchor="middle">snapshot record</text>
+      </g>
+      <path class="flow-arrow" d="M 665 85 L 715 85" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="m4">
+        <rect class="flow-stage-rect process" x="720" y="50" width="180" height="70" rx="6"/>
+        <text class="flow-stage-label" x="810" y="74" text-anchor="middle">Expert reads + writes</text>
+        <text class="flow-stage-sublabel" x="810" y="90" text-anchor="middle">to workspace dir</text>
+        <text class="flow-stage-sublabel" x="810" y="106" text-anchor="middle">freely during session</text>
+      </g>
+
+      <!-- Down arrow to bottom row -->
+      <path class="flow-arrow" d="M 810 125 L 810 175" marker-end="url(#df-arrow)"/>
+
+      <!-- Bottom row: Session end -->
+      <text x="20" y="170" font-size="11.5" font-weight="600" fill="#8c959f">SESSION END (finalize)</text>
+
+      <g class="flow-stage" data-stage="m5">
+        <rect class="flow-stage-rect gate" x="720" y="180" width="180" height="70" rx="6"/>
+        <text class="flow-stage-label" x="810" y="204" text-anchor="middle">Diff vs manifest</text>
+        <text class="flow-stage-sublabel" x="810" y="220" text-anchor="middle">extract added bytes</text>
+        <text class="flow-stage-sublabel" x="810" y="236" text-anchor="middle">per modified file</text>
+      </g>
+      <path class="flow-arrow" d="M 715 215 L 665 215" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="m6">
+        <rect class="flow-stage-rect process" x="480" y="180" width="180" height="70" rx="6"/>
+        <text class="flow-stage-label" x="570" y="204" text-anchor="middle">Merger wraps entry</text>
+        <text class="flow-stage-sublabel" x="570" y="220" text-anchor="middle">&lt;!-- entry: actor=...</text>
+        <text class="flow-stage-sublabel" x="570" y="236" text-anchor="middle">role=... ts=... --&gt;</text>
+      </g>
+      <path class="flow-arrow" d="M 475 215 L 425 215" marker-end="url(#df-arrow)"/>
+      <text class="flow-arrow-label" x="450" y="206" text-anchor="middle">append</text>
+
+      <g class="flow-stage" data-stage="m7">
+        <rect class="flow-stage-rect store" x="240" y="180" width="180" height="70" rx="6"/>
+        <text class="flow-stage-label" x="330" y="204" text-anchor="middle">Canonical store</text>
+        <text class="flow-stage-sublabel" x="330" y="220" text-anchor="middle">file grows by N entries</text>
+        <text class="flow-stage-sublabel" x="330" y="236" text-anchor="middle">never overwrites</text>
+      </g>
+      <path class="flow-arrow" d="M 235 215 L 185 215" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="m8">
+        <rect class="flow-stage-rect output" x="20" y="180" width="160" height="70" rx="6"/>
+        <text class="flow-stage-label" x="100" y="204" text-anchor="middle">workspace</text>
+        <text class="flow-stage-sublabel" x="100" y="220" text-anchor="middle">rmtree</text>
+        <text class="flow-stage-sublabel" x="100" y="236" text-anchor="middle">(scratch destroyed)</text>
+      </g>
+
+      <!-- TTL note at bottom -->
+      <text x="20" y="290" font-size="11.5" font-weight="600" fill="#8c959f">TTL SWEEPER (every 6h, Inngest cron)</text>
+      <g class="flow-stage" data-stage="m9">
+        <rect class="flow-stage-rect gate" x="20" y="300" width="200" height="48" rx="6"/>
+        <text class="flow-stage-label" x="120" y="320" text-anchor="middle">TTL sweep — 14 days</text>
+        <text class="flow-stage-sublabel" x="120" y="336" text-anchor="middle">prune old entries from canonical</text>
+      </g>
+    </svg>
+
+    <div class="flow-detail-card" id="flow-memory-detail">
+      <div class="flow-detail-content active" data-stage="default">
+        <h4>Memory flow at a glance</h4>
+        <p>Two halves: at session start, canonical → workspace projection. At session end, workspace → canonical merge (append-only). The TTL sweeper runs out-of-band on a cron, pruning entries older than 14 days from canonical files.</p>
+      </div>
+      <div class="flow-detail-content" data-stage="m1"><h4>Canonical store</h4><p>Path: <code>/memory/&lt;org_id&gt;/{org,pharmacy/&lt;P&gt;}/&lt;bucket&gt;/&lt;key&gt;.md</code>. Each .md file is a stack of <code>&lt;!-- entry: actor ... --&gt;</code> blocks in chronological append order. Read by every session at start; written by every session at end.</p></div>
+      <div class="flow-detail-content" data-stage="m2"><h4>Memory selector</h4><p>Computes which keys to copy: intersect <code>workflow.memory_scope.read</code> with role-permitted buckets at the session's pharmacy. Assistant role might exclude <code>patients/</code> entirely. Walks the canonical FS and selects matching files.</p></div>
+      <div class="flow-detail-content" data-stage="m3"><h4>Workspace memories/</h4><p>Selected files copied (or hardlinked) into <code>workspace/memories/</code>. Manifest written at <code>workspace/.memory-manifest.json</code>: list of keys included, list excluded by role, byte sizes, source mtimes, snapshot timestamp. The manifest IS the audit record.</p></div>
+      <div class="flow-detail-content" data-stage="m4"><h4>Expert reads + writes</h4><p>During the session, experts read these files like normal MD files. They append notes ("Patient routinely provides DOB transposed..."). They DON'T see the merge or TTL — they just see a per-key MD file.</p></div>
+      <div class="flow-detail-content" data-stage="m5"><h4>Diff vs manifest</h4><p>At session end, the merger compares each modified file to the snapshot byte range from the manifest. Anything past the snapshot is "new content from this session." Deletions or edits to pre-existing content are silently ignored — append-only invariant enforced here.</p></div>
+      <div class="flow-detail-content" data-stage="m6"><h4>Merger wraps entry</h4><p>The diff content is wrapped in <code>&lt;!-- entry: actor=&lt;sub&gt; role=&lt;role&gt; session=&lt;sid&gt; ts=&lt;iso&gt; --&gt;</code> ... <code>&lt;!-- /entry --&gt;</code>. Comment fences are human-readable; metadata is in-band. Workflow's <code>memory_scope.write</code> gates which buckets actually merge.</p></div>
+      <div class="flow-detail-content" data-stage="m7"><h4>Canonical store (post-merge)</h4><p>File grows by N entries. <code>open(path, "a")</code> with file lock. Two concurrent sessions merging the same file? Append in arrival order. No conflict resolution needed.</p></div>
+      <div class="flow-detail-content" data-stage="m8"><h4>Workspace rmtree</h4><p>Existing pattern from <code>finalize_session</code>. Deletes the entire workspace tmpdir. Memories already merged; transcript already uploaded; proposals already shipped.</p></div>
+      <div class="flow-detail-content" data-stage="m9"><h4>TTL sweeper</h4><p>Inngest cron, every 6h. Walks each org's memory tree. For each .md file: parses entries, drops those older than 14d, rewrites file with surviving entries (or deletes if empty), writes a <code>&lt;!-- swept: ... --&gt;</code> marker. Audit event per pharmacy with prune counts.</p></div>
+    </div>
+  </div>
+
+  <!-- Permission flow -->
+  <div class="dataflow-subpanel" data-flow-panel="permission">
+    <h3>Permission flow — JWT to enforced action</h3>
+    <svg class="dataflow-svg" viewBox="0 0 1080 380" xmlns="http://www.w3.org/2000/svg" id="flow-permission-svg">
+      <!-- Top row: identity → projection -->
+      <text x="20" y="30" font-size="11.5" font-weight="600" fill="#8c959f">SESSION CREATION (one-shot)</text>
+
+      <g class="flow-stage" data-stage="p1">
+        <rect class="flow-stage-rect input" x="20" y="50" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="100" y="72" text-anchor="middle">JWT</text>
+        <text class="flow-stage-sublabel" x="100" y="88" text-anchor="middle">{ sub, org_id, exp }</text>
+      </g>
+      <path class="flow-arrow" d="M 185 80 L 235 80" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="p2">
+        <rect class="flow-stage-rect process" x="240" y="50" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="320" y="72" text-anchor="middle">Permit.io</text>
+        <text class="flow-stage-sublabel" x="320" y="88" text-anchor="middle">role × verb policy</text>
+      </g>
+      <path class="flow-arrow" d="M 405 80 L 455 80" marker-end="url(#df-arrow)"/>
+      <text class="flow-arrow-label" x="430" y="72" text-anchor="middle">project</text>
+
+      <g class="flow-stage" data-stage="p3">
+        <rect class="flow-stage-rect output" x="460" y="50" width="200" height="60" rx="6"/>
+        <text class="flow-stage-label" x="560" y="72" text-anchor="middle">InvokerContext</text>
+        <text class="flow-stage-sublabel" x="560" y="88" text-anchor="middle">cached for session lifetime</text>
+      </g>
+      <path class="flow-arrow" d="M 665 80 L 715 80" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="p4">
+        <rect class="flow-stage-rect store" x="720" y="50" width="200" height="60" rx="6"/>
+        <text class="flow-stage-label" x="820" y="72" text-anchor="middle">Pinned on session row</text>
+        <text class="flow-stage-sublabel" x="820" y="88" text-anchor="middle">extra_data.invoker</text>
+      </g>
+
+      <!-- Down arrow -->
+      <path class="flow-arrow" d="M 820 115 L 820 165" marker-end="url(#df-arrow)"/>
+
+      <!-- Middle row: enforcement layers -->
+      <text x="20" y="160" font-size="11.5" font-weight="600" fill="#8c959f">ENFORCEMENT (every action)</text>
+
+      <g class="flow-stage" data-stage="p5">
+        <rect class="flow-stage-rect gate" x="720" y="170" width="200" height="60" rx="6"/>
+        <text class="flow-stage-label" x="820" y="192" text-anchor="middle">L2: Workflow startable</text>
+        <text class="flow-stage-sublabel" x="820" y="208" text-anchor="middle">required_roles ∩ user.roles</text>
+      </g>
+      <path class="flow-arrow" d="M 715 200 L 665 200" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="p6">
+        <rect class="flow-stage-rect gate" x="460" y="170" width="200" height="60" rx="6"/>
+        <text class="flow-stage-label" x="560" y="192" text-anchor="middle">L3: Expert invocable</text>
+        <text class="flow-stage-sublabel" x="560" y="208" text-anchor="middle">filter at MCP boundary</text>
+      </g>
+      <path class="flow-arrow" d="M 455 200 L 405 200" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="p7">
+        <rect class="flow-stage-rect gate" x="240" y="170" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="320" y="192" text-anchor="middle">L4: Verb permitted</text>
+        <text class="flow-stage-sublabel" x="320" y="208" text-anchor="middle">restish_guard hook</text>
+      </g>
+      <path class="flow-arrow" d="M 235 200 L 185 200" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="p8">
+        <rect class="flow-stage-rect gate" x="20" y="170" width="160" height="60" rx="6"/>
+        <text class="flow-stage-label" x="100" y="192" text-anchor="middle">L5: Approver auth</text>
+        <text class="flow-stage-sublabel" x="100" y="208" text-anchor="middle">role-aware decide</text>
+      </g>
+
+      <!-- Down arrow to L6 -->
+      <path class="flow-arrow" d="M 100 235 L 100 285" marker-end="url(#df-arrow)"/>
+
+      <!-- Bottom row: authoritative -->
+      <text x="20" y="280" font-size="11.5" font-weight="600" fill="#8c959f">AUTHORITATIVE (existing today)</text>
+
+      <g class="flow-stage" data-stage="p9">
+        <rect class="flow-stage-rect process" x="20" y="290" width="200" height="60" rx="6"/>
+        <text class="flow-stage-label" x="120" y="312" text-anchor="middle">L6: Backend RBAC</text>
+        <text class="flow-stage-sublabel" x="120" y="328" text-anchor="middle">Permit.io ABAC at endpoint</text>
+      </g>
+      <path class="flow-arrow" d="M 225 320 L 275 320" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="p10">
+        <rect class="flow-stage-rect output" x="280" y="290" width="200" height="60" rx="6"/>
+        <text class="flow-stage-label" x="380" y="312" text-anchor="middle">Action executes or 403</text>
+        <text class="flow-stage-sublabel" x="380" y="328" text-anchor="middle">audit trail recorded</text>
+      </g>
+    </svg>
+
+    <div class="flow-detail-card" id="flow-permission-detail">
+      <div class="flow-detail-content active" data-stage="default">
+        <h4>Permission flow at a glance</h4>
+        <p>One projection at session start, then six enforcement layers (L0-L6 from the Access Control tab). Layers 0-5 are fail-fast advisory; L6 is authoritative. The InvokerContext is the single object that flows through all checkpoints.</p>
+      </div>
+      <div class="flow-detail-content" data-stage="p1"><h4>JWT</h4><p>WorkOS-signed. Claims include <code>sub</code> (user id), <code>org_id</code> (which DB to use). Short-lived. Refreshed by the frontend.</p></div>
+      <div class="flow-detail-content" data-stage="p2"><h4>Permit.io</h4><p>Source of truth for role × verb × resource policy. AGI calls via SDK to query "what can this user do at this pharmacy?" Returns the projected permission set.</p></div>
+      <div class="flow-detail-content" data-stage="p3"><h4>InvokerContext</h4><p>Pydantic object: <code>{invoker_id, roles, pharmacy_ids, permitted_verbs: frozenset[VerbScope], permitted_experts, projected_at, ttl_seconds}</code>. Cached per-session. Refreshed on Permit.io change events.</p></div>
+      <div class="flow-detail-content" data-stage="p4"><h4>Pinned on session row</h4><p>Persisted to <code>extra_data.invoker</code> so cold-revive can read it without a fresh Permit.io call. Snapshot at session start; respects 4h ceiling for re-auth.</p></div>
+      <div class="flow-detail-content" data-stage="p5"><h4>L2: Workflow startable</h4><p>Three checks at <code>POST /sessions</code>: (1) org has workflow enabled, (2) user role at pharmacy intersects <code>workflow.required_roles_to_start</code>, (3) user is in PharmacyStaff at pharmacy.</p></div>
+      <div class="flow-detail-content" data-stage="p6"><h4>L3: Expert invocable</h4><p>Filter at session creation: workflow's expert list narrowed to those the invoker can use. Enforced at MCP <code>invoke_expert</code> handler — even if orchestrator tries an expert outside its scope, MCP rejects.</p></div>
+      <div class="flow-detail-content" data-stage="p7"><h4>L4: Verb permitted</h4><p>PreToolUse hook on Bash. On every <code>restish carelink &lt;verb&gt;</code> call, projects against role × verb matrix. Three outcomes: allow → run, HITL → park, deny → typed envelope. Audit event written.</p></div>
+      <div class="flow-detail-content" data-stage="p8"><h4>L5: Approver auth</h4><p><code>POST /pharmacies/{pid}/approvals/{aid}/decide</code>. Validates approver's pharmacy_id == approval.pharmacy_id AND approver.roles ∩ approval.required_roles ≠ ∅. Logs both initiator and approver.</p></div>
+      <div class="flow-detail-content" data-stage="p9"><h4>L6: Backend RBAC (authoritative)</h4><p>Existing Permit.io enforcement at the actual API endpoint. The single source of truth. If L0-L5 had any bug, this catches it. AGI's projection is fail-fast; this is final.</p></div>
+      <div class="flow-detail-content" data-stage="p10"><h4>Action executes or 403</h4><p>Either: action runs, response back to expert, audit event "tool_use" recorded; or 403, typed envelope, audit event "permission_denied" recorded.</p></div>
+    </div>
+  </div>
+
+  <!-- Audit flow -->
+  <div class="dataflow-subpanel" data-flow-panel="audit">
+    <h3>Audit flow — events to compliance reports</h3>
+    <svg class="dataflow-svg" viewBox="0 0 1080 320" xmlns="http://www.w3.org/2000/svg" id="flow-audit-svg">
+      <!-- Producers row -->
+      <text x="20" y="30" font-size="11.5" font-weight="600" fill="#8c959f">EVENT PRODUCERS</text>
+
+      <g class="flow-stage" data-stage="a1">
+        <rect class="flow-stage-rect input" x="20" y="50" width="140" height="50" rx="6"/>
+        <text class="flow-stage-label" x="90" y="72" text-anchor="middle">PreToolUse hook</text>
+        <text class="flow-stage-sublabel" x="90" y="88" text-anchor="middle">tool_use, deny</text>
+      </g>
+      <g class="flow-stage" data-stage="a2">
+        <rect class="flow-stage-rect input" x="170" y="50" width="140" height="50" rx="6"/>
+        <text class="flow-stage-label" x="240" y="72" text-anchor="middle">Memory selector</text>
+        <text class="flow-stage-sublabel" x="240" y="88" text-anchor="middle">memory_snapshot</text>
+      </g>
+      <g class="flow-stage" data-stage="a3">
+        <rect class="flow-stage-rect input" x="320" y="50" width="140" height="50" rx="6"/>
+        <text class="flow-stage-label" x="390" y="72" text-anchor="middle">Lease manager</text>
+        <text class="flow-stage-sublabel" x="390" y="88" text-anchor="middle">acquired/revoked</text>
+      </g>
+      <g class="flow-stage" data-stage="a4">
+        <rect class="flow-stage-rect input" x="470" y="50" width="140" height="50" rx="6"/>
+        <text class="flow-stage-label" x="540" y="72" text-anchor="middle">Approval gate</text>
+        <text class="flow-stage-sublabel" x="540" y="88" text-anchor="middle">decided</text>
+      </g>
+      <g class="flow-stage" data-stage="a5">
+        <rect class="flow-stage-rect input" x="620" y="50" width="140" height="50" rx="6"/>
+        <text class="flow-stage-label" x="690" y="72" text-anchor="middle">Memory merger</text>
+        <text class="flow-stage-sublabel" x="690" y="88" text-anchor="middle">memory_write</text>
+      </g>
+      <g class="flow-stage" data-stage="a6">
+        <rect class="flow-stage-rect input" x="770" y="50" width="140" height="50" rx="6"/>
+        <text class="flow-stage-label" x="840" y="72" text-anchor="middle">TTL sweeper</text>
+        <text class="flow-stage-sublabel" x="840" y="88" text-anchor="middle">memory_swept</text>
+      </g>
+
+      <!-- Converging arrows -->
+      <path class="flow-arrow" d="M 90 105 Q 90 130 460 145" marker-end="url(#df-arrow)"/>
+      <path class="flow-arrow" d="M 240 105 Q 240 130 470 145" marker-end="url(#df-arrow)"/>
+      <path class="flow-arrow" d="M 390 105 Q 390 130 480 145" marker-end="url(#df-arrow)"/>
+      <path class="flow-arrow" d="M 540 105 Q 540 130 490 145" marker-end="url(#df-arrow)"/>
+      <path class="flow-arrow" d="M 690 105 Q 690 130 500 145" marker-end="url(#df-arrow)"/>
+      <path class="flow-arrow" d="M 840 105 Q 840 130 510 145" marker-end="url(#df-arrow)"/>
+
+      <!-- Aggregator -->
+      <g class="flow-stage" data-stage="a7">
+        <rect class="flow-stage-rect process" x="380" y="150" width="220" height="60" rx="6"/>
+        <text class="flow-stage-label" x="490" y="172" text-anchor="middle">AuditCollector</text>
+        <text class="flow-stage-sublabel" x="490" y="188" text-anchor="middle">in-process buffer</text>
+        <text class="flow-stage-sublabel" x="490" y="204" text-anchor="middle">+ broadcast SSE</text>
+      </g>
+      <path class="flow-arrow" d="M 490 215 L 490 245" marker-end="url(#df-arrow)"/>
+
+      <!-- Persisters -->
+      <g class="flow-stage" data-stage="a8">
+        <rect class="flow-stage-rect store" x="280" y="250" width="180" height="50" rx="6"/>
+        <text class="flow-stage-label" x="370" y="272" text-anchor="middle">Org DB</text>
+        <text class="flow-stage-sublabel" x="370" y="288" text-anchor="middle">extra_data.events_log</text>
+      </g>
+      <path class="flow-arrow" d="M 470 250 L 480 230" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="a9">
+        <rect class="flow-stage-rect store" x="500" y="250" width="180" height="50" rx="6"/>
+        <text class="flow-stage-label" x="590" y="272" text-anchor="middle">GCS (per org)</text>
+        <text class="flow-stage-sublabel" x="590" y="288" text-anchor="middle">final transcript at end</text>
+      </g>
+      <path class="flow-arrow" d="M 510 250 L 500 230" marker-end="url(#df-arrow)"/>
+
+      <!-- Reports column -->
+      <g class="flow-stage" data-stage="a10">
+        <rect class="flow-stage-rect output" x="700" y="150" width="180" height="50" rx="6"/>
+        <text class="flow-stage-label" x="790" y="172" text-anchor="middle">Live SSE consumers</text>
+        <text class="flow-stage-sublabel" x="790" y="188" text-anchor="middle">stats panel, trace</text>
+      </g>
+      <path class="flow-arrow" d="M 605 175 L 695 175" marker-end="url(#df-arrow)"/>
+
+      <g class="flow-stage" data-stage="a11">
+        <rect class="flow-stage-rect output" x="700" y="250" width="180" height="50" rx="6"/>
+        <text class="flow-stage-label" x="790" y="272" text-anchor="middle">Compliance reports</text>
+        <text class="flow-stage-sublabel" x="790" y="288" text-anchor="middle">SQL: filter by pharmacy</text>
+      </g>
+      <path class="flow-arrow" d="M 685 275 L 695 275" marker-end="url(#df-arrow)"/>
+    </svg>
+
+    <div class="flow-detail-card" id="flow-audit-detail">
+      <div class="flow-detail-content active" data-stage="default">
+        <h4>Audit flow at a glance</h4>
+        <p>Many producers, one collector, two persisters, two consumers. Producers fire events at well-defined moments. The collector buffers in-process and broadcasts to SSE. At session end, events flush to Org DB. Final transcript also lands in GCS.</p>
+      </div>
+      <div class="flow-detail-content" data-stage="a1"><h4>PreToolUse hook</h4><p>Every Bash invocation. Records: <code>tool_use</code> on allow, <code>permission_denied</code> on deny, <code>permission_check_hitl</code> on park. Includes verb, role, decision reason.</p></div>
+      <div class="flow-detail-content" data-stage="a2"><h4>Memory selector</h4><p>One event per session start: <code>memory_snapshot</code> with manifest of keys included + keys excluded by role. Single snapshot at start; no per-read overhead.</p></div>
+      <div class="flow-detail-content" data-stage="a3"><h4>Lease manager</h4><p><code>lease_acquired</code>, <code>lease_revoked</code>, <code>lease_expired</code>. Captures from-instance, to-instance, machine_id, actor_id. Lets you trace who held which session when.</p></div>
+      <div class="flow-detail-content" data-stage="a4"><h4>Approval gate</h4><p><code>approval_requested</code> on park, <code>approval_decided</code> on resolve. Decided event captures BOTH initiator (who started) and approver (who decided), plus role-check result.</p></div>
+      <div class="flow-detail-content" data-stage="a5"><h4>Memory merger</h4><p>One event per modified memory file: <code>memory_write</code> with bucket, key, byte count, expert that wrote. <code>memory_write_blocked_by_workflow</code> when scope.write disallows.</p></div>
+      <div class="flow-detail-content" data-stage="a6"><h4>TTL sweeper</h4><p>Per-pharmacy event from cron: <code>memory_swept</code> with files_pruned, entries_pruned, bucket counts.</p></div>
+      <div class="flow-detail-content" data-stage="a7"><h4>AuditCollector</h4><p>Existing component (<code>hooks.py:524+</code>). In-process list with broadcast callback. Already wired for tool_use + state transitions; new event types compose without changing the broadcast contract.</p></div>
+      <div class="flow-detail-content" data-stage="a8"><h4>Org DB persistence</h4><p>Today: <code>extra_data.events_log</code> JSONB column. Future: dedicated <code>agi_audit_events</code> table for queryability. Either way, per-org DB means cross-org leakage is structurally impossible.</p></div>
+      <div class="flow-detail-content" data-stage="a9"><h4>GCS final transcript</h4><p>At session end, full SDK transcript JSONL uploaded to per-org GCS bucket. <code>transcript_gcs_path</code> on session row points to it. Long-term retention per the org's compliance policy.</p></div>
+      <div class="flow-detail-content" data-stage="a10"><h4>Live SSE consumers</h4><p>Frontend stats panel + agent trace panel. Pushed via the broadcast callback. No polling. Already in place.</p></div>
+      <div class="flow-detail-content" data-stage="a11"><h4>Compliance reports</h4><p>"All HITL approvals at PharmacyA in March, group by approver_role." One SQL query against the org's audit table with WHERE on pharmacy_id. The pharmacy column makes per-pharmacy reports trivially derivable.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ OPEN QUESTIONS -->
+<section class="panel" data-panel="open">
+  <h2>Open questions worth resolving</h2>
+  <p>None of these block the v1 architecture. Each shapes a future iteration.</p>
+
+  <h3>1. Cross-pharmacy users at the same org</h3>
+  <p>Alice is technician @ P1 and assistant @ P2 in OrgX. When she opens the frontend, does she pick a pharmacy at login or switch contexts mid-session?</p>
+  <p><strong>Leaning:</strong> pick at login, switch only via re-auth. Simplifies session-bound pharmacy_id; avoids context-switch edge cases.</p>
+
+  <h3>2. Workflow versioning</h3>
+  <p>When rx-flow's definition changes (new expert, prompt update), do running sessions see the new version mid-flight?</p>
+  <p><strong>Leaning:</strong> no — pin the workflow version at session creation, store on the session row. New sessions get the new version.</p>
+
+  <h3>3. Org workflow override governance</h3>
+  <p>Who in OrgX can flip <code>claims-flow.enabled = true</code> or override approval thresholds? Org admin only, or delegate to compliance?</p>
+
+  <h3>4. Memory promotion / pinning</h3>
+  <p>14-day TTL is naive. Some notes (a payer's quirk that's stable for years) should be evergreen. Need a "pin" mechanism that exempts entries from TTL. Phase 2.</p>
+
+  <h3>5. Cross-org learning (option B/C)</h3>
+  <p>Today: option A (each org learns independently). Future: option B (CareLink-curated platform priors for tools/drugs) or option C (anonymized cross-org write-back). Both require redaction and curation infrastructure.</p>
+
+  <h3>6. Take-over UX during in-flight tool_use</h3>
+  <p>What happens if the active session is mid-tool-use when another machine takes over? Probably: defer take-over until quiescent boundary. Edge case worth speccing.</p>
+
+  <h3>7. Inngest concurrency vs lease</h3>
+  <p>Cold-revive Inngest function might fire on any replica. How does it interact with the lease? Probably: forces lease acquisition, runs to completion, releases.</p>
+
+  <h3>8. Connection pool sizing per org</h3>
+  <p>One backend deployment talking to N org DBs needs per-org pool limits to prevent noisy-neighbor starvation. Standard practice but needs a pool config strategy.</p>
+
+  <h3>9. Schema migration orchestration</h3>
+  <p>Alembic against N DBs. Standard DB-per-tenant pain. Patterns: lockstep deploy, migration runner script, forward-compatible code. CareLink probably already has this for the core schema; AGI tables fold in.</p>
+</section>
+
+<div class="footer-note">
+  <strong>Document state</strong>: design synthesis, no code committed.<br>
+  <strong>Inputs</strong>: cross-pollination handoff (2026-04-24), Phase D spike (2026-04-27), comparison report (2026-04-27), this conversation's 12-axis decisions.<br>
+  <strong>Companion docs</strong>: <code>docs/rx-flow-comparison-2026-04-27.md</code>, <code>docs/rx-flow-part-d-spike-2026-04-27.md</code>.
+</div>
+
+</main>
+
+<script>
+  // Tab switching
+  const tabs = document.querySelectorAll('nav.tabs button');
+  const panels = document.querySelectorAll('section.panel');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      tabs.forEach(t => t.classList.toggle('active', t === tab));
+      panels.forEach(p => p.classList.toggle('active', p.dataset.panel === target));
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+
+  // Scope row expand
+  const scopeRows = document.querySelectorAll('#scope-stack .scope-row');
+  scopeRows.forEach(row => {
+    row.addEventListener('click', () => {
+      const wasActive = row.classList.contains('active');
+      scopeRows.forEach(r => r.classList.remove('active'));
+      if (!wasActive) row.classList.add('active');
+    });
+  });
+
+  // Layer expand
+  const layers = document.querySelectorAll('#layer-stack .layer');
+  layers.forEach(layer => {
+    layer.addEventListener('click', () => {
+      const wasActive = layer.classList.contains('active');
+      layers.forEach(l => l.classList.remove('active'));
+      if (!wasActive) layer.classList.add('active');
+    });
+  });
+
+  // Role × verb matrix filter
+  const roleButtons = document.querySelectorAll('#role-filter button');
+  const matrixCells = document.querySelectorAll('#matrix-grid > [data-row]');
+  function applyRoleFilter(role) {
+    roleButtons.forEach(b => b.classList.toggle('active', b.dataset.role === role));
+    matrixCells.forEach(c => {
+      if (c.classList.contains('row-header')) {
+        c.style.opacity = c.dataset.row === role ? '1' : '0.35';
+      } else {
+        c.style.opacity = c.dataset.row === role ? '1' : '0.25';
+      }
+    });
+  }
+  roleButtons.forEach(btn => {
+    btn.addEventListener('click', () => applyRoleFilter(btn.dataset.role));
+  });
+  applyRoleFilter('admin');
+
+  // Lifecycle stepper — swimlane + pills + detail card
+  const swimSteps = document.querySelectorAll('#swimlane-svg .swim-step');
+  const stepPills = document.querySelectorAll('#step-pills button[data-step]');
+  const stepDetails = document.querySelectorAll('#step-detail-card .step-detail-content');
+  const lcPrev = document.getElementById('lifecycle-prev');
+  const lcNext = document.getElementById('lifecycle-next');
+  let lcCurrent = 1;
+  const lcTotal = stepPills.length;
+
+  function showStep(n) {
+    lcCurrent = n;
+    swimSteps.forEach(s => {
+      const sn = parseInt(s.dataset.step);
+      s.classList.toggle('active', sn === n);
+      s.classList.toggle('dim', sn !== n);
+    });
+    stepPills.forEach(p => p.classList.toggle('active', parseInt(p.dataset.step) === n));
+    stepDetails.forEach(d => d.classList.toggle('active', parseInt(d.dataset.step) === n));
+    lcPrev.disabled = n === 1;
+    lcNext.disabled = n === lcTotal;
+  }
+  stepPills.forEach(p => p.addEventListener('click', () => showStep(parseInt(p.dataset.step))));
+  swimSteps.forEach(s => s.addEventListener('click', () => showStep(parseInt(s.dataset.step))));
+  lcPrev.addEventListener('click', () => showStep(Math.max(1, lcCurrent - 1)));
+  lcNext.addEventListener('click', () => showStep(Math.min(lcTotal, lcCurrent + 1)));
+  showStep(1);
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    const lifecyclePanel = document.querySelector('section.panel[data-panel="lifecycle"]');
+    if (lifecyclePanel.classList.contains('active')) {
+      if (e.key === 'ArrowLeft' && !lcPrev.disabled) showStep(lcCurrent - 1);
+      if (e.key === 'ArrowRight' && !lcNext.disabled) showStep(lcCurrent + 1);
+    }
+  });
+
+  // Code map — module click highlight
+  const moduleBoxes = document.querySelectorAll('#codemap-svg .module-box');
+  const moduleArrows = document.querySelectorAll('#codemap-svg .module-arrow');
+  const moduleDetails = document.querySelectorAll('#module-detail-card .module-detail-content');
+  let activeModule = null;
+
+  function highlightModule(id) {
+    moduleBoxes.forEach(b => {
+      b.classList.remove('active');
+      b.classList.remove('dim');
+    });
+    moduleArrows.forEach(a => {
+      a.classList.remove('highlight');
+      a.style.opacity = '';
+    });
+
+    if (id === null) {
+      moduleDetails.forEach(d => d.classList.toggle('active', d.dataset.module === 'default'));
+      return;
+    }
+
+    const connected = new Set([id]);
+    moduleArrows.forEach(a => {
+      if (a.dataset.from === id || a.dataset.to === id) {
+        connected.add(a.dataset.from);
+        connected.add(a.dataset.to);
+      }
+    });
+
+    moduleBoxes.forEach(b => {
+      if (b.dataset.module === id) {
+        b.classList.add('active');
+      } else if (!connected.has(b.dataset.module)) {
+        b.classList.add('dim');
+      }
+    });
+
+    moduleArrows.forEach(a => {
+      if (a.dataset.from === id || a.dataset.to === id) {
+        a.classList.add('highlight');
+        a.style.opacity = '1';
+      } else {
+        a.style.opacity = '0.15';
+      }
+    });
+
+    moduleDetails.forEach(d => d.classList.toggle('active', d.dataset.module === id));
+  }
+
+  moduleBoxes.forEach(box => {
+    box.addEventListener('click', () => {
+      const m = box.dataset.module;
+      activeModule = activeModule === m ? null : m;
+      highlightModule(activeModule);
+    });
+  });
+
+  // Data flow — sub-tab switching
+  const flowSubtabs = document.querySelectorAll('#dataflow-subtabs button');
+  const flowSubpanels = document.querySelectorAll('.dataflow-subpanel');
+  flowSubtabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const f = btn.dataset.flow;
+      flowSubtabs.forEach(b => b.classList.toggle('active', b === btn));
+      flowSubpanels.forEach(p => p.classList.toggle('active', p.dataset.flowPanel === f));
+    });
+  });
+
+  // Data flow — stage click handlers (per panel)
+  document.querySelectorAll('.dataflow-subpanel').forEach(panel => {
+    const stages = panel.querySelectorAll('.flow-stage[data-stage]');
+    const detailCard = panel.querySelector('.flow-detail-card');
+    if (!detailCard) return;
+    const details = detailCard.querySelectorAll('.flow-detail-content');
+    stages.forEach(stage => {
+      stage.addEventListener('click', () => {
+        const stageId = stage.dataset.stage;
+        details.forEach(d => d.classList.toggle('active', d.dataset.stage === stageId));
+        stages.forEach(s => {
+          const rect = s.querySelector('.flow-stage-rect');
+          if (rect) {
+            rect.setAttribute('stroke-width', s === stage ? '3' : '2');
+          }
+        });
+      });
+    });
+  });
+</script>
+
+</body>
+</html>

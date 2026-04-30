@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Story: 340B vs Non-340B Inventory — Implementation Flow</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2333;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --pink: #f778ba;
+    --cyan: #39d2c0;
+    --yellow: #e3b341;
+    --teal: #2dd4bf;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; }
+
+  .topnav { position: fixed; top:0; left:0; right:0; z-index:100; background: var(--surface); border-bottom: 1px solid var(--border); display:flex; align-items:center; padding: 0 24px; height: 56px; gap: 8px; backdrop-filter: blur(12px); }
+  .topnav .logo { font-weight: 700; font-size: 16px; color: var(--teal); margin-right: 24px; letter-spacing: -0.5px; }
+  .topnav .logo span { color: var(--text2); font-weight: 400; }
+  .nav-btn { background: none; border: 1px solid transparent; color: var(--text2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.15s; white-space: nowrap; }
+  .nav-btn:hover { color: var(--text); background: var(--surface2); }
+  .nav-btn.active { color: var(--teal); border-color: var(--teal); background: rgba(45,212,191,0.08); }
+
+  main { margin-top: 56px; padding: 32px 24px 80px; max-width: 1400px; margin-left: auto; margin-right: auto; }
+  .section { display: none; animation: fadeIn 0.3s ease; }
+  .section.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+
+  h1 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+  h2 { font-size: 18px; font-weight: 600; margin: 28px 0 14px; color: var(--teal); }
+  h3 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; }
+  p.desc { color: var(--text2); font-size: 14px; line-height: 1.6; margin-bottom: 20px; max-width: 800px; }
+
+  .story-card { background: var(--surface); border: 2px solid rgba(45,212,191,0.3); border-radius: 12px; padding: 24px; margin: 16px 0 24px; }
+  .story-card .meta { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  .story-card .meta-item { font-size: 12px; color: var(--text2); }
+  .story-card .meta-item strong { color: var(--text); }
+  .story-card .story-text { font-size: 18px; font-weight: 600; color: var(--teal); margin-bottom: 8px; }
+  .story-card .story-sub { font-size: 13px; color: var(--text2); line-height: 1.5; }
+
+  .flow-container { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; margin: 16px 0 24px; overflow-x: auto; }
+  .flow-wrap { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  .arrow { color: var(--text2); font-size: 20px; padding: 0 4px; flex-shrink: 0; user-select: none; }
+  .arrow-down { color: var(--text2); font-size: 18px; padding: 4px 0; user-select: none; text-align: center; }
+  .arrow-label { font-size: 10px; color: var(--text2); display: block; }
+
+  .node { padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; text-align: center; cursor: pointer; transition: all 0.2s; min-width: 100px; border: 2px solid transparent; }
+  .node:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+  .node .sub { font-size: 10px; font-weight: 400; color: var(--text2); display: block; margin-top: 2px; }
+  .node.db { background: rgba(210,153,34,0.12); color: var(--orange); border-color: rgba(210,153,34,0.3); }
+  .node.pms { background: rgba(188,140,255,0.12); color: var(--purple); border-color: rgba(188,140,255,0.3); }
+  .node.api { background: rgba(63,185,80,0.12); color: var(--green); border-color: rgba(63,185,80,0.3); }
+  .node.ts { background: rgba(88,166,255,0.12); color: var(--accent); border-color: rgba(88,166,255,0.3); }
+  .node.ui { background: rgba(45,212,191,0.12); color: var(--teal); border-color: rgba(45,212,191,0.3); }
+  .node.test { background: rgba(247,120,186,0.12); color: var(--pink); border-color: rgba(247,120,186,0.3); }
+  .node.new { box-shadow: 0 0 0 1px var(--teal), 0 0 12px rgba(45,212,191,0.15); }
+  .node.modify { box-shadow: 0 0 0 1px var(--orange), 0 0 12px rgba(210,153,34,0.15); }
+
+  .detail-panel { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin: 12px 0; display: none; animation: slideDown 0.2s ease; }
+  .detail-panel.open { display: block; }
+  @keyframes slideDown { from { opacity:0; } to { opacity:1; } }
+  .detail-panel h4 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .detail-panel p { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .detail-panel code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--accent); }
+
+  .tag-new { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: rgba(45,212,191,0.15); color: var(--teal); margin-right: 4px; }
+  .tag-modify { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: rgba(210,153,34,0.15); color: var(--orange); margin-right: 4px; }
+  .tag-file { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: rgba(188,140,255,0.12); color: var(--purple); margin-right: 4px; }
+
+  .item-list { list-style: none; padding: 0; margin: 6px 0 0; }
+  .item-list li { font-size: 13px; color: var(--text2); padding: 3px 0; line-height: 1.5; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin: 14px 0; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; transition: all 0.15s; }
+  .card:hover { border-color: var(--teal); }
+  .card h4 { font-size: 13px; margin-bottom: 4px; }
+  .card p { font-size: 12px; color: var(--text2); line-height: 1.5; }
+  .card.clickable { cursor: pointer; }
+  .card.clickable:hover { transform: translateY(-2px); }
+
+  .badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-bottom: 6px; }
+  .badge-teal { background: rgba(45,212,191,0.15); color: var(--teal); }
+  .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .badge-pink { background: rgba(247,120,186,0.15); color: var(--pink); }
+  .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  .stats-row { display: flex; gap: 12px; margin: 14px 0; flex-wrap: wrap; }
+  .stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; min-width: 120px; flex: 1; }
+  .stat-box .num { font-size: 24px; font-weight: 700; }
+  .stat-box .label { font-size: 11px; color: var(--text2); margin-top: 3px; }
+
+  .schema-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.8; color: var(--text2); margin: 10px 0; overflow-x: auto; white-space: pre; }
+  .s-new { color: var(--teal); }
+  .s-exist { color: var(--text2); }
+  .s-model { color: var(--purple); font-weight: 600; }
+  .s-comment { color: var(--text2); opacity: 0.5; }
+  .s-type { color: var(--orange); }
+  .s-key { color: var(--accent); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; padding: 14px; background: var(--surface); border-radius: 10px; border: 1px solid var(--border); }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; background: var(--surface2); border-bottom: 1px solid var(--border); color: var(--text2); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: rgba(45,212,191,0.04); }
+
+  .expandable { border: 1px solid var(--border); border-radius: 8px; margin: 6px 0; overflow: hidden; }
+  .expandable-header { padding: 12px 16px; background: var(--surface); cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; }
+  .expandable-header:hover { background: var(--surface2); }
+  .expandable-header .chev { transition: transform 0.2s; color: var(--text2); font-size: 12px; }
+  .expandable.open .chev { transform: rotate(90deg); }
+  .expandable-body { display: none; padding: 14px 16px; background: var(--surface2); border-top: 1px solid var(--border); font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .expandable.open .expandable-body { display: block; }
+
+  /* Mock UI */
+  .mock-ui { background: var(--bg); border: 2px solid var(--border); border-radius: 12px; overflow: hidden; margin: 16px 0; }
+  .mock-header { background: var(--surface); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .mock-header .mock-title { font-size: 14px; font-weight: 600; }
+  .mock-tab { font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: default; }
+  .mock-tab.active { background: rgba(45,212,191,0.12); color: var(--teal); }
+  .mock-tab.inactive { color: var(--text2); }
+  .mock-body { padding: 16px; }
+  .mock-cards { display: flex; gap: 10px; margin-bottom: 14px; }
+  .mock-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; flex: 1; }
+  .mock-stat .mv { font-size: 18px; font-weight: 700; }
+  .mock-stat .ml { font-size: 10px; color: var(--text2); margin-top: 2px; }
+  .mock-filters { display: flex; gap: 6px; margin-bottom: 12px; }
+  .mock-btn { font-size: 11px; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text2); cursor: default; }
+  .mock-btn.on { border-color: var(--teal); color: var(--teal); background: rgba(45,212,191,0.08); }
+  .mock-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .mock-table th { text-align: left; padding: 6px 8px; background: var(--surface2); color: var(--text2); font-weight: 600; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  .mock-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .mock-chip { display: inline-block; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 6px; }
+  .mock-chip.teal { background: rgba(45,212,191,0.15); color: var(--teal); }
+  .mock-chip.orange { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .mock-chip.red { background: rgba(248,81,73,0.15); color: var(--red); }
+  .mock-chip.green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .mock-chip.gray { background: rgba(139,148,158,0.15); color: var(--text2); }
+
+  .progress-bar { height: 6px; border-radius: 3px; background: var(--surface2); overflow: hidden; margin: 6px 0 3px; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+
+  @media (max-width: 768px) {
+    .topnav { overflow-x: auto; gap: 4px; padding: 0 12px; }
+    .nav-btn { font-size: 12px; padding: 4px 10px; }
+    main { padding: 24px 16px 60px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .mock-cards { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="logo">340B Inventory <span>Story</span></div>
+  <button class="nav-btn active" onclick="showSection('story')">Story</button>
+  <button class="nav-btn" onclick="showSection('layers')">Layer Map</button>
+  <button class="nav-btn" onclick="showSection('db')">1. Database</button>
+  <button class="nav-btn" onclick="showSection('schema')">2. Schemas</button>
+  <button class="nav-btn" onclick="showSection('service')">3. Service</button>
+  <button class="nav-btn" onclick="showSection('api')">4. API</button>
+  <button class="nav-btn" onclick="showSection('frontend')">5. Frontend</button>
+  <button class="nav-btn" onclick="showSection('tests')">6. Tests</button>
+  <button class="nav-btn" onclick="showSection('mockup')">UI Mockup</button>
+</nav>
+
+<main>
+
+<!-- ==================== STORY ==================== -->
+<div class="section active" id="sec-story">
+  <h1>User Story: 340B Inventory View</h1>
+
+  <div class="story-card">
+    <div class="meta">
+      <div class="meta-item"><strong>Role:</strong> Technician</div>
+      <div class="meta-item"><strong>Integration:</strong> System (internal)</div>
+      <div class="meta-item"><strong>Endpoint:</strong> <code style="color:var(--teal)">GET /inventory/340b</code></div>
+      <div class="meta-item"><strong>Status:</strong> <span style="color:var(--red); font-weight:600;">0% &mdash; Not Started</span></div>
+    </div>
+    <div class="story-text">"I want to see 340B vs non-340B inventory separately"</div>
+    <div class="story-sub">
+      <strong>What I need to see:</strong> Inventory by acquisition source, replenishment needs<br>
+      <strong>Technical notes:</strong> GET /inventory/340b &mdash; Dedicated endpoint returning per-product 340B vs standard stock breakdown with replenishment assessment
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-box"><div class="num" style="color:var(--orange)">11</div><div class="label">Files changed</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--teal)">2</div><div class="label">New files</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--purple)">6</div><div class="label">Layers touched</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--green)">1</div><div class="label">New endpoint</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--pink)">8+</div><div class="label">New tests</div></div>
+  </div>
+
+  <h2>What This Story Delivers</h2>
+  <div class="grid">
+    <div class="card">
+      <span class="badge badge-teal">VIEW</span>
+      <h4>Split Inventory View</h4>
+      <p>Every product shows standard vs 340B stock side-by-side &mdash; quantities, lot counts, earliest expiry per source.</p>
+    </div>
+    <div class="card">
+      <span class="badge badge-orange">LOGIC</span>
+      <h4>Replenishment Assessment</h4>
+      <p>Computed per-product: is 340B stock below reorder point? Zero stock? Expiring soon? How many dispensed since last receipt?</p>
+    </div>
+    <div class="card">
+      <span class="badge badge-purple">DATA</span>
+      <h4>Acquisition Source Tracking</h4>
+      <p>New <code>acquisition_source</code> column on <code>InventoryLot</code> &mdash; tags every lot as "standard", "340b", or "wac" at receiving time.</p>
+    </div>
+    <div class="card">
+      <span class="badge badge-green">API</span>
+      <h4>Dedicated Endpoint</h4>
+      <p><code>GET /inventory/340b</code> &mdash; returns summary stats + per-product breakdown with filters for "only 340B" and "needs replenishment".</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== LAYER MAP ==================== -->
+<div class="section" id="sec-layers">
+  <h1>Implementation Layer Map</h1>
+  <p class="desc">This story touches 6 layers, bottom to top. Click any layer to see what changes. Orange glow = modified file, teal glow = new file.</p>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Database</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> Schemas (Pydantic)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> Service (Python)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> API (FastAPI)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Types + Hooks (TS)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div> UI (React)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--pink)"></div> Tests</div>
+    <div class="legend-item"><span class="tag-modify">MODIFY</span> Existing file</div>
+    <div class="legend-item"><span class="tag-new">NEW</span> New file</div>
+  </div>
+
+  <div class="flow-container">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:8px; width:100%;">
+
+      <!-- Layer 6: UI -->
+      <div class="flow-wrap">
+        <div class="node ui new" onclick="toggleDetail('lyr-ui')">
+          Inventory340BPanel.tsx
+          <span class="sub">NEW &mdash; React component</span>
+        </div>
+      </div>
+      <div class="arrow-down">&uarr; <span class="arrow-label">renders data from hooks</span></div>
+
+      <!-- Layer 5: TS -->
+      <div class="flow-wrap">
+        <div class="node ts modify" onclick="toggleDetail('lyr-types')">
+          types/inventory.ts
+          <span class="sub">MODIFY &mdash; add 6 types</span>
+        </div>
+        <div class="node ts modify" onclick="toggleDetail('lyr-hooks')">
+          hooks/use-inventory.ts
+          <span class="sub">MODIFY &mdash; add hook</span>
+        </div>
+      </div>
+      <div class="arrow-down">&uarr; <span class="arrow-label">fetches from</span></div>
+
+      <!-- Layer 4: API -->
+      <div class="flow-wrap">
+        <div class="node api modify" onclick="toggleDetail('lyr-api')">
+          routers/inventory.py
+          <span class="sub">MODIFY &mdash; add endpoint</span>
+        </div>
+      </div>
+      <div class="arrow-down">&uarr; <span class="arrow-label">calls service method</span></div>
+
+      <!-- Layer 3: Service -->
+      <div class="flow-wrap">
+        <div class="node pms modify" onclick="toggleDetail('lyr-service')">
+          stock_service.py
+          <span class="sub">MODIFY &mdash; add method (~80 lines)</span>
+        </div>
+      </div>
+      <div class="arrow-down">&uarr; <span class="arrow-label">returns validated schemas</span></div>
+
+      <!-- Layer 2: Schemas -->
+      <div class="flow-wrap">
+        <div class="node pms modify" onclick="toggleDetail('lyr-schemas')">
+          inventory/schemas.py
+          <span class="sub">MODIFY &mdash; 5 new schemas</span>
+        </div>
+      </div>
+      <div class="arrow-down">&uarr; <span class="arrow-label">serializes models</span></div>
+
+      <!-- Layer 1: DB -->
+      <div class="flow-wrap">
+        <div class="node db modify" onclick="toggleDetail('lyr-db')">
+          inventory/models.py
+          <span class="sub">MODIFY &mdash; enum + column</span>
+        </div>
+        <div class="node db new" onclick="toggleDetail('lyr-migration')">
+          alembic migration
+          <span class="sub">NEW &mdash; add column</span>
+        </div>
+      </div>
+
+      <!-- Tests (side) -->
+      <div style="margin-top:16px;">
+        <div class="flow-wrap">
+          <div class="node test modify" onclick="toggleDetail('lyr-tests')">
+            test_models_inventory.py
+            <span class="sub">MODIFY &mdash; 3 tests</span>
+          </div>
+          <div class="node test modify" onclick="toggleDetail('lyr-tests-svc')">
+            test_inventory_services.py
+            <span class="sub">MODIFY &mdash; 5 tests</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Layer detail panels -->
+  <div class="detail-panel" id="lyr-ui">
+    <h4><span class="tag-new">NEW</span> <code>carelink-frontend/src/components/inventory/Inventory340BPanel.tsx</code></h4>
+    <p>Summary cards + filter toggles + product table with 340B/standard split columns and replenishment badges. Wired to workspace tab system.</p>
+  </div>
+  <div class="detail-panel" id="lyr-types">
+    <h4><span class="tag-modify">MODIFY</span> <code>carelink-frontend/src/types/inventory.ts</code></h4>
+    <p>Add <code>AcquisitionSource</code> type + <code>SourceStockSummary</code>, <code>ReplenishmentInfo</code>, <code>Product340BView</code>, <code>Inventory340BSummary</code>, <code>Inventory340BResponse</code> interfaces.</p>
+  </div>
+  <div class="detail-panel" id="lyr-hooks">
+    <h4><span class="tag-modify">MODIFY</span> <code>carelink-frontend/src/hooks/use-inventory.ts</code></h4>
+    <p>Add <code>use340BInventory(params?)</code> hook &mdash; calls <code>GET /api/backend/api/inventory/340b</code> with optional <code>only_with_340b</code> and <code>only_needing_replenishment</code> query params.</p>
+  </div>
+  <div class="detail-panel" id="lyr-api">
+    <h4><span class="tag-modify">MODIFY</span> <code>carelink-backend/app/routers/inventory.py</code></h4>
+    <p>Add <code>GET /inventory/340b</code> endpoint. Query params: <code>only_with_340b: bool</code>, <code>only_needing_replenishment: bool</code>. Calls <code>cl.inventory.stock.get_340b_inventory()</code>. Returns <code>Inventory340BResponse</code>.</p>
+  </div>
+  <div class="detail-panel" id="lyr-service">
+    <h4><span class="tag-modify">MODIFY</span> <code>carelink-pms/carelink/inventory/stock_service.py</code></h4>
+    <p>Add <code>get_340b_inventory(actor_id, only_with_340b, only_needing_replenishment)</code> method. Queries stock grouped by product + acquisition_source, computes replenishment assessment, returns structured response.</p>
+  </div>
+  <div class="detail-panel" id="lyr-schemas">
+    <h4><span class="tag-modify">MODIFY</span> <code>carelink-pms/carelink/inventory/schemas.py</code></h4>
+    <p>Add 5 schemas: <code>SourceStockSummary</code>, <code>ReplenishmentInfo</code>, <code>Product340BView</code>, <code>Inventory340BSummary</code>, <code>Inventory340BResponse</code>. Also add <code>acquisition_source</code> to <code>StockReceive</code>.</p>
+  </div>
+  <div class="detail-panel" id="lyr-db">
+    <h4><span class="tag-modify">MODIFY</span> <code>carelink-pms/carelink/inventory/models.py</code></h4>
+    <p>Add <code>AcquisitionSource</code> enum. Add <code>acquisition_source</code> column to <code>InventoryLot</code>. Update unique constraint from <code>(product_id, lot_number)</code> to <code>(product_id, lot_number, acquisition_source)</code>. Add index.</p>
+  </div>
+  <div class="detail-panel" id="lyr-migration">
+    <h4><span class="tag-new">NEW</span> <code>carelink-pms/alembic/versions/xxxx_add_acquisition_source.py</code></h4>
+    <p>3-step migration: (1) add column with <code>server_default="standard"</code> to backfill, (2) drop old unique constraint, (3) add new constraint with <code>acquisition_source</code>.</p>
+  </div>
+  <div class="detail-panel" id="lyr-tests">
+    <h4><span class="tag-modify">MODIFY</span> <code>carelink-pms/tests/section2_db/test_models_inventory.py</code></h4>
+    <p>3 tests: (1) lot persists with <code>acquisition_source="340b"</code>, (2) two lots same lot_number different source allowed by constraint, (3) default is <code>"standard"</code>.</p>
+  </div>
+  <div class="detail-panel" id="lyr-tests-svc">
+    <h4><span class="tag-modify">MODIFY</span> <code>carelink-pms/tests/section4_services/test_inventory_services.py</code></h4>
+    <p>5 tests: seed mixed stock, verify split response, verify <code>only_with_340b</code> filter, verify <code>only_needing_replenishment</code> filter, verify replenishment reasons.</p>
+  </div>
+</div>
+
+<!-- ==================== DB ==================== -->
+<div class="section" id="sec-db">
+  <h1>Layer 1: Database</h1>
+  <p class="desc">Add <code>acquisition_source</code> to <code>InventoryLot</code>. This is the foundation &mdash; every other layer reads from this column.</p>
+
+  <h2>File: inventory/models.py</h2>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 1a: Add AcquisitionSource enum</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <p>Add after <code>PurchaseOrderStatus</code> (line ~76):</p>
+      <div class="schema-box"><span class="s-key">class</span> <span class="s-model">AcquisitionSource</span>(<span class="s-type">str</span>, <span class="s-type">enum.Enum</span>):
+    <span class="s-comment">"""Drug acquisition channel for 340B segregation."""</span>
+    <span class="s-new">STANDARD = "standard"</span>
+    <span class="s-new">PROGRAM_340B = "340b"</span>
+    <span class="s-new">WAC = "wac"</span></div>
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 1b: Add column to InventoryLot</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <p>Add after <code>serial_number</code> (line ~453):</p>
+      <div class="schema-box"><span class="s-comment"># 340B segregation</span>
+<span class="s-new">acquisition_source</span>: <span class="s-type">Mapped[str]</span> = mapped_column(
+    String(20),
+    nullable=False,
+    default=AcquisitionSource.STANDARD.value,
+    server_default="standard",
+    comment="Drug acquisition source: standard, 340b, wac",
+)</div>
+      <p style="margin-top:8px"><code>server_default="standard"</code> ensures the migration backfills all existing rows.</p>
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 1c: Update UniqueConstraint</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <p>Same lot number can arrive on both a 340B PO and a standard PO. Widen the constraint:</p>
+      <div class="schema-box"><span class="s-comment"># Before (line ~468):</span>
+<span class="s-exist">UniqueConstraint("product_id", "lot_number", name="uq_inventory_lots_product_lot")</span>
+
+<span class="s-comment"># After:</span>
+<span class="s-new">UniqueConstraint("product_id", "lot_number", "acquisition_source",
+                 name="uq_inventory_lots_product_lot_source")</span></div>
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 1d: Add index for filtering</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-new">Index("ix_inventory_lots_acquisition_source", "acquisition_source")</span></div>
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 1e: Alembic migration</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-comment"># Generate</span>
+alembic revision --autogenerate -m "add acquisition_source to inventory_lots"
+
+<span class="s-comment"># The migration does 3 things:</span>
+<span class="s-new">1. op.add_column("inventory_lots",
+       sa.Column("acquisition_source", sa.String(20),
+                 nullable=False, server_default="standard"))</span>
+
+<span class="s-new">2. op.drop_constraint("uq_inventory_lots_product_lot", "inventory_lots")</span>
+
+<span class="s-new">3. op.create_unique_constraint("uq_inventory_lots_product_lot_source",
+       "inventory_lots", ["product_id", "lot_number", "acquisition_source"])</span>
+
+<span class="s-comment"># Run</span>
+alembic upgrade head</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCHEMAS ==================== -->
+<div class="section" id="sec-schema">
+  <h1>Layer 2: Pydantic Schemas</h1>
+  <p class="desc">5 new response schemas for the dedicated endpoint + 1 field addition to <code>StockReceive</code>.</p>
+
+  <h2>File: inventory/schemas.py</h2>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 2a: Add acquisition_source to StockReceive</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <p>When receiving stock (PO or manual), technician specifies the source:</p>
+      <div class="schema-box"><span class="s-key">class</span> <span class="s-model">StockReceive</span>(BaseModel):
+    product_id: UUID
+    location_id: UUID
+    quantity: Decimal = Field(..., gt=0)
+    lot_number: Optional[str] = None
+    expiration_date: Optional[date] = None
+    unit_cost: Optional[Decimal] = None
+    reference: Optional[str] = None
+    notes: Optional[str] = None
+    <span class="s-new">acquisition_source: AcquisitionSource = AcquisitionSource.STANDARD</span></div>
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 2b: Add 5 new response schemas</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-key">class</span> <span class="s-model">SourceStockSummary</span>(BaseModel):
+    <span class="s-comment">"""Stock summary for one acquisition source."""</span>
+    <span class="s-new">quantity_on_hand: Decimal</span>
+    <span class="s-new">quantity_reserved: Decimal</span>
+    <span class="s-new">quantity_available: Decimal</span>
+    <span class="s-new">lot_count: int</span>
+    <span class="s-new">earliest_expiry: date | None = None</span>
+    <span class="s-new">days_until_expiry: int | None = None</span>
+
+<span class="s-key">class</span> <span class="s-model">ReplenishmentInfo</span>(BaseModel):
+    <span class="s-comment">"""340B replenishment assessment for a product."""</span>
+    <span class="s-new">needs_replenishment: bool</span>
+    <span class="s-new">reason: str | None = None</span>        <span class="s-comment"># "below_threshold" | "zero_stock" | "expiring_soon"</span>
+    <span class="s-new">reorder_point: int</span>
+    <span class="s-new">suggested_quantity: int</span>
+    <span class="s-new">last_340b_receipt_date: date | None = None</span>
+    <span class="s-new">dispensed_since_last_receipt: int = 0</span>
+
+<span class="s-key">class</span> <span class="s-model">Product340BView</span>(BaseModel):
+    <span class="s-comment">"""Per-product 340B vs standard breakdown."""</span>
+    <span class="s-new">product_id: UUID</span>
+    <span class="s-new">ndc: str</span>
+    <span class="s-new">name: str</span>
+    <span class="s-new">manufacturer: str | None = None</span>
+    <span class="s-new">is_controlled: bool</span>
+    <span class="s-new">standard_stock: SourceStockSummary</span>
+    <span class="s-new">stock_340b: SourceStockSummary</span>
+    <span class="s-new">replenishment: ReplenishmentInfo</span>
+
+<span class="s-key">class</span> <span class="s-model">Inventory340BSummary</span>(BaseModel):
+    <span class="s-comment">"""Top-level summary stats."""</span>
+    <span class="s-new">total_340b_products: int</span>
+    <span class="s-new">total_340b_units: Decimal</span>
+    <span class="s-new">total_standard_units: Decimal</span>
+    <span class="s-new">products_needing_replenishment: int</span>
+
+<span class="s-key">class</span> <span class="s-model">Inventory340BResponse</span>(BaseModel):
+    <span class="s-comment">"""Full response for GET /inventory/340b."""</span>
+    <span class="s-new">summary: Inventory340BSummary</span>
+    <span class="s-new">products: list[Product340BView]</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SERVICE ==================== -->
+<div class="section" id="sec-service">
+  <h1>Layer 3: Service</h1>
+  <p class="desc">New method on <code>StockService</code> &mdash; the heaviest piece of work. Two SQL queries + in-memory aggregation.</p>
+
+  <h2>File: stock_service.py</h2>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 3a: Method signature</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-key">async def</span> <span class="s-model">get_340b_inventory</span>(
+    self,
+    actor_id: str,
+    only_with_340b: bool = False,
+    only_needing_replenishment: bool = False,
+) -> <span class="s-type">dict[str, Any]</span>:
+    <span class="s-comment">"""Get full 340B vs standard inventory breakdown
+    with replenishment needs."""</span></div>
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 3b: Query 1 &mdash; Stock grouped by product + source</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-comment"># Aggregate stock per product per acquisition_source</span>
+stmt = (
+    select(
+        InventoryProduct.id,
+        InventoryProduct.ndc,
+        InventoryProduct.name,
+        InventoryProduct.manufacturer,
+        InventoryProduct.is_controlled,
+        InventoryProduct.reorder_point,
+        InventoryProduct.reorder_quantity,
+        <span class="s-new">InventoryLot.acquisition_source,</span>
+        func.sum(InventoryStock.quantity_on_hand).label("qty_on_hand"),
+        func.sum(InventoryStock.quantity_reserved).label("qty_reserved"),
+        func.sum(InventoryStock.quantity_available).label("qty_available"),
+        func.count(distinct(InventoryLot.id)).label("lot_count"),
+        func.min(InventoryLot.expiration_date).label("earliest_expiry"),
+    )
+    .join(InventoryStock, InventoryStock.product_id == InventoryProduct.id)
+    .outerjoin(InventoryLot, InventoryStock.lot_id == InventoryLot.id)
+    .where(InventoryProduct.is_active.is_(True))
+    .group_by(InventoryProduct.id, InventoryLot.acquisition_source)
+)</div>
+      <p style="margin-top:8px">Returns one row per (product, acquisition_source) pair. Pivot in Python to build <code>standard_stock</code> + <code>stock_340b</code> per product.</p>
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 3c: Query 2 &mdash; Replenishment data</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-comment"># Last 340B receipt date + dispensed since, per product</span>
+receipt_stmt = (
+    select(
+        InventoryTransaction.product_id,
+        func.max(InventoryTransaction.created_at).label("last_receipt"),
+    )
+    .join(InventoryLot, InventoryTransaction.lot_id == InventoryLot.id)
+    .where(
+        InventoryTransaction.transaction_type == TransactionType.RECEIPT,
+        <span class="s-new">InventoryLot.acquisition_source == "340b",</span>
+    )
+    .group_by(InventoryTransaction.product_id)
+)
+
+<span class="s-comment"># Then for each product, count dispenses from 340B lots since last receipt</span></div>
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 3d: Replenishment logic (in-memory)</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-comment"># For each product, compute replenishment:</span>
+<span class="s-key">if</span> qty_340b == 0:
+    reason = <span class="s-new">"zero_stock"</span>
+    needs_replenishment = True
+<span class="s-key">elif</span> qty_340b &lt; product.reorder_point:
+    reason = <span class="s-new">"below_threshold"</span>
+    needs_replenishment = True
+<span class="s-key">elif</span> earliest_340b_expiry and days_until &lt; 30:
+    reason = <span class="s-new">"expiring_soon"</span>
+    needs_replenishment = True
+<span class="s-key">else</span>:
+    reason = None
+    needs_replenishment = False
+
+suggested_quantity = product.reorder_quantity</div>
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 3e: Apply filters + build response</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-comment"># Optional filters before returning</span>
+<span class="s-key">if</span> only_with_340b:
+    products = [p <span class="s-key">for</span> p <span class="s-key">in</span> products <span class="s-key">if</span> p.stock_340b.quantity_on_hand > 0]
+
+<span class="s-key">if</span> only_needing_replenishment:
+    products = [p <span class="s-key">for</span> p <span class="s-key">in</span> products <span class="s-key">if</span> p.replenishment.needs_replenishment]
+
+<span class="s-comment"># Build summary from filtered list</span>
+summary = Inventory340BSummary(
+    total_340b_products=len([p for p in products if p.stock_340b.lot_count > 0]),
+    total_340b_units=sum(p.stock_340b.quantity_on_hand for p in products),
+    total_standard_units=sum(p.standard_stock.quantity_on_hand for p in products),
+    products_needing_replenishment=len([p for p in products if p.replenishment.needs_replenishment]),
+)</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== API ==================== -->
+<div class="section" id="sec-api">
+  <h1>Layer 4: API Endpoint</h1>
+  <p class="desc">One new endpoint on the existing inventory router. Thin layer &mdash; validates params and delegates to service.</p>
+
+  <h2>File: routers/inventory.py</h2>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 4a: Add import</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-key">from</span> carelink.inventory.schemas <span class="s-key">import</span> (
+    ...existing imports...,
+    <span class="s-new">Inventory340BResponse,</span>
+)</div>
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 4b: Add GET /inventory/340b</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-comment"># =========================================================================</span>
+<span class="s-comment"># 340B Inventory View</span>
+<span class="s-comment"># =========================================================================</span>
+
+@router.get(<span class="s-new">"/340b"</span>, response_model=<span class="s-new">Inventory340BResponse</span>)
+<span class="s-key">async def</span> <span class="s-model">get_340b_inventory</span>(
+    actor_id: str = Depends(get_actor_id),
+    cl: CareLink = Depends(get_carelink),
+    only_with_340b: bool = Query(
+        False, description="Only products with 340B stock"
+    ),
+    only_needing_replenishment: bool = Query(
+        False, description="Only products needing 340B replenishment"
+    ),
+) -> Inventory340BResponse:
+    <span class="s-comment">"""340B vs non-340B inventory with replenishment needs.
+
+    Role: Technician+
+    """</span>
+    <span class="s-key">return await</span> cl.inventory.stock.get_340b_inventory(
+        actor_id,
+        only_with_340b=only_with_340b,
+        only_needing_replenishment=only_needing_replenishment,
+    )</div>
+      <p style="margin-top:8px">Lives at <code>GET /api/inventory/340b</code>. Proxied via frontend as <code>/api/backend/api/inventory/340b</code>.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== FRONTEND ==================== -->
+<div class="section" id="sec-frontend">
+  <h1>Layer 5: Frontend</h1>
+  <p class="desc">TypeScript types + React Query hook + new panel component. Three files touched.</p>
+
+  <h2>types/inventory.ts (modify)</h2>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 5a: Add AcquisitionSource type + 5 interfaces</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-new">export type AcquisitionSource = "standard" | "340b" | "wac";</span>
+
+<span class="s-new">export interface SourceStockSummary</span> {
+  quantity_on_hand: number;
+  quantity_reserved: number;
+  quantity_available: number;
+  lot_count: number;
+  earliest_expiry?: string | null;
+  days_until_expiry?: number | null;
+}
+
+<span class="s-new">export interface ReplenishmentInfo</span> {
+  needs_replenishment: boolean;
+  reason?: string | null;
+  reorder_point: number;
+  suggested_quantity: number;
+  last_340b_receipt_date?: string | null;
+  dispensed_since_last_receipt: number;
+}
+
+<span class="s-new">export interface Product340BView</span> {
+  product_id: string;
+  ndc: string;
+  name: string;
+  manufacturer?: string | null;
+  is_controlled: boolean;
+  standard_stock: SourceStockSummary;
+  stock_340b: SourceStockSummary;
+  replenishment: ReplenishmentInfo;
+}
+
+<span class="s-new">export interface Inventory340BSummary</span> {
+  total_340b_products: number;
+  total_340b_units: number;
+  total_standard_units: number;
+  products_needing_replenishment: number;
+}
+
+<span class="s-new">export interface Inventory340BResponse</span> {
+  summary: Inventory340BSummary;
+  products: Product340BView[];
+}</div>
+    </div>
+  </div>
+
+  <h2>hooks/use-inventory.ts (modify)</h2>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 5b: Add use340BInventory hook</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <div class="schema-box"><span class="s-new">export function use340BInventory</span>(params?: {
+  only_with_340b?: boolean;
+  only_needing_replenishment?: boolean;
+}) {
+  return useQuery&lt;Inventory340BResponse&gt;({
+    queryKey: ["inventory-340b", params],
+    queryFn: () => {
+      const qs = new URLSearchParams();
+      if (params?.only_with_340b) qs.set("only_with_340b", "true");
+      if (params?.only_needing_replenishment)
+        qs.set("only_needing_replenishment", "true");
+      const q = qs.toString();
+      return fetchJson&lt;Inventory340BResponse&gt;(
+        q ? `${BASE}/340b?${q}` : `${BASE}/340b`
+      );
+    },
+  });
+}</div>
+    </div>
+  </div>
+
+  <h2>components/inventory/Inventory340BPanel.tsx (new)</h2>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header"><span>Step 5c: Component structure</span><span class="chev">&#9654;</span></div>
+    <div class="expandable-body">
+      <p><strong>State:</strong></p>
+      <ul class="item-list">
+        <li><code>filter: "all" | "340b_only" | "needs_replenishment"</code> &mdash; maps to query params</li>
+        <li><code>expandedRow: string | null</code> &mdash; product_id of expanded row for lot detail</li>
+      </ul>
+      <p style="margin-top:8px"><strong>Layout:</strong></p>
+      <ul class="item-list">
+        <li>4 summary cards from <code>data.summary</code> (total 340B products, 340B units, standard units, needs replenishment)</li>
+        <li>MUI <code>ToggleButtonGroup</code> for filter: All / 340B Stock Only / Needs Replenishment</li>
+        <li>MUI <code>DataGrid</code> or <code>Table</code> with columns: NDC, Product, Standard Stock, 340B Stock, 340B Expiry, Replenishment Status, Action</li>
+        <li>Row expansion shows lot-level detail (calls existing <code>useProductLots</code>)</li>
+        <li>Replenishment column shows color-coded MUI <code>Chip</code>: red=zero_stock, orange=below_threshold, yellow=expiring_soon</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TESTS ==================== -->
+<div class="section" id="sec-tests">
+  <h1>Layer 6: Tests</h1>
+  <p class="desc">8 new tests across 2 existing test files. No new test files needed.</p>
+
+  <h2>test_models_inventory.py (3 tests)</h2>
+  <table>
+    <thead><tr><th>Test</th><th>What it verifies</th></tr></thead>
+    <tbody>
+      <tr><td><code>test_lot_acquisition_source_persists</code></td><td>Create lot with <code>acquisition_source="340b"</code>, reload from DB, assert value</td></tr>
+      <tr><td><code>test_lot_same_number_different_source</code></td><td>Two lots: same <code>product_id</code> + <code>lot_number</code>, one "standard" one "340b" &mdash; unique constraint allows both</td></tr>
+      <tr><td><code>test_lot_acquisition_source_default</code></td><td>Create lot without specifying source &mdash; assert defaults to <code>"standard"</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2>test_inventory_services.py (5 tests)</h2>
+  <table>
+    <thead><tr><th>Test</th><th>Setup</th><th>What it verifies</th></tr></thead>
+    <tbody>
+      <tr><td><code>test_340b_inventory_full_response</code></td><td>3 products: standard-only, 340b-only, mixed</td><td>All 3 appear with correct <code>standard_stock</code> / <code>stock_340b</code> split</td></tr>
+      <tr><td><code>test_340b_inventory_only_with_340b</code></td><td>Same seed</td><td><code>only_with_340b=True</code> excludes standard-only product</td></tr>
+      <tr><td><code>test_340b_inventory_needs_replenishment</code></td><td>One product 340B qty below reorder_point</td><td><code>only_needing_replenishment=True</code> shows only that product</td></tr>
+      <tr><td><code>test_340b_replenishment_reasons</code></td><td>3 products: zero 340B, below threshold, expiring in 20 days</td><td>Reasons are <code>"zero_stock"</code>, <code>"below_threshold"</code>, <code>"expiring_soon"</code> respectively</td></tr>
+      <tr><td><code>test_340b_dispensed_since_receipt</code></td><td>Receive 340B lot, then 3 dispenses</td><td><code>dispensed_since_last_receipt == 3</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ==================== MOCKUP ==================== -->
+<div class="section" id="sec-mockup">
+  <h1>UI Mockup</h1>
+  <p class="desc">What the technician sees. This is the end result of all 6 layers wired together.</p>
+
+  <div class="mock-ui">
+    <div class="mock-header">
+      <div class="mock-title">Inventory</div>
+      <div class="mock-tab inactive">Products</div>
+      <div class="mock-tab inactive">Stock</div>
+      <div class="mock-tab inactive">Purchase Orders</div>
+      <div class="mock-tab active">340B</div>
+      <div class="mock-tab inactive">Suppliers</div>
+    </div>
+    <div class="mock-body">
+
+      <!-- Summary Cards -->
+      <div class="mock-cards">
+        <div class="mock-stat">
+          <div class="mv" style="color:var(--teal)">42</div>
+          <div class="ml">340B Products</div>
+        </div>
+        <div class="mock-stat">
+          <div class="mv" style="color:var(--teal)">1,830</div>
+          <div class="ml">340B Units</div>
+        </div>
+        <div class="mock-stat">
+          <div class="mv" style="color:var(--text2)">12,450</div>
+          <div class="ml">Standard Units</div>
+        </div>
+        <div class="mock-stat">
+          <div class="mv" style="color:var(--red)">7</div>
+          <div class="ml">Need Replenishment</div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="mock-filters">
+        <div class="mock-btn on">All Products</div>
+        <div class="mock-btn">340B Stock Only</div>
+        <div class="mock-btn">Needs Replenishment</div>
+      </div>
+
+      <!-- Table -->
+      <table class="mock-table">
+        <thead>
+          <tr>
+            <th>NDC</th>
+            <th>Product</th>
+            <th>Standard Stock</th>
+            <th>340B Stock</th>
+            <th>340B Expiry</th>
+            <th>Replenishment</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-family:monospace; font-size:10px;">00078-0697-20</td>
+            <td>Humira 40mg Pen<br><span style="color:var(--text2); font-size:10px;">AbbVie</span></td>
+            <td>42 avail <span style="color:var(--text2)">(2 lots)</span></td>
+            <td style="color:var(--teal); font-weight:600;">7 avail <span style="font-weight:400; color:var(--text2)">(1 lot)</span></td>
+            <td>182 days</td>
+            <td><span class="mock-chip orange">Below threshold</span></td>
+            <td><span class="mock-chip teal" style="cursor:pointer">Reorder</span></td>
+          </tr>
+          <tr>
+            <td style="font-family:monospace; font-size:10px;">00006-0011-68</td>
+            <td>Januvia 100mg<br><span style="color:var(--text2); font-size:10px;">Merck</span></td>
+            <td>120 avail <span style="color:var(--text2)">(4 lots)</span></td>
+            <td style="color:var(--red); font-weight:600;">0 avail <span style="font-weight:400; color:var(--text2)">(0 lots)</span></td>
+            <td style="color:var(--text2)">&mdash;</td>
+            <td><span class="mock-chip red">Zero stock</span></td>
+            <td><span class="mock-chip teal" style="cursor:pointer">Reorder</span></td>
+          </tr>
+          <tr>
+            <td style="font-family:monospace; font-size:10px;">55513-0710-01</td>
+            <td>Enbrel 50mg<br><span style="color:var(--text2); font-size:10px;">Amgen</span></td>
+            <td>30 avail <span style="color:var(--text2)">(1 lot)</span></td>
+            <td style="color:var(--teal); font-weight:600;">15 avail <span style="font-weight:400; color:var(--text2)">(1 lot)</span></td>
+            <td style="color:var(--orange)">28 days</td>
+            <td><span class="mock-chip orange">Expiring soon</span></td>
+            <td><span class="mock-chip teal" style="cursor:pointer">Reorder</span></td>
+          </tr>
+          <tr>
+            <td style="font-family:monospace; font-size:10px;">50242-0040-01</td>
+            <td>Truvada<br><span style="color:var(--text2); font-size:10px;">Gilead</span></td>
+            <td>85 avail <span style="color:var(--text2)">(3 lots)</span></td>
+            <td style="color:var(--teal); font-weight:600;">40 avail <span style="font-weight:400; color:var(--text2)">(2 lots)</span></td>
+            <td>245 days</td>
+            <td><span class="mock-chip green">OK</span></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td style="font-family:monospace; font-size:10px;">59762-3280-01</td>
+            <td>Revlimid 25mg<br><span style="color:var(--text2); font-size:10px;">BMS</span></td>
+            <td>12 avail <span style="color:var(--text2)">(1 lot)</span></td>
+            <td style="color:var(--teal); font-weight:600;">5 avail <span style="font-weight:400; color:var(--text2)">(1 lot)</span></td>
+            <td>90 days</td>
+            <td><span class="mock-chip green">OK</span></td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Expanded row mockup -->
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 16px; margin-top:4px; font-size:11px;">
+        <div style="font-weight:600; margin-bottom:6px; color:var(--text2)">Lot Detail &mdash; Humira 40mg Pen</div>
+        <table class="mock-table" style="margin:0;">
+          <thead><tr><th>Lot #</th><th>Source</th><th>Qty</th><th>Expires</th><th>Received</th></tr></thead>
+          <tbody>
+            <tr>
+              <td style="font-family:monospace">ABC-2026-001</td>
+              <td><span class="mock-chip teal">340B</span></td>
+              <td>7</td>
+              <td>2026-09-15</td>
+              <td>2026-02-10</td>
+            </tr>
+            <tr>
+              <td style="font-family:monospace">DEF-2026-045</td>
+              <td><span class="mock-chip gray">Standard</span></td>
+              <td>25</td>
+              <td>2026-11-01</td>
+              <td>2026-01-15</td>
+            </tr>
+            <tr>
+              <td style="font-family:monospace">DEF-2026-102</td>
+              <td><span class="mock-chip gray">Standard</span></td>
+              <td>17</td>
+              <td>2027-01-20</td>
+              <td>2026-03-01</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="margin-top:8px; color:var(--text2)">
+          <strong>Replenishment:</strong> Last 340B receipt: 2026-02-10 &bull; Dispensed since: 12 units &bull; Suggested reorder: 20 units
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.querySelectorAll('.detail-panel').forEach(p => p.classList.remove('open'));
+}
+
+function toggleDetail(id) {
+  const panel = document.getElementById(id);
+  if (!panel) return;
+  const wasOpen = panel.classList.contains('open');
+  panel.parentElement.querySelectorAll('.detail-panel').forEach(p => p.classList.remove('open'));
+  if (!wasOpen) panel.classList.add('open');
+}
+</script>
+</body>
+</html>

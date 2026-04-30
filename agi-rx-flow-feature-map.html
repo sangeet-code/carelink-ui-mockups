@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CareLink AGI — Rx-Flow Feature Map (Full Landscape)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --bg-code: #f6f8fa;
+    --border: #d0d7de;
+    --border-strong: #afb8c1;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --text-faint: #8c959f;
+    --info: #0969da;
+    --good: #1a7f37;
+    --warn: #cf222e;
+    --neutral: #57606a;
+    --partial: #bf8700;
+    --done: #1a7f37;
+    --pending: #57606a;
+    --code-text: #24292f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.55;
+    font-size: 15px;
+  }
+  header {
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 32px 20px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
+  header .meta { color: var(--text-muted); font-size: 13px; }
+  header .intent {
+    margin-top: 12px;
+    color: var(--text);
+    max-width: 880px;
+  }
+  nav.tabs {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  nav.tabs button {
+    background: transparent;
+    border: 0;
+    padding: 14px 18px;
+    font-size: 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active {
+    color: var(--text);
+    border-bottom-color: var(--info);
+  }
+  main {
+    padding: 32px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  section.panel {
+    display: none;
+    animation: fadein 0.2s ease;
+  }
+  section.panel.active { display: block; }
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  h2 { font-size: 20px; margin: 0 0 16px; font-weight: 600; }
+  h3 { font-size: 16px; margin: 24px 0 10px; font-weight: 600; }
+  h4 { font-size: 13.5px; margin: 18px 0 8px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 12px 22px; padding: 0; }
+  li { margin: 4px 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--bg-code);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    color: var(--code-text);
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--code-text);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  table th, table td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table th { background: var(--bg-alt); font-weight: 600; }
+  .callout {
+    border-left: 4px solid var(--info);
+    background: #ddf4ff;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 14px;
+  }
+  .callout.good { border-left-color: var(--good); background: #dafbe1; }
+  .callout.warn { border-left-color: var(--warn); background: #ffebe9; }
+  .callout strong { font-weight: 600; }
+
+  .badge {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+  .badge-done { background: #dafbe1; color: #0a3622; }
+  .badge-pending { background: var(--bg-alt); color: var(--text-muted); }
+  .badge-partial { background: #fff8c5; color: #4d2d00; }
+  .badge-shipped { background: #ddf4ff; color: #0a3069; }
+  .badge-ui { background: #fbf0ff; color: #4d1e6e; }
+  .badge-locked { background: var(--bg-alt); color: var(--text); border: 1px solid var(--border); }
+
+  .grouping-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .group-card {
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: white;
+  }
+  .group-card.shipped { border-color: var(--good); }
+  .group-card.pending { border-color: var(--neutral); }
+  .group-card .group-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .group-card.shipped .group-label { color: var(--good); }
+  .group-card .group-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .group-card .group-summary {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+  .group-card ul { margin: 4px 0 0 18px; font-size: 13px; }
+
+  .footer-note {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CareLink AGI — Rx-Flow Feature Map</h1>
+  <div class="meta">2026-04-27 (Phase 7+ expert decomposition plan + Group A status snapshot). Source: <code>docs/indexes/rx-flow/expert-decomposition-plan.md</code></div>
+  <div class="intent">A single reference for every orchestration, expert, skill, and orchestrator template the rx-flow universe will eventually contain. Sourced from a deep read of the master pseudo-code doc (72 pages, 17 FUNC orchestrations + parallel document-intake leg) plus the 10 user-locked design decisions from 2026-04-27.</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="overview" class="active">Overview</button>
+  <button data-tab="inventory">Orchestration inventory</button>
+  <button data-tab="experts">Experts (19 total)</button>
+  <button data-tab="skills">Skills (~58)</button>
+  <button data-tab="orchestrators">Orchestrator templates</button>
+  <button data-tab="patterns">Cross-cutting patterns</button>
+  <button data-tab="decisions">Locked decisions</button>
+  <button data-tab="sequencing">Recommended sequencing</button>
+  <button data-tab="process">Process + open Qs</button>
+  <button data-tab="files">Where to find things</button>
+</nav>
+
+<main>
+
+<!-- ============================================================ OVERVIEW -->
+<section class="panel active" data-panel="overview">
+  <h2>TL;DR</h2>
+  <ul>
+    <li>The master pseudo-code doc enumerates <strong>17 orchestrations</strong> + a <strong>parallel document-intake leg</strong>. NewRx is ~25–30% of that surface.</li>
+    <li>Targeting <strong>19 LLM experts total</strong> when complete (8 existing + 2 shipped + 9 remaining), supported by <strong>~58 skills</strong> (44 exist + ~14 missing) and <strong>multiple per-entry-point orchestrator templates</strong>.</li>
+    <li><strong>3 RPH gates</strong> (PV1 eRX-verification, PV1 billing-verification, PV2 final-verification) are <strong>operator UI gates, NOT LLM experts</strong> per a locked decision.</li>
+    <li><strong>Cancel-Rx + Renewal-Response shipped 2026-04-27</strong> along with the shared Inngest→AGI-orchestrator bridge.</li>
+    <li>Architecture is now mature: shared preamble, loose contracts, DB-authoritative HITL, Inngest cold-revive, classified subprocess retry, cold Bash approval. <strong>Each remaining expert is ~3–4 days of work.</strong></li>
+  </ul>
+
+  <h3>Status snapshot — 2026-04-27</h3>
+
+  <h4>Shipped today</h4>
+  <table>
+    <tr><th>Item</th><th>Why it matters</th></tr>
+    <tr><td><span class="badge badge-shipped">SHIPPED</span> <code>rx-flow-cancel-rx</code> expert</td><td>First Group A NCPDP message handler. Match + fulfillment-stage routing + linked records. 6 tests.</td></tr>
+    <tr><td><span class="badge badge-shipped">SHIPPED</span> <code>rx-flow-renewal-response</code> expert</td><td>Second Group A. Match + status branch (Approved / Approved-with-Changes / Denied). 5 tests.</td></tr>
+    <tr><td><span class="badge badge-shipped">SHIPPED</span> <code>_orchestrator_bridge.py</code> (NEW shared infra)</td><td>Inngest → AGI orchestrator session bridge. Future Group A handlers reuse this. 8 tests.</td></tr>
+    <tr><td><span class="badge badge-shipped">SHIPPED</span> <code>DataEntryExpertInput.source</code> discriminator</td><td>Locked decision #8 implemented. Unblocks Approved-with-Changes / Approved / Valid-Transfer-Response branches reusing existing data-entry expert.</td></tr>
+    <tr><td><span class="badge badge-shipped">SHIPPED</span> 2 new orchestrator templates</td><td><code>rx-cancel-rx-orchestrator</code> + <code>rx-renewal-response-orchestrator</code>. Locked decision #6 (multi-orchestrator) takes its first concrete shape.</td></tr>
+    <tr><td><span class="badge badge-shipped">SHIPPED</span> Inngest DI wire-up</td><td><code>set_orchestrator_bridge_dependencies</code>. Bridge ready to receive Inngest events at app boot.</td></tr>
+    <tr><td>13 files / +2,278 LoC / 19 new tests</td><td>All tests pass; 0 new pre-existing-failure regressions</td></tr>
+  </table>
+
+  <h4>Final expert tally</h4>
+  <table>
+    <tr><th>Group</th><th>Count</th><th>Status</th></tr>
+    <tr><td>Existing (pre-2026-04-27)</td><td>8</td><td><span class="badge badge-done">DONE</span></td></tr>
+    <tr><td>Group A (NCPDP messages)</td><td>6</td><td>2/6 SHIPPED 2026-04-27; 4 pending</td></tr>
+    <tr><td>Group B (sub-workflows)</td><td>4</td><td>0/4; 3 LLM experts + 1 thin bridge</td></tr>
+    <tr><td>Group C (doc intake)</td><td>1</td><td>0/1</td></tr>
+    <tr><td><strong>Total LLM experts</strong></td><td><strong>19</strong></td><td><strong>10 done, 9 pending</strong></td></tr>
+    <tr><td>Operator UI gates</td><td>3</td><td>UI work, no LLM</td></tr>
+  </table>
+
+  <h3>Architecture deltas every new expert inherits for free</h3>
+  <ol>
+    <li>Native <code>AgentDefinition</code> (Option A) — 4 hops/expert (was 13)</li>
+    <li>Loose Pydantic outputs + retry-once at <code>invoke_expert</code> boundary</li>
+    <li>Registry: 4 essential gates (was 14)</li>
+    <li>Shared expert preamble auto-prepended at registry load (HITL resume + memory protocol + restish conventions + output-contract reminder hoisted from per-MD duplication)</li>
+    <li>DB-authoritative HITL + Inngest cold-revive durability</li>
+    <li>Push-based SSE stats + LogsPanel + AgentTracePanel</li>
+    <li>Subprocess robustness: classified retry + typed fallback envelope</li>
+    <li>Cold Bash approval gate for mutating verbs</li>
+    <li>Trace export endpoint (<code>/api/agi/debug/trace/{session_id}/export</code>)</li>
+    <li>Body-vs-frontmatter linter (parametrized over each agent file)</li>
+    <li>Inngest→AGI-orchestrator-session bridge (<code>_orchestrator_bridge.py</code>, 2026-04-27)</li>
+  </ol>
+</section>
+
+<!-- ============================================================ INVENTORY -->
+<section class="panel" data-panel="inventory">
+  <h2>Orchestration inventory from the master doc</h2>
+  <p>The pseudo code organises rx-flow into <strong>3 entry points</strong> and <strong>17+ FUNC orchestrations</strong> invoked from them.</p>
+
+  <h3>Entry points</h3>
+  <table>
+    <tr><th>Entry</th><th>Trigger</th><th>Routes to</th></tr>
+    <tr><td><strong>FUNC INBOUND</strong></td><td>NCPDP eRx message arrives</td><td>one of 9 message-type funcs (NewRx, RxRenewalResponse, CancelRx, RxChangeResponse, RxTransferRequest/Response/Confirm, RxHistoryResponse, NewRxResponseDenied)</td></tr>
+    <tr><td><strong>FUNC RX RENEWAL REQUESTED</strong></td><td>Refills==0, IVR refill request, scheduled refill</td><td>outbound renewal request to prescriber</td></tr>
+    <tr><td><strong>Document upload event</strong></td><td>Fax/upload arrives independent of NCPDP</td><td>FUNC DOCUMENT FLOW DETERMINATION (parallel leg)</td></tr>
+  </table>
+
+  <h3>NCPDP message-type FUNCs (9 inbound branches)</h3>
+  <table>
+    <tr><th>FUNC</th><th>Pseudo-code page</th><th>Status</th></tr>
+    <tr><td>FUNC NEW RX</td><td>p.2</td><td><span class="badge badge-done">DONE</span> <code>newrx-orchestrator</code> + 8 experts</td></tr>
+    <tr><td>FUNC RX RENEWAL RESPONSE</td><td>p.5</td><td><span class="badge badge-done">DONE</span> <code>rx-flow-renewal-response</code> (2026-04-27)</td></tr>
+    <tr><td>FUNC CANCEL RX</td><td>p.10</td><td><span class="badge badge-done">DONE</span> <code>rx-flow-cancel-rx</code> (2026-04-27)</td></tr>
+    <tr><td>FUNC RX CHANGE RESPONSE</td><td>p.13</td><td><span class="badge badge-pending">PENDING</span> Group A3</td></tr>
+    <tr><td>FUNC RX TRANSFER REQUEST</td><td>p.16</td><td><span class="badge badge-pending">PENDING</span> folded into Group A4 (transfer expert)</td></tr>
+    <tr><td>FUNC RX TRANSFER RESPONSE</td><td>p.16</td><td><span class="badge badge-pending">PENDING</span> same expert</td></tr>
+    <tr><td>FUNC RX TRANSFER CONFIRM</td><td>p.17</td><td><span class="badge badge-pending">PENDING</span> same expert</td></tr>
+    <tr><td>FUNC RX HISTORY RESPONSE</td><td>p.18</td><td><span class="badge badge-pending">PENDING</span> Group A5</td></tr>
+    <tr><td>FUNC NEW RX RESPONSE DENIED</td><td>p.19</td><td><span class="badge badge-pending">PENDING</span> Group A6</td></tr>
+  </table>
+
+  <h3>Sub-workflows (called from multiple entry points)</h3>
+  <table>
+    <tr><th>FUNC</th><th>Pseudo-code page</th><th>Status</th></tr>
+    <tr><td>FUNC DATA ENTRY AUTO_PROCESS</td><td>p.20</td><td><span class="badge badge-done">DONE</span> <code>rx-flow-data-entry</code> (now with <code>source</code> discriminator)</td></tr>
+    <tr><td>FUNC CREATE CLINICAL CHECKLIST</td><td>p.23</td><td><span class="badge badge-partial">PARTIAL</span> <code>rx-flow-clinical-checklist</code> covers NewRx; reuse for PA + doc intake via mode flag</td></tr>
+    <tr><td>FUNC SUBMIT_CLAIM</td><td>p.25</td><td><span class="badge badge-done">DONE</span> <code>rx-flow-billing</code> payload builder + Inngest dispatch bridge</td></tr>
+    <tr><td>FUNC CLAIM_RESPONSE</td><td>p.26</td><td><span class="badge badge-partial">PARTIAL</span> <code>paid-claim-evaluator</code> skill exists; folded into billing expert per locked decision</td></tr>
+    <tr><td>FUNC REJECT_CLASSIFIER</td><td>p.27</td><td><span class="badge badge-done">DONE</span> <code>rx-flow-rejection-classifier</code></td></tr>
+    <tr><td>FUNC REFILL READINESS REVIEW</td><td>p.7</td><td><span class="badge badge-pending">PENDING</span> Group B1</td></tr>
+    <tr><td>FUNC RX HOLD ROUTING</td><td>p.9</td><td><span class="badge badge-pending">PENDING</span> folded into refill-readiness</td></tr>
+    <tr><td>FUNC ERX_Verification (PV1 eRX)</td><td>p.27</td><td><span class="badge badge-ui">UI GATE ONLY</span> no LLM expert</td></tr>
+    <tr><td>FUNC BILLING_Verification (PV1 billing)</td><td>p.28</td><td><span class="badge badge-ui">UI GATE ONLY</span> no LLM expert</td></tr>
+    <tr><td>FUNC PERFORM DUR</td><td>p.28</td><td><span class="badge badge-done">DONE</span> <code>rx-flow-dur</code></td></tr>
+    <tr><td>FUNC DUR REVIEW</td><td>p.29</td><td><span class="badge badge-pending">PENDING</span> Group B2</td></tr>
+    <tr><td>FUNC CALL AGENT</td><td>p.29</td><td><span class="badge badge-pending">PENDING</span> Group B4 (<code>rx-flow-prescriber-outreach</code>)</td></tr>
+    <tr><td>FUNC LOAD FULFILLMENT QUEUE / PRINT LABEL / ACCURACY SCAN / MANUAL NDC ENTRY</td><td>p.31–34</td><td><span class="badge badge-partial">MOSTLY UI</span> <code>rx-flow-fulfillment</code> covers data-side</td></tr>
+    <tr><td>FUNC LOAD BATCH PATIENT / VERIFICATION SCAN (PV2)</td><td>p.34</td><td><span class="badge badge-ui">UI GATE ONLY</span> no LLM expert</td></tr>
+    <tr><td>FUNC INITIATE SHIPMENT / PACKAGING / GENERATE CARTON IDS / PACK CARTON / SEAL CARTON / COMPLETE SHIPMENT (10 funcs)</td><td>p.35–42</td><td><span class="badge badge-partial">PARTIAL</span> <code>rx-flow-shipping</code> is payload builder; operator UI handles physical steps</td></tr>
+  </table>
+
+  <h3>Document Intake — Clinical Management (parallel flow)</h3>
+  <table>
+    <tr><th>FUNC</th><th>Pseudo-code page</th><th>Status</th></tr>
+    <tr><td>FUNC DOCUMENT FLOW DETERMINATION</td><td>p.43</td><td><span class="badge badge-pending">PENDING</span> folded into Group C <code>doc-intake-assessor</code></td></tr>
+    <tr><td>FUNC DOCUMENT MATCHED TO RX / PATIENT / PRESCRIBER / NOT MATCHED</td><td>p.43–48</td><td>Same — single assessor with internal branches</td></tr>
+    <tr><td>FUNC LAB / PROGRESS NOTE / PA RESPONSE / INSURANCE / DEMOGRAPHIC / REFERRAL ASSESSMENT</td><td>p.43–47</td><td>Same</td></tr>
+    <tr><td>FUNC PA APPEAL / PA RFI / PEER TO PEER</td><td>p.46</td><td>Triggered by PA Response branch — calls Group B3 (<code>rx-flow-prior-auth</code>)</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ EXPERTS -->
+<section class="panel" data-panel="experts">
+  <h2>19 LLM experts total when complete</h2>
+  <p>10 done, 9 pending. Plus 3 operator UI gates that are NOT LLM experts.</p>
+
+  <div class="grouping-grid">
+    <div class="group-card shipped">
+      <div class="group-label">Existing — 8 experts (DONE)</div>
+      <div class="group-title">Phase 1–6: NewRx flow</div>
+      <div class="group-summary">Shipped pre-2026-04-27. Cover the FUNC NEW RX entry point end-to-end.</div>
+      <ul>
+        <li><code>rx-flow-intake</code> — match patient/prescriber/drug/insurance + intake review</li>
+        <li><code>rx-flow-rejection-classifier</code> — stateless reject-code classifier</li>
+        <li><code>rx-flow-data-entry</code> — sig + benefits + compliance (gained <code>source</code> discriminator 2026-04-27)</li>
+        <li><code>rx-flow-clinical-checklist</code> — NewRx checklist build</li>
+        <li><code>rx-flow-billing</code> — submit-claim payload builder; CLAIM_RESPONSE folded in</li>
+        <li><code>rx-flow-dur</code> — read-only DUR screening</li>
+        <li><code>rx-flow-fulfillment</code> — lot/label/scan/dispensed-quantity</li>
+        <li><code>rx-flow-shipping</code> — storage / shipping payload builder</li>
+      </ul>
+    </div>
+
+    <div class="group-card shipped">
+      <div class="group-label">Group A — 2/6 shipped 2026-04-27</div>
+      <div class="group-title">NCPDP message handlers</div>
+      <div class="group-summary">First two of the 6 Group A handlers. Pattern is now copy-paste for the remaining four.</div>
+      <ul>
+        <li><span class="badge badge-shipped">SHIPPED</span> <code>rx-flow-cancel-rx</code> — match + fulfillment-stage routing + linked records</li>
+        <li><span class="badge badge-shipped">SHIPPED</span> <code>rx-flow-renewal-response</code> — match + status branch (Approved / Approved-with-Changes / Denied)</li>
+        <li><span class="badge badge-pending">A3</span> <code>rx-flow-change-response</code> — RxChangeResponse status branch; Approved-with-Changes hands to data-entry with <code>source="rx_change"</code></li>
+        <li><span class="badge badge-pending">A4</span> <code>rx-flow-transfer</code> (one expert, three modes via <code>mode</code> discriminator: request / response / confirm)</li>
+        <li><span class="badge badge-pending">A5</span> <code>rx-flow-history-response</code> — patient-only match; stores med history on patient profile</li>
+        <li><span class="badge badge-pending">A6</span> <code>rx-flow-newrx-response-denied</code> — match to originating NewRxRequest + create outreach work item</li>
+      </ul>
+    </div>
+
+    <div class="group-card pending">
+      <div class="group-label">Group B — 0/4 (3 LLM + 1 bridge)</div>
+      <div class="group-title">Sub-workflows</div>
+      <div class="group-summary">Cross-cutting workflows triggered from multiple entry points.</div>
+      <ul>
+        <li><span class="badge badge-pending">B1</span> <code>rx-flow-refill-readiness</code> — runs all 6 SKILL checks (open-hold, refill-benefits, test-claim, rems, clinical, financial). All 6 skills exist!</li>
+        <li><span class="badge badge-pending">B2</span> <code>rx-flow-dur-review</code> — RPH overrides on DUR; corrective-action; may trigger outreach</li>
+        <li><span class="badge badge-pending">B3</span> <code>rx-flow-prior-auth</code> — multi-day saga: Approved/Denied/RFI/Peer-to-Peer branches. Needs 3 NEW skills.</li>
+        <li><span class="badge badge-pending">B4</span> <code>rx-flow-prescriber-outreach</code> — thin bridge expert. Decides WHEN to dispatch a call. Bridges to existing IVR.</li>
+      </ul>
+    </div>
+
+    <div class="group-card pending">
+      <div class="group-label">Group C — 0/1</div>
+      <div class="group-title">Document Intake</div>
+      <div class="group-summary">Parallel leg from fax/document upload events. Internal branches by match-target + doc type.</div>
+      <ul>
+        <li><span class="badge badge-pending">C1</span> <code>doc-intake-assessor</code> — ONE expert handles all branches: match-target (RX / Patient / Prescriber / Unmatched) × doc type (Labs / Progress / PA Response / Insurance / Demographics / Referral / Unclassified). PA Response branch hands to Group B3. Document parsing skills bridge to existing Gemini.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Pending experts — full detail</h3>
+
+  <h4>Group A — NCPDP message handlers (4 remaining)</h4>
+  <table>
+    <tr><th>#</th><th>Expert ID</th><th>Skills consumed</th><th>Notes</th></tr>
+    <tr><td>11</td><td><code>rx-flow-change-response</code></td><td><code>rx-change-matching</code>, <code>rx-match</code></td><td>Status branch (Approved / Approved-with-Changes / Denied / Pending). Approved-with-Changes hands to <code>rx-flow-data-entry</code> with <code>source="rx_change"</code>. If already billed, reverse claim via <code>rx-flow-billing</code>.</td></tr>
+    <tr><td>12</td><td><code>rx-flow-transfer</code> (one expert, three modes)</td><td><code>rx-transfer-request-matching</code>, <code>rx-transfer-response-matching</code>, <code>rx-transfer-confirm-matching</code>, <code>rx-match</code></td><td><code>mode</code> discriminator on input (<code>request</code> / <code>response</code> / <code>confirm</code>). Request = we are origin (return our records); Response = we are destination (create new RX_ID, hand to data-entry with <code>source="transfer_in"</code>); Confirm = closes our transfer-out.</td></tr>
+    <tr><td>13</td><td><code>rx-flow-history-response</code></td><td><code>rx-history-response-matching</code></td><td>Patient-only match. Stores med history on patient profile, compares to active therapies. Different shape from other Group A — no rx_id mutation.</td></tr>
+    <tr><td>14</td><td><code>rx-flow-newrx-response-denied</code></td><td><code>new-rx-response-denied-matching</code></td><td>Match to originating NewRxRequest + create outreach work item.</td></tr>
+  </table>
+
+  <h4>Group B — Sub-workflows (4 remaining)</h4>
+  <table>
+    <tr><th>#</th><th>Expert ID</th><th>Skills consumed</th><th>Notes</th></tr>
+    <tr><td>15</td><td><code>rx-flow-refill-readiness</code></td><td><code>open-hold-evaluation</code>, <code>refill-benefits-check</code>, <code>test-claim</code>, <code>rems-status</code>, <code>clinical-review</code>, <code>financial-review</code></td><td>All 6 skills exist! Output is a route (Refill-Hold-Review / Refill-Benefits-Review / Refill-REMS-Review / Refill-Clinical-Review / Refill-Financial-Review / Billing). Triggered by RxRenewalResponse-Approved (currently HITL queue), IVR patient refill, scheduled refill.</td></tr>
+    <tr><td>16</td><td><code>rx-flow-dur-review</code></td><td><code>dur-corrective-action</code>, <code>call-prescriber-dur</code></td><td>Triggered AFTER <code>rx-flow-dur</code> raises issues. RPH overrides → if rejected, runs corrective-action skill → may trigger Group B4 outreach.</td></tr>
+    <tr><td>17</td><td><code>rx-flow-prior-auth</code></td><td><code>create-clinical-checklist</code>, <code>paid-claim-evaluator</code>, NEW: <code>pa-response-parsing</code>, <code>draft-letter-of-medical-necessity</code>, <code>create-clinical-summary-doc</code>, <code>create-peer-to-peer-plan</code></td><td>Multi-day saga. Triggered by reject classifier (PA-required) OR doc-intake (PA Response document). Branches: Approved → billing; Denied → Appeal sub-flow; RFI → checklist gather; Peer-to-Peer → summary doc + plan. <strong>One expert with internal branches per locked decision</strong> — split later if MD body grows unwieldy.</td></tr>
+    <tr><td>18</td><td><code>rx-flow-prescriber-outreach</code></td><td>None — bridges to existing <code>ivr/service.py::create_autonomous</code></td><td>Thin bridge expert. Decides WHEN to dispatch a call. Used by DUR-review (clarification), PA peer-to-peer (PBM call), NewRxResponseDenied/Renewal-Denied (patient outreach).</td></tr>
+  </table>
+
+  <h4>Group C — Document Intake (1 remaining)</h4>
+  <table>
+    <tr><th>#</th><th>Expert ID</th><th>Skills consumed</th><th>Notes</th></tr>
+    <tr><td>19</td><td><code>doc-intake-assessor</code></td><td>Existing: <code>clinical-review</code>, <code>benefits-check</code>, <code>match-insurance</code>, <code>match-pt</code>, <code>match-prescriber</code>, <code>rx-match</code>, <code>create-clinical-checklist</code>. NEW: <code>document-classifier</code>, <code>unmatched-document-classifier</code>, <code>lab-value-parsing</code>, <code>progress-parsing</code>, <code>pa-response-parsing</code>, <code>insurance-parsing</code>, <code>demographic-parsing</code>, <code>referral-parsing</code>, <code>clinical-checklist-status</code>, <code>therapy-requirement</code>, <code>demographic-changes</code></td><td><strong>One expert</strong> per locked decision. Internally branches by match-target (RX / Patient / Prescriber / Unmatched) + document type (Labs / Progress Note / PA Response / Insurance / Demographics / Referral / Unclassified). PA Response branch hands to Group B3 (<code>rx-flow-prior-auth</code>). Document-classifier + extractors <strong>bridge to existing Gemini <code>document_ai/prompts.py</code></strong> rather than rewriting as Claude SKILL.md per locked decision.</td></tr>
+  </table>
+
+  <h3>Operator UI gates — NOT new experts</h3>
+  <p>These are RPH approval gates with pre-loaded structured checklists. Operator-driven; no LLM reasoning. <strong>Build as frontend HITL components</strong>, not experts.</p>
+  <table>
+    <tr><th>Gate</th><th>Pseudo-code</th><th>Replaces FUNC</th></tr>
+    <tr><td>PV1 eRX verification</td><td>Pre-billing pharmacist gate</td><td>FUNC ERX_Verification (p.27)</td></tr>
+    <tr><td>PV1 billing verification</td><td>Post-paid-claim pharmacist gate</td><td>FUNC BILLING_Verification (p.28)</td></tr>
+    <tr><td>PV2 final verification</td><td>Post-fulfillment 6-point checklist</td><td>FUNC VERIFICATION SCAN (p.34)</td></tr>
+  </table>
+  <p style="font-size: 13px; color: var(--text-muted);">Implementation note: ONE generic UI gate component with checklist data parameterized; not three bespoke components.</p>
+</section>
+
+<!-- ============================================================ SKILLS -->
+<section class="panel" data-panel="skills">
+  <h2>~58 skills total</h2>
+  <p>44 exist + ~14 missing. Most missing skills can BRIDGE to existing Gemini <code>document_ai/prompts.py</code> rather than being authored from scratch.</p>
+
+  <h3>Existing 44 skills</h3>
+  <p style="font-size: 13px;">Located in <code>carelink-pms/carelink/agi/skills/</code>:</p>
+  <pre style="white-space: pre-wrap; line-height: 1.6;">benefits-check · call-prescriber-dur · cancel-rx-linked-records · cancel-rx-routing · carton-compatibility · clinical-review · compatible-shipping-profile · compliance · create-clinical-checklist · create-insurance · create-inventory-drug · create-prescriber · create-pt · data-entry-enhancement · data-entry-mapping · dur-corrective-action · dur-severity-classification · financial-review · match-insurance · match-inventory-drug · match-prescriber · match-pt · new-rx-response-denied-matching · open-hold-evaluation · paid-claim-evaluator · patient-cover-page · perform-dur · refill-benefits-check · reject-classifier · rems-status · rx-change-matching · rx-history-response-matching · rx-match · rx-reminder · rx-renewal-matching · rx-transfer-confirm-matching · rx-transfer-request-matching · rx-transfer-response-matching · shipping-documentation · shipping-requirements · sig-code-mapping · storage-requirements · supply-requirements · test-claim</pre>
+
+  <h3>~14 missing skills (need authoring)</h3>
+
+  <h4>Doc-intake cluster (10) — most can BRIDGE to existing Gemini</h4>
+  <table>
+    <tr><th>Skill</th><th>Strategy</th></tr>
+    <tr><td><code>document-classifier</code></td><td>Use Gemini CLASSIFICATION_PROMPT</td></tr>
+    <tr><td><code>unmatched-document-classifier</code></td><td>New — small classifier</td></tr>
+    <tr><td><code>lab-value-parsing</code></td><td>Uses LOINC tool</td></tr>
+    <tr><td><code>progress-parsing</code></td><td>Bridge to Gemini progress note prompt</td></tr>
+    <tr><td><code>pa-response-parsing</code></td><td>Bridge to Gemini PA response prompt</td></tr>
+    <tr><td><code>insurance-parsing</code></td><td>Bridge to Gemini insurance card prompt</td></tr>
+    <tr><td><code>demographic-parsing</code></td><td>Bridge to Gemini demographics prompt</td></tr>
+    <tr><td><code>referral-parsing</code></td><td>Bridge to Gemini referral prompt</td></tr>
+    <tr><td><code>clinical-checklist-status</code></td><td>New — checklist state assessor</td></tr>
+    <tr><td><code>therapy-requirement</code></td><td>Uses FDB tool</td></tr>
+    <tr><td><code>demographic-changes</code></td><td>HITL diff</td></tr>
+  </table>
+
+  <h4>PA cluster (3) — need fresh authoring</h4>
+  <ul>
+    <li><code>draft-letter-of-medical-necessity</code></li>
+    <li><code>create-clinical-summary-doc</code></li>
+    <li><code>create-peer-to-peer-plan</code></li>
+  </ul>
+
+  <h4>Misc (1) — could be a TOOL not a SKILL</h4>
+  <ul>
+    <li><code>task-assignment</code> — parallel-task distribution from clinical checklist</li>
+  </ul>
+</section>
+
+<!-- ============================================================ ORCHESTRATORS -->
+<section class="panel" data-panel="orchestrators">
+  <h2>Orchestrator templates</h2>
+  <p>User-locked decision: <strong>multi-orchestrator</strong> — one template per entry point. Stored in <code>carelink-frontend/src/constants/system-prompt-templates.ts</code>.</p>
+
+  <h3>Existing templates</h3>
+  <table>
+    <tr><th>Template ID</th><th>Status</th></tr>
+    <tr><td><code>newrx-agent</code></td><td>Monolith (Phase 6 deletion gated on 14-day clean orchestrator soak)</td></tr>
+    <tr><td><code>newrx-orchestrator</code></td><td><span class="badge badge-done">DONE</span></td></tr>
+    <tr><td><code>rx-cancel-rx-orchestrator</code></td><td><span class="badge badge-shipped">DONE 2026-04-27</span></td></tr>
+    <tr><td><code>rx-renewal-response-orchestrator</code></td><td><span class="badge badge-shipped">DONE 2026-04-27</span></td></tr>
+  </table>
+
+  <h3>Pending templates</h3>
+  <table>
+    <tr><th>Template ID</th><th>For expert(s)</th></tr>
+    <tr><td><code>rx-change-response-orchestrator</code></td><td><code>rx-flow-change-response</code></td></tr>
+    <tr><td><code>rx-transfer-orchestrator</code></td><td><code>rx-flow-transfer</code> (all 3 modes)</td></tr>
+    <tr><td><code>rx-history-response-orchestrator</code></td><td><code>rx-flow-history-response</code></td></tr>
+    <tr><td><code>rx-newrx-response-denied-orchestrator</code></td><td><code>rx-flow-newrx-response-denied</code></td></tr>
+    <tr><td><code>rx-refill-readiness-orchestrator</code></td><td><code>rx-flow-refill-readiness</code></td></tr>
+    <tr><td><code>rx-prior-auth-orchestrator</code></td><td><code>rx-flow-prior-auth</code> (multi-day saga)</td></tr>
+    <tr><td><code>doc-intake-orchestrator</code></td><td><code>doc-intake-assessor</code> (parallel flow)</td></tr>
+  </table>
+  <p style="font-size: 13px; color: var(--text-muted);">DUR-review and prescriber-outreach typically run as sub-flows inside other orchestrators — they may not need their own top-level templates.</p>
+</section>
+
+<!-- ============================================================ PATTERNS -->
+<section class="panel" data-panel="patterns">
+  <h2>Cross-cutting overlap patterns</h2>
+  <p>These patterns repeat across multiple experts; encoding them once is critical for maintainability.</p>
+
+  <table>
+    <tr><th>#</th><th>Pattern</th><th>Where it appears</th><th>Resolution</th></tr>
+    <tr>
+      <td>1</td>
+      <td><strong>Match-with-confidence-fallback</strong> (try linkage → previous Rx ref → fuzzy → confidence&gt;0.95 ? load : HITL)</td>
+      <td>All 6 NCPDP-message experts + history + doc intake</td>
+      <td>Per-message-type matching skills already encapsulate the entry-point cues; all internally call shared <code>rx-match</code> for fuzzy fallback</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>Status-branch routing</strong> (Approved / Approved-with-Changes / Denied / Pending / RFI / Peer-to-Peer)</td>
+      <td>renewal-response, change-response, transfer, PA</td>
+      <td>Encode in expert MD body — deterministic, not a separate skill</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Hand-off to data-entry</strong> (Approved-with-Changes / Valid-Transfer-Response → data-entry)</td>
+      <td>renewal-response, change-response, transfer</td>
+      <td>Extend existing <code>rx-flow-data-entry</code> with <code>source</code> discriminator (DONE 2026-04-27). NO new expert.</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>Linked-records cascade</strong> (cancel any pending requests, link new RX to previous, supersede on change)</td>
+      <td>cancel-rx, renewal-denied, change-response-approved-with-changes</td>
+      <td>Deterministic DB operations in Inngest steps OR a TOOL call. Already pattern of <code>cancel-rx-linked-records</code> skill.</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><strong>Outreach task creation</strong> (denied responses, DUR-blocked, PA peer-to-peer)</td>
+      <td>NewRxResponseDenied, RxRenewalResponse-Denied, DUR-blocked, PA peer-to-peer</td>
+      <td>TOOL not expert. Decision lives in expert; action is <code>create-outreach-task</code>.</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td><strong>Clinical-checklist read/update</strong> (build vs update mode)</td>
+      <td>NewRx (build), PA-RFI (update), PA-Appeal (update), doc-intake-referral (build)</td>
+      <td>Extend <code>rx-flow-clinical-checklist</code> with <code>mode</code> flag (build / update). NO split per locked decision.</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td><strong>RPH HITL approval gate</strong> (PV1 eRX, PV1 billing, DUR-review, PV2)</td>
+      <td>Multiple gate points</td>
+      <td>ONE generic UI gate component with parameterized checklist data. NO LLM experts per locked decision.</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ============================================================ DECISIONS -->
+<section class="panel" data-panel="decisions">
+  <h2>10 locked design decisions (2026-04-27)</h2>
+  <p>The following 10 decisions are LOCKED. Future expert work must respect them; revisiting requires explicit user approval.</p>
+
+  <table>
+    <tr><th>#</th><th>Decision</th><th>Status</th><th>Implication</th></tr>
+    <tr><td>1</td><td>Transfer flow = ONE expert with mode discriminator</td><td><span class="badge badge-pending">PENDING</span> Group A4</td><td><code>rx-flow-transfer</code> handles request/response/confirm; saves 2 expert MDs</td></tr>
+    <tr><td>2</td><td>PA flow = ONE expert; lean out later if MD grows</td><td><span class="badge badge-pending">PENDING</span> Group B3</td><td><code>rx-flow-prior-auth</code> has internal Approved/Denied/RFI/Peer-to-Peer branches</td></tr>
+    <tr><td>3</td><td>Refill-readiness = ONE expert running all 6 SKILL checks</td><td><span class="badge badge-pending">PENDING</span> Group B1</td><td>NOT split into per-check experts</td></tr>
+    <tr><td>4</td><td>Doc-intake = ONE expert (<code>doc-intake-assessor</code>)</td><td><span class="badge badge-pending">PENDING</span> Group C</td><td>Internal branches by match-target + doc type. NOT split into determination + assessor.</td></tr>
+    <tr><td>5</td><td>PV1 / DUR-review-gate / PV2 = UI gate only</td><td><span class="badge badge-locked">PRINCIPLE LOCKED</span></td><td>NO LLM experts for these RPH approval steps. UI work pending.</td></tr>
+    <tr><td>6</td><td>Multi-orchestrator (one template per entry point)</td><td><span class="badge badge-partial">PARTIAL</span></td><td>3 templates exist (<code>newrx</code>, <code>rx-cancel-rx</code>, <code>rx-renewal-response</code>); 6+ pending. NOT a mega-router orchestrator.</td></tr>
+    <tr><td>7</td><td>Doc-intake parsing skills = bridge to existing Gemini <code>document_ai/prompts.py</code></td><td><span class="badge badge-pending">PENDING</span> Group C dependency</td><td>NOT rewritten as Claude SKILL.md prose</td></tr>
+    <tr><td>8</td><td>Data-entry = extended with <code>source</code> discriminator</td><td><span class="badge badge-done">IMPLEMENTED</span> 2026-04-27</td><td>NO per-source data-entry forks</td></tr>
+    <tr><td>9</td><td>Clinical-checklist = mode flag (build / update)</td><td><span class="badge badge-pending">PENDING</span> Group B3 (PA) or Group C (doc-intake) consumer</td><td>NOT split into builder + updater experts</td></tr>
+    <tr><td>10</td><td>Claim-response-evaluator = lean fold-in to billing</td><td><span class="badge badge-done">ALREADY IN PLACE</span></td><td><code>paid-claim-evaluator</code> skill already inside billing expert; NOT a separate expert until billing MD outgrows ~400 lines.</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ SEQUENCING -->
+<section class="panel" data-panel="sequencing">
+  <h2>Recommended sequencing for the remaining 9 experts</h2>
+  <p>Order optimized by <strong>leverage of new infrastructure</strong> + <strong>dependency chains</strong> + <strong>user-visible value</strong>.</p>
+
+  <div class="callout good">
+    <strong>DONE 2026-04-27</strong>: <code>rx-flow-cancel-rx</code> (#9), <code>rx-flow-renewal-response</code> (#10) + shared <code>_orchestrator_bridge.py</code>. Pattern now validated end-to-end.
+  </div>
+
+  <h3>Remaining order</h3>
+  <ol>
+    <li><strong><code>doc-intake-assessor</code> (Group C)</strong> — unlocks the entire fax/document leg; reuses existing Gemini classifier; first multi-orchestrator template lands; significant business value (PA responses, lab results, demographic updates all flow through this)</li>
+    <li><strong><code>rx-flow-renewal-response</code> follow-up: build <code>rx-flow-refill-readiness</code></strong> — completes the Approved branch (currently HITL queue). High volume.</li>
+    <li><strong><code>rx-flow-change-response</code></strong> — high-volume NCPDP message; same pattern as renewal-response</li>
+    <li><strong><code>rx-flow-prior-auth</code> + 3 new PA skills</strong> — biggest unknown. Plan a separate skill-creation phase. Unlocks the rejection-classifier→PA branch + the doc-intake PA Response branch</li>
+    <li><strong><code>rx-flow-transfer</code></strong> (one expert, 3 modes) — moderately common; structurally identical to renewal-response</li>
+    <li><strong><code>rx-flow-dur-review</code></strong> — gates DUR overrides; depends on whether operator UI is enough or LLM reasoning adds value</li>
+    <li><strong><code>rx-flow-history-response</code> + <code>rx-flow-newrx-response-denied</code></strong> — lowest volume; parallelizable</li>
+    <li><strong><code>rx-flow-prescriber-outreach</code></strong> — last; depends on PA + DUR-review consumers wanting it</li>
+  </ol>
+
+  <p>Each future Group A expert is <strong>~3–4 days</strong> with one developer using the cancel-rx + renewal-response template. Group B/C are larger (1–2 weeks each for PA + doc-intake due to the new skill suites).</p>
+</section>
+
+<!-- ============================================================ PROCESS -->
+<section class="panel" data-panel="process">
+  <h2>Process for building the next expert</h2>
+  <div class="callout good">
+    <strong>Playbook validated 2026-04-27</strong> with cancel-rx + renewal-response.
+  </div>
+
+  <ol>
+    <li><strong>Pre-flight</strong> (master): read existing patterns (rejection-classifier MD, contracts, new_rx Inngest fn, <code>agi_cold_revive.py</code> bridge, <code>AGIService.create_session</code> signature). Verify the matching skills exist + are current. Confirm the relevant Inngest event is already mapped at <code>inbound.py:23-33</code>.</li>
+    <li><strong>Build in worktree</strong>: spawn an Opus agent with <code>isolation: "worktree"</code> and a brief that pins base SHA, forbids commits/pushes/destructive git, lists exact deliverables (expert MD, contract classes, orchestrator template, Inngest handler, tests, sibling-collision note), and includes a stop-and-surface clause.</li>
+    <li><strong>Verify + test in parallel</strong> (after worktree returns): two opus agents — one read-only verification (contracts, MD frontmatter, sacred-touch, body-vs-frontmatter), one testing (pyflakes + pytest narrow + tsc smoke).</li>
+    <li><strong>Collate to main</strong>: copy worktree's diff; for shared files (contracts append, <code>__init__.py</code> register, templates append), merge manually. Apply any nit fixes inline.</li>
+    <li><strong>Stage, surface, STOP</strong>: never commit on user's behalf. Stage + draft message + wait for explicit <code>git commit</code> from user.</li>
+    <li><strong>Worktree cleanup</strong>: after user confirms commit, <code>git worktree remove --force &lt;path&gt; &amp;&amp; git branch -D &lt;branch&gt;</code>.</li>
+  </ol>
+
+  <p style="font-size: 13px; color: var(--text-muted);">For 2+ experts in parallel, sibling worktrees deliberately duplicate setup files (data-entry source ext, bridge wire-up). Collator dedups at merge time.</p>
+
+  <h3>Open questions deferred until consumers force a decision</h3>
+  <ol>
+    <li><strong>PA expert split point</strong> — at what MD body length does it become unwieldy? Locked decision says "lean out later if needed". Likely trigger: when MD exceeds ~600 lines of body content (preamble inherited).</li>
+    <li><strong>Refill-readiness orchestrator template</strong> — is it triggered ONLY from renewal-response orchestrator, or does it also have its own entry point (IVR patient refill, scheduled refill)? If multiple entry points, dedicated template; if one, can be invoked inline.</li>
+    <li><strong>Doc-intake bridges to Gemini</strong> — fine for parsing; what about classification confidence? Claude classifier as fallback when Gemini confidence &lt; threshold? Cost trade-off.</li>
+    <li><strong>Transfer expert mode discriminator</strong> — input shape: top-level <code>mode: Literal["request", "response", "confirm"]</code> field, or three separate input classes inheriting a common base? Lean toward the former (one input class, branch in body).</li>
+    <li><strong>Prescriber-outreach durability</strong> — IVR autonomous calls are async + long-running. Should the bridge wait? Or return <code>outreach_initiated=true</code> immediately and let the IVR side complete asynchronously? Lean toward the latter.</li>
+    <li><strong>Linked-records work item type</strong> — for cancel-rx we use <code>rx.cancel.linked_records_review</code>. For renewal-response and change-response, do we need parallel types, or one generic <code>rx.linked_records_review</code> with a category?</li>
+  </ol>
+
+  <h3>Reading order for new agents</h3>
+  <p>If you're picking this up cold:</p>
+  <ol>
+    <li><strong>This doc</strong> — the landscape</li>
+    <li><code>migration-playbook.md</code> — original Phases 0–6 plan (mostly DONE)</li>
+    <li><code>io-contracts-context.md</code> — Pydantic conventions</li>
+    <li><code>restish-expert-integration.md</code> — restish CLI conventions</li>
+    <li><code>ai-skills-layer.md</code> — skill catalog</li>
+    <li>The shipped expert MDs themselves (<code>carelink-pms/carelink/agi/agents/rx-flow-*.md</code>) — start with <code>rx-flow-rejection-classifier.md</code> (smallest)</li>
+    <li>The shared preamble (<code>carelink-pms/carelink/agi/agents/preamble.py</code>) — what's inherited</li>
+    <li>The shipped Group A (cancel-rx + renewal-response) as the working pattern for new Group A experts</li>
+  </ol>
+</section>
+
+<!-- ============================================================ FILES -->
+<section class="panel" data-panel="files">
+  <h2>Where to find things</h2>
+
+  <table>
+    <tr><th>Concern</th><th>Location</th></tr>
+    <tr><td>Expert MDs</td><td><code>carelink-pms/carelink/agi/agents/rx-flow-*.md</code></td></tr>
+    <tr><td>Shared preamble</td><td><code>carelink-pms/carelink/agi/agents/preamble.py</code></td></tr>
+    <tr><td>Registry + 4 gates</td><td><code>carelink-pms/carelink/agi/agents/registry.py</code></td></tr>
+    <tr><td>Skill catalog</td><td><code>carelink-pms/carelink/agi/skills/&lt;skill-name&gt;/SKILL.md</code></td></tr>
+    <tr><td>I/O contracts</td><td><code>carelink-pms/carelink/agi/contracts/rx_flow.py</code></td></tr>
+    <tr><td><code>invoke_expert</code> MCP tool + retry</td><td><code>carelink-pms/carelink/agi/tools.py</code></td></tr>
+    <tr><td>AGI session lifecycle</td><td><code>carelink-pms/carelink/agi/service.py</code></td></tr>
+    <tr><td>Shared drain helper</td><td><code>carelink-pms/carelink/agi/drain.py::drive_client</code></td></tr>
+    <tr><td>Inngest→orchestrator bridge</td><td><code>carelink-pms/carelink/integrations/inngest/rx_flows/_orchestrator_bridge.py</code></td></tr>
+    <tr><td>Inngest message router</td><td><code>carelink-pms/carelink/integrations/inngest/rx_flows/inbound.py</code></td></tr>
+    <tr><td>Inngest cold-revive</td><td><code>carelink-pms/carelink/integrations/inngest/agi_cold_revive.py</code></td></tr>
+    <tr><td>Per-message Inngest handlers</td><td><code>carelink-pms/carelink/integrations/inngest/rx_flows/{cancel_rx,renewal_response,...}.py</code></td></tr>
+    <tr><td>Orchestrator templates</td><td><code>carelink-frontend/src/constants/system-prompt-templates.ts</code></td></tr>
+    <tr><td>Live Dashboard UI</td><td><code>carelink-frontend/src/components/live-dashboard/</code></td></tr>
+    <tr><td>Tests</td><td><code>carelink-pms/tests/section3_integrations/test_invoke_expert_*.py</code> + <code>tests/section4_services/test_orchestrator_bridge.py</code></td></tr>
+    <tr><td>Master pseudo code (source of truth)</td><td><code>~/Downloads/CareLink Rx Flows Pseudo Code.pdf</code> (not in repo)</td></tr>
+  </table>
+</section>
+
+</main>
+
+<div class="footer-note">
+  <strong>Source</strong>: <code>docs/indexes/rx-flow/expert-decomposition-plan.md</code> @ commit <code>36c24e0</code> (branch <code>docs/rx-flow-indexes</code>, 2026-04-27).<br>
+  <strong>Companion docs</strong>: <code>migration-playbook.md</code>, <code>io-contracts-context.md</code>, <code>restish-expert-integration.md</code>, <code>ai-skills-layer.md</code>, <code>ncpdp-integration.md</code>.
+</div>
+
+<script>
+  const tabs = document.querySelectorAll('nav.tabs button');
+  const panels = document.querySelectorAll('section.panel');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      tabs.forEach(t => t.classList.toggle('active', t === tab));
+      panels.forEach(p => p.classList.toggle('active', p.dataset.panel === target));
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+</script>
+
+</body>
+</html>

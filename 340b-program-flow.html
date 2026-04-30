@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CareLink — 340B Drug Pricing Program</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2333;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --pink: #f778ba;
+    --cyan: #39d2c0;
+    --yellow: #e3b341;
+    --teal: #2dd4bf;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; }
+
+  /* NAV */
+  .topnav { position: fixed; top:0; left:0; right:0; z-index:100; background: var(--surface); border-bottom: 1px solid var(--border); display:flex; align-items:center; padding: 0 24px; height: 56px; gap: 8px; backdrop-filter: blur(12px); }
+  .topnav .logo { font-weight: 700; font-size: 18px; color: var(--teal); margin-right: 24px; letter-spacing: -0.5px; }
+  .topnav .logo span { color: var(--text2); font-weight: 400; }
+  .nav-btn { background: none; border: 1px solid transparent; color: var(--text2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.15s; white-space: nowrap; }
+  .nav-btn:hover { color: var(--text); background: var(--surface2); }
+  .nav-btn.active { color: var(--teal); border-color: var(--teal); background: rgba(45,212,191,0.08); }
+
+  /* MAIN */
+  main { margin-top: 56px; padding: 32px 24px 80px; max-width: 1400px; margin-left: auto; margin-right: auto; }
+
+  /* SECTIONS */
+  .section { display: none; animation: fadeIn 0.3s ease; }
+  .section.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+
+  h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 32px 0 16px; color: var(--teal); }
+  h3 { font-size: 16px; font-weight: 600; margin: 20px 0 10px; }
+  p.desc { color: var(--text2); font-size: 14px; line-height: 1.6; margin-bottom: 24px; max-width: 800px; }
+
+  /* FLOW DIAGRAM */
+  .flow-container { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px; margin: 16px 0 24px; overflow-x: auto; }
+  .flow { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; min-width: min-content; }
+  .flow-v { display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .flow-wrap { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+  .node { padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; min-width: 120px; border: 2px solid transparent; }
+  .node:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .node.frontend { background: rgba(88,166,255,0.12); color: var(--accent); border-color: rgba(88,166,255,0.3); }
+  .node.backend { background: rgba(63,185,80,0.12); color: var(--green); border-color: rgba(63,185,80,0.3); }
+  .node.pms { background: rgba(188,140,255,0.12); color: var(--purple); border-color: rgba(188,140,255,0.3); }
+  .node.db { background: rgba(210,153,34,0.12); color: var(--orange); border-color: rgba(210,153,34,0.3); }
+  .node.external { background: rgba(247,120,186,0.12); color: var(--pink); border-color: rgba(247,120,186,0.3); }
+  .node.workflow { background: rgba(57,210,192,0.12); color: var(--cyan); border-color: rgba(57,210,192,0.3); }
+  .node.program340b { background: rgba(45,212,191,0.12); color: var(--teal); border-color: rgba(45,212,191,0.3); }
+  .node.gap { background: rgba(248,81,73,0.08); color: var(--red); border-color: rgba(248,81,73,0.3); }
+  .node .sub { font-size: 11px; font-weight: 400; color: var(--text2); display: block; margin-top: 3px; }
+
+  .arrow { color: var(--text2); font-size: 20px; padding: 0 6px; flex-shrink: 0; user-select: none; }
+  .arrow-down { color: var(--text2); font-size: 20px; padding: 4px 0; user-select: none; text-align: center; }
+  .arrow-label { font-size: 10px; color: var(--text2); text-align: center; display: block; margin-top: -2px; }
+
+  /* DETAIL PANEL */
+  .detail-panel { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin: 16px 0; display: none; animation: slideDown 0.2s ease; }
+  .detail-panel.open { display: block; }
+  @keyframes slideDown { from { opacity:0; max-height:0; } to { opacity:1; max-height: 800px; } }
+  .detail-panel h4 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .detail-panel p { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .detail-panel code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--accent); }
+  .detail-panel .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 12px; margin: 2px 4px 2px 0; }
+  .tag.t-db { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .tag.t-fhir { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .tag.t-api { background: rgba(63,185,80,0.15); color: var(--green); }
+  .tag.t-ext { background: rgba(247,120,186,0.15); color: var(--pink); }
+  .tag.t-340b { background: rgba(45,212,191,0.15); color: var(--teal); }
+
+  .exists-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: rgba(63,185,80,0.15); color: var(--green); margin-right: 4px; }
+  .gap-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: rgba(248,81,73,0.15); color: var(--red); margin-right: 4px; }
+
+  .item-list { list-style: none; padding: 0; margin: 8px 0 0; }
+  .item-list li { font-size: 13px; color: var(--text2); padding: 4px 0; line-height: 1.5; }
+
+  /* GRID */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin: 16px 0; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; cursor: pointer; transition: all 0.15s; }
+  .card:hover { border-color: var(--teal); transform: translateY(-2px); }
+  .card.no-hover { cursor: default; }
+  .card.no-hover:hover { transform: none; border-color: var(--border); }
+  .card h4 { font-size: 14px; margin-bottom: 6px; }
+  .card p { font-size: 12px; color: var(--text2); line-height: 1.5; }
+  .card .badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; }
+  .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-pink { background: rgba(247,120,186,0.15); color: var(--pink); }
+  .badge-cyan { background: rgba(57,210,192,0.15); color: var(--cyan); }
+  .badge-teal { background: rgba(45,212,191,0.15); color: var(--teal); }
+
+  /* STATS */
+  .stats-row { display: flex; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
+  .stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; min-width: 140px; flex: 1; }
+  .stat-box .num { font-size: 28px; font-weight: 700; }
+  .stat-box .label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  /* PROGRESS BARS */
+  .progress-bar { height: 6px; border-radius: 3px; background: var(--surface2); overflow: hidden; margin: 8px 0 4px; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+
+  /* LEGEND */
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; padding: 16px; background: var(--surface); border-radius: 10px; border: 1px solid var(--border); }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+
+  /* TABLE */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th { text-align: left; padding: 10px 12px; background: var(--surface2); border-bottom: 1px solid var(--border); color: var(--text2); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: rgba(45,212,191,0.04); }
+
+  /* EXPANDABLE */
+  .expandable { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; overflow: hidden; }
+  .expandable-header { padding: 14px 18px; background: var(--surface); cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; }
+  .expandable-header:hover { background: var(--surface2); }
+  .expandable-header .chevron { transition: transform 0.2s; color: var(--text2); }
+  .expandable.open .chevron { transform: rotate(90deg); }
+  .expandable-body { display: none; padding: 16px 18px; background: var(--surface2); border-top: 1px solid var(--border); font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .expandable.open .expandable-body { display: block; }
+
+  /* DECISION TREE */
+  .dtree { padding: 0; margin: 16px 0; }
+  .dnode { background: var(--surface); border: 2px solid var(--border); border-radius: 10px; padding: 16px 20px; margin: 8px 0; cursor: pointer; transition: all 0.2s; }
+  .dnode:hover { border-color: var(--teal); }
+  .dnode.active { border-color: var(--teal); background: rgba(45,212,191,0.06); }
+  .dnode .q { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .dnode .q-num { color: var(--teal); margin-right: 8px; }
+  .dbranch { display: flex; gap: 16px; margin: 0 0 0 32px; }
+  .dbranch-item { flex: 1; position: relative; padding-left: 16px; }
+  .dbranch-item::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 2px; }
+  .dbranch-item.yes::before { background: var(--green); }
+  .dbranch-item.no::before { background: var(--red); }
+  .dbranch-label { font-size: 12px; font-weight: 700; padding: 4px 0; }
+  .dbranch-label.yes { color: var(--green); }
+  .dbranch-label.no { color: var(--red); }
+  .dbranch-result { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin: 4px 0; font-size: 12px; color: var(--text2); line-height: 1.5; }
+  .dbranch-result.result-340b { border-color: rgba(45,212,191,0.4); background: rgba(45,212,191,0.06); }
+  .dbranch-result.result-standard { border-color: rgba(248,81,73,0.3); background: rgba(248,81,73,0.04); }
+  .dbranch-result code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 11px; color: var(--accent); }
+
+  /* STEP FLOW (vertical) */
+  .step-flow { display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .step-node { width: 100%; max-width: 600px; padding: 16px 24px; border-radius: 10px; font-size: 14px; font-weight: 600; text-align: center; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; position: relative; }
+  .step-node:hover { transform: scale(1.02); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+  .step-node .step-num { font-size: 11px; font-weight: 400; color: var(--text2); display: block; margin-bottom: 2px; }
+  .step-node .step-sub { font-size: 11px; font-weight: 400; color: var(--text2); display: block; margin-top: 4px; }
+  .step-arrow { font-size: 20px; color: var(--text2); padding: 4px 0; }
+
+  /* SCHEMA BOX */
+  .schema-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.8; color: var(--text2); margin: 12px 0; overflow-x: auto; }
+  .schema-box .field-new { color: var(--teal); }
+  .schema-box .field-exists { color: var(--text2); }
+  .schema-box .model-name { color: var(--purple); font-weight: 600; }
+  .schema-box .comment { color: var(--text2); opacity: 0.5; }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .topnav { overflow-x: auto; gap: 4px; padding: 0 12px; }
+    .nav-btn { font-size: 12px; padding: 4px 10px; }
+    main { padding: 24px 16px 60px; }
+    .flow-container { padding: 16px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .dbranch { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="logo">340B <span>Program Flow</span></div>
+  <button class="nav-btn active" onclick="showSection('overview')">Overview</button>
+  <button class="nav-btn" onclick="showSection('integration')">Integration Map</button>
+  <button class="nav-btn" onclick="showSection('dispensing')">Dispensing Flow</button>
+  <button class="nav-btn" onclick="showSection('split')">Split Billing</button>
+  <button class="nav-btn" onclick="showSection('inventory')">Inventory</button>
+  <button class="nav-btn" onclick="showSection('compliance')">Compliance</button>
+  <button class="nav-btn" onclick="showSection('stories')">Stories &amp; Gaps</button>
+  <button class="nav-btn" onclick="showSection('roadmap')">Roadmap</button>
+</nav>
+
+<main>
+
+<!-- ==================== SECTION 1: OVERVIEW ==================== -->
+<div class="section active" id="sec-overview">
+  <h1>340B Drug Pricing Program</h1>
+  <p class="desc">The 340B program (Section 340B of the Public Health Service Act, 1992) allows qualifying healthcare organizations &mdash; called <strong>covered entities</strong> &mdash; to purchase outpatient drugs at significantly reduced prices from manufacturers. CareLink operates as a <strong>contract pharmacy</strong>, dispensing 340B drugs on behalf of covered entities. This module is currently at <strong style="color:var(--red)">0% implementation</strong> and is a critical compliance blocker for 340B participation.</p>
+
+  <div class="stats-row">
+    <div class="stat-box"><div class="num" style="color:var(--red)">0%</div><div class="label">Implementation</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--teal)">9</div><div class="label">User stories</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--purple)">7+</div><div class="label">Modules touched</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--orange)">2</div><div class="label">CSV backlog stories</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--red)">BLOCKER</div><div class="label">Cannot participate without this</div></div>
+  </div>
+
+  <h2>Key 340B Concepts</h2>
+  <div class="grid">
+    <div class="card no-hover">
+      <span class="badge badge-teal">ENTITY</span>
+      <h4>Covered Entity (CE)</h4>
+      <p>HRSA-registered organization (hospital, FQHC, DSH, CAH, etc.) that qualifies for 340B pricing. Identified by an <strong>OPA ID</strong> (Office of Pharmacy Affairs). Must maintain eligibility through annual recertification.</p>
+    </div>
+    <div class="card no-hover">
+      <span class="badge badge-teal">PHARMACY</span>
+      <h4>Contract Pharmacy</h4>
+      <p>External pharmacy (like CareLink) that dispenses 340B drugs on behalf of a covered entity under a written contract. Must track all 340B dispenses separately and report to the CE's Third Party Administrator (TPA).</p>
+    </div>
+    <div class="card no-hover">
+      <span class="badge badge-teal">PRICING</span>
+      <h4>Ceiling Price</h4>
+      <p>Maximum price a manufacturer can charge for a 340B-eligible drug, calculated by HRSA using AMP (Average Manufacturer Price) minus the URA (Unit Rebate Amount). Published quarterly. Typically 25-50% below WAC.</p>
+    </div>
+    <div class="card no-hover">
+      <span class="badge badge-teal">BILLING</span>
+      <h4>Split Billing</h4>
+      <p>Decision engine at point-of-dispense that determines whether an Rx qualifies for 340B pricing or standard billing. Considers patient eligibility, drug source, payer type (Medicaid exclusion), and inventory availability.</p>
+    </div>
+  </div>
+
+  <h2>How 340B Works for a Contract Pharmacy</h2>
+  <div class="flow-container">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:12px; width:100%;">
+      <div class="flow-wrap">
+        <div class="node external">Covered Entity<span class="sub">Hospital / FQHC</span></div>
+        <div class="arrow">&rarr;</div>
+        <div class="node program340b">Contract Agreement<span class="sub">Written pharmacy contract</span></div>
+        <div class="arrow">&rarr;</div>
+        <div class="node pms">CareLink PMS<span class="sub">Contract pharmacy</span></div>
+      </div>
+      <div class="arrow-down">&darr; <span class="arrow-label">Patient presents Rx from CE provider</span></div>
+      <div class="flow-wrap">
+        <div class="node program340b">Eligibility Check<span class="sub">Patient + Drug + Payer</span></div>
+        <div class="arrow">&rarr;</div>
+        <div class="node program340b">Split Billing<span class="sub">340B or standard?</span></div>
+        <div class="arrow">&rarr;</div>
+        <div class="node pms">Dispense<span class="sub">From correct lot</span></div>
+        <div class="arrow">&rarr;</div>
+        <div class="node external">Claim<span class="sub">basis_of_cost = "06"</span></div>
+      </div>
+      <div class="arrow-down">&darr; <span class="arrow-label">Report to TPA for covered entity reconciliation</span></div>
+      <div class="flow-wrap">
+        <div class="node external">TPA<span class="sub">340B ESP / Sentry / Macro Helix</span></div>
+        <div class="arrow">&rarr;</div>
+        <div class="node external">HRSA<span class="sub">Audit &amp; compliance</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 2: INTEGRATION MAP ==================== -->
+<div class="section" id="sec-integration">
+  <h1>Module Integration Map</h1>
+  <p class="desc">340B touches 7+ existing CareLink modules. Click any module to see what already exists (green) versus what needs to be built (red).</p>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div> 340B Program (New)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> Existing PMS Module</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--pink)"></div> External System</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Data Store</div>
+    <div class="legend-item"><span class="exists-tag">EXISTS</span> Built</div>
+    <div class="legend-item"><span class="gap-tag">GAP</span> Needs build</div>
+  </div>
+
+  <div class="flow-container">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:16px; width:100%;">
+      <!-- Row 1: External Systems -->
+      <div class="flow-wrap">
+        <div class="node external">HRSA OPA Database<span class="sub">Covered entity registry</span></div>
+        <div class="node external">Covered Entity EHR<span class="sub">Patient eligibility source</span></div>
+        <div class="node external">Wholesaler / IDR<span class="sub">340B drug acquisition</span></div>
+        <div class="node external">TPA<span class="sub">Accumulator files</span></div>
+      </div>
+      <div class="arrow-down">&darr; <span class="arrow-label">External data flows into CareLink</span></div>
+
+      <!-- Row 2: 340B Hub + CareLink Modules -->
+      <div style="display:flex; flex-direction:column; align-items:center; gap:12px;">
+        <div class="node program340b" style="min-width:200px; padding:16px 32px; font-size:15px;" onclick="toggleDetail('int-hub')">
+          340B Program Service
+          <span class="sub">NEW: cl.program_340b</span>
+        </div>
+        <div class="arrow-down">&darr; <span class="arrow-label">Integrates with existing modules</span></div>
+        <div class="flow-wrap">
+          <div class="node pms" onclick="toggleDetail('int-inventory')">Inventory<span class="sub">Lot segregation</span></div>
+          <div class="node pms" onclick="toggleDetail('int-claims')">Claims Switch<span class="sub">NCPDP D.0</span></div>
+          <div class="node pms" onclick="toggleDetail('int-products')">Products/Pricing<span class="sub">Ceiling prices</span></div>
+          <div class="node pms" onclick="toggleDetail('int-patients')">Patients<span class="sub">CE eligibility</span></div>
+          <div class="node pms" onclick="toggleDetail('int-prescriptions')">Prescriptions<span class="sub">340B gate</span></div>
+          <div class="node pms" onclick="toggleDetail('int-dispensing')">Dispensing<span class="sub">Split billing</span></div>
+          <div class="node pms" onclick="toggleDetail('int-reporting')">Reporting<span class="sub">HRSA audit</span></div>
+        </div>
+      </div>
+      <div class="arrow-down">&darr;</div>
+
+      <!-- Row 3: Data Stores -->
+      <div class="flow-wrap">
+        <div class="node db">PostgreSQL<span class="sub">340B models, transactions</span></div>
+        <div class="node db">FHIR R4<span class="sub">MedicationRequest extensions</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Panels -->
+  <div class="detail-panel" id="int-hub">
+    <h4>340B Program Service (New Module)</h4>
+    <p>New CareLink service at <code>carelink-pms/carelink/program_340b/</code>, registered as <code>cl.program_340b</code> on the CareLink singleton.</p>
+    <ul class="item-list">
+      <li><span class="gap-tag">GAP</span> <code>models.py</code> &mdash; CoveredEntity, CoveredEntityContract, Patient340BEligibility, TPAAccumulatorRecord, DuplicateDiscountCheck</li>
+      <li><span class="gap-tag">GAP</span> <code>service.py</code> &mdash; Program340BService with eligibility, split billing, TPA file generation</li>
+      <li><span class="gap-tag">GAP</span> <code>schemas.py</code> &mdash; Pydantic request/response schemas</li>
+      <li><span class="gap-tag">GAP</span> <code>carelink/__init__.py</code> &mdash; Register <code>cl.program_340b</code> lazy property</li>
+      <li><span class="gap-tag">GAP</span> <code>carelink-backend/app/routers/program_340b.py</code> &mdash; API router</li>
+    </ul>
+  </div>
+
+  <div class="detail-panel" id="int-inventory">
+    <h4>Inventory Module Integration</h4>
+    <p>Inventory already has comprehensive lot tracking. 340B requires tagging lots by acquisition source for virtual segregation.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> <code>InventoryProduct.extra_data</code> JSONB &mdash; can store <code>340b_eligible: boolean</code> (models.py:200)</li>
+      <li><span class="exists-tag">EXISTS</span> <code>InventoryLot</code> model with lot number, expiry, serial tracking (models.py:408)</li>
+      <li><span class="exists-tag">EXISTS</span> <code>InventoryStock</code> composite unique (product_id, location_id, lot_id) &mdash; supports segregation (models.py:567)</li>
+      <li><span class="exists-tag">EXISTS</span> <code>InventoryTransaction.unit_cost</code> &mdash; tracks cost at transaction time (models.py:671)</li>
+      <li><span class="gap-tag">GAP</span> <code>InventoryLot.acquisition_source</code> &mdash; new enum field: "standard", "340b", "wac"</li>
+      <li><span class="gap-tag">GAP</span> <code>InventoryLot.covered_entity_id</code> &mdash; FK to CoveredEntity</li>
+      <li><span class="gap-tag">GAP</span> <code>InventoryLot.ceiling_price_at_acquisition</code> &mdash; Decimal, lock-in price at receipt</li>
+      <li><span class="gap-tag">GAP</span> Virtual segregation query logic in <code>StockService</code></li>
+    </ul>
+    <div style="margin-top:8px"><span class="tag t-db">8 SQL models</span><span class="tag t-340b">Virtual segregation</span></div>
+  </div>
+
+  <div class="detail-panel" id="int-claims">
+    <h4>Claims Switch Integration</h4>
+    <p>NCPDP D.0 already supports 340B via <code>basis_of_cost="06"</code>. Need to store program type and auto-set the code.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> <code>ClaimRequest.basis_of_cost</code> field in NCPDP builder (ncpdp.py:89) &mdash; supports code "06" (340B Program Price)</li>
+      <li><span class="exists-tag">EXISTS</span> <code>ClaimRequest.other_coverage_code</code> field (ncpdp.py:92) &mdash; for COB scenarios</li>
+      <li><span class="exists-tag">EXISTS</span> NCPDP message builder emits field DN (basis_of_cost) on the wire</li>
+      <li><span class="exists-tag">EXISTS</span> <code>PharmacyClaim</code> model tracks full claim lifecycle (claims_switch/models.py:62)</li>
+      <li><span class="gap-tag">GAP</span> <code>PharmacyClaim.program_type</code> &mdash; new field to flag "340b" vs "standard" claims</li>
+      <li><span class="gap-tag">GAP</span> <code>PharmacyClaim.basis_of_cost</code> &mdash; store the submitted basis (currently only in raw_request JSON)</li>
+      <li><span class="gap-tag">GAP</span> Auto-set <code>basis_of_cost="06"</code> when dispensing from 340B inventory</li>
+      <li><span class="gap-tag">GAP</span> <code>submission_clarification_code</code> &mdash; some 340B plans require it</li>
+    </ul>
+    <div style="margin-top:8px"><span class="tag t-ext">RxLinc TCP/TLS</span><span class="tag t-340b">Code "06"</span></div>
+  </div>
+
+  <div class="detail-panel" id="int-products">
+    <h4>Products/Pricing Integration</h4>
+    <p>ProductPricing model already has flexible JSONB fields for multiple price points. 340B ceiling price fits naturally.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> <code>ProductPricing.cost_basis</code> JSONB &mdash; stores AWP, WAC, NADAC (products/models.py:91)</li>
+      <li><span class="exists-tag">EXISTS</span> <code>ProductPricing.pricing_vectors</code> JSONB &mdash; named price points (models.py:79)</li>
+      <li><span class="exists-tag">EXISTS</span> <code>ProductPricing.get_price(vector_id)</code> method &mdash; already supports named vectors (models.py:204)</li>
+      <li><span class="exists-tag">EXISTS</span> <code>ProductPricing.awp</code>, <code>.wac</code>, <code>.acquisition_cost</code> denormalized fields</li>
+      <li><span class="gap-tag">GAP</span> Add <code>340b_ceiling_price</code> to <code>cost_basis</code> structure</li>
+      <li><span class="gap-tag">GAP</span> Add <code>"340b"</code> pricing vector with ceiling price + effective date</li>
+      <li><span class="gap-tag">GAP</span> HRSA ceiling price quarterly import service</li>
+    </ul>
+    <div style="margin-top:8px"><span class="tag t-db">ProductPricing</span><span class="tag t-340b">Ceiling price</span></div>
+  </div>
+
+  <div class="detail-panel" id="int-patients">
+    <h4>Patient Module Integration</h4>
+    <p>Patient model needs 340B eligibility tracking. A patient is "340B eligible" if they are a patient of a registered covered entity.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> <code>Patient</code> model with demographics, FHIR link, contact info (patients/models.py:29)</li>
+      <li><span class="gap-tag">GAP</span> <code>Patient340BEligibility</code> model &mdash; links patient to covered entity with eligibility dates</li>
+      <li><span class="gap-tag">GAP</span> Eligibility determination service &mdash; three-prong test (established relationship, CE provider encounter, service date)</li>
+      <li><span class="gap-tag">GAP</span> Covered entity registration data import</li>
+    </ul>
+    <div style="margin-top:8px"><span class="tag t-db">SQL Patient</span><span class="tag t-fhir">FHIR Patient</span></div>
+  </div>
+
+  <div class="detail-panel" id="int-prescriptions">
+    <h4>Prescriptions Integration</h4>
+    <p>Prescription workflow needs a 340B eligibility gate. Incoming eRx may carry an OPA ID from the covered entity.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> FHIR MedicationRequest with CareLink extensions</li>
+      <li><span class="exists-tag">EXISTS</span> Prescription workflow state machine with gate system</li>
+      <li><span class="exists-tag">EXISTS</span> <code>OfficeOfPharmacyAffairsID</code> in NCPDP SCRIPT XSD (structures.xsd:3124)</li>
+      <li><span class="gap-tag">GAP</span> 340B eligibility gate in prescription workflow</li>
+      <li><span class="gap-tag">GAP</span> Parse <code>OfficeOfPharmacyAffairsID</code> from incoming eRx (NewRx)</li>
+      <li><span class="gap-tag">GAP</span> FHIR MedicationRequest extension for 340B program flag</li>
+    </ul>
+    <div style="margin-top:8px"><span class="tag t-fhir">FHIR MedicationRequest</span><span class="tag t-340b">OPA ID</span></div>
+  </div>
+
+  <div class="detail-panel" id="int-dispensing">
+    <h4>Dispensing Integration</h4>
+    <p>Dispensing is where split billing happens. Must select the correct inventory source and set claim parameters accordingly.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> Dispensing workflow state (DISPENSING &rarr; VERIFICATION)</li>
+      <li><span class="exists-tag">EXISTS</span> <code>InventoryStockService.adjust()</code> for inventory decrement</li>
+      <li><span class="gap-tag">GAP</span> Split billing decision engine &mdash; determines 340B vs standard at dispense time</li>
+      <li><span class="gap-tag">GAP</span> 340B inventory source selection &mdash; filter lots by <code>acquisition_source='340b'</code></li>
+      <li><span class="gap-tag">GAP</span> Medicaid duplicate discount check (federal prohibition)</li>
+      <li><span class="gap-tag">GAP</span> Auto-populate claim with 340B pricing when 340B lot selected</li>
+    </ul>
+    <div style="margin-top:8px"><span class="tag t-340b">Split billing</span><span class="tag t-340b">FEFO + source</span></div>
+  </div>
+
+  <div class="detail-panel" id="int-reporting">
+    <h4>Reporting &amp; Audit Integration</h4>
+    <p>HRSA requires comprehensive audit trails. TPA file exchange is the primary compliance mechanism for contract pharmacies.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> Audit log framework with user/action/resource tracking</li>
+      <li><span class="exists-tag">EXISTS</span> <code>InventoryTransaction</code> audit trail with balance_after</li>
+      <li><span class="gap-tag">GAP</span> HRSA audit report generation (dispense-level detail)</li>
+      <li><span class="gap-tag">GAP</span> TPA accumulator file generation (CSV/pipe-delimited)</li>
+      <li><span class="gap-tag">GAP</span> TPA inbound file import (replenishment authorization)</li>
+      <li><span class="gap-tag">GAP</span> Duplicate discount prevention reporting</li>
+      <li><span class="gap-tag">GAP</span> 340B savings dashboard / utilization metrics</li>
+    </ul>
+    <div style="margin-top:8px"><span class="tag t-340b">HRSA audit</span><span class="tag t-ext">TPA files</span></div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 3: DISPENSING FLOW ==================== -->
+<div class="section" id="sec-dispensing">
+  <h1>340B Dispensing Flow</h1>
+  <p class="desc">End-to-end flow from prescription arrival to TPA accumulation. Each step is clickable &mdash; click to see implementation details and which code components are involved.</p>
+
+  <div class="flow-container">
+    <div class="step-flow">
+
+      <div class="step-node external" onclick="toggleDetail('step-1')">
+        <span class="step-num">Step 1</span>
+        Rx Arrives
+        <span class="step-sub">eRx (NewRx) or manual entry</span>
+      </div>
+      <div class="step-arrow">&darr;</div>
+
+      <div class="step-node program340b" onclick="toggleDetail('step-2')">
+        <span class="step-num">Step 2</span>
+        Patient 340B Eligibility Check
+        <span class="step-sub">Is patient a "patient of the covered entity"?</span>
+      </div>
+      <div class="step-arrow">&darr;</div>
+
+      <div class="step-node program340b" onclick="toggleDetail('step-3')">
+        <span class="step-num">Step 3</span>
+        Drug 340B Eligibility Check
+        <span class="step-sub">Is NDC on 340B ceiling price list?</span>
+      </div>
+      <div class="step-arrow">&darr;</div>
+
+      <div class="step-node gap" onclick="toggleDetail('step-4')">
+        <span class="step-num">Step 4 &mdash; CRITICAL</span>
+        Duplicate Discount Check
+        <span class="step-sub">Is primary payer Medicaid? (federal prohibition)</span>
+      </div>
+      <div class="step-arrow">&darr;</div>
+
+      <div class="step-node program340b" onclick="toggleDetail('step-5')">
+        <span class="step-num">Step 5</span>
+        Inventory Source Decision
+        <span class="step-sub">Select 340B lot or standard lot</span>
+      </div>
+      <div class="step-arrow">&darr;</div>
+
+      <div class="step-node pms" onclick="toggleDetail('step-6')">
+        <span class="step-num">Step 6</span>
+        Dispense from Selected Source
+        <span class="step-sub">FEFO within selected acquisition source</span>
+      </div>
+      <div class="step-arrow">&darr;</div>
+
+      <div class="step-node external" onclick="toggleDetail('step-7')">
+        <span class="step-num">Step 7</span>
+        Submit Claim (basis_of_cost = "06")
+        <span class="step-sub">NCPDP D.0 via RxLinc switch</span>
+      </div>
+      <div class="step-arrow">&darr;</div>
+
+      <div class="step-node program340b" onclick="toggleDetail('step-8')">
+        <span class="step-num">Step 8</span>
+        TPA Accumulation Record
+        <span class="step-sub">Report to covered entity's TPA</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Step detail panels -->
+  <div class="detail-panel" id="step-1">
+    <h4>Step 1: Rx Arrives</h4>
+    <p>Prescription arrives via NCPDP SCRIPT eRx (NewRx) or manual data entry. Check for <code>OfficeOfPharmacyAffairsID</code> in the SCRIPT message &mdash; if present, the prescriber is at a covered entity and the Rx is flagged for 340B evaluation.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> eRx intake via RxLinc SCRIPT mailbox</li>
+      <li><span class="exists-tag">EXISTS</span> <code>OfficeOfPharmacyAffairsID</code> field defined in NCPDP SCRIPT XSD</li>
+      <li><span class="gap-tag">GAP</span> Parse and store OPA ID from incoming eRx</li>
+      <li><span class="gap-tag">GAP</span> Auto-flag Rx for 340B evaluation when OPA ID present</li>
+    </ul>
+  </div>
+
+  <div class="detail-panel" id="step-2">
+    <h4>Step 2: Patient 340B Eligibility Check</h4>
+    <p>Determine if the patient qualifies as a "patient of the covered entity." HRSA's three-prong test requires:</p>
+    <ul class="item-list">
+      <li><strong>1. Established relationship</strong> &mdash; Patient has records at the covered entity</li>
+      <li><strong>2. CE provider encounter</strong> &mdash; The prescribing provider is employed by or contracted with the CE</li>
+      <li><strong>3. Healthcare responsibility</strong> &mdash; The CE maintains responsibility for the patient's care</li>
+    </ul>
+    <p style="margin-top:8px"><strong>Implementation:</strong> New <code>Patient340BEligibility</code> model linking patient &rarr; covered entity with eligibility dates. Service checks eligibility at dispense time.</p>
+    <ul class="item-list">
+      <li><span class="gap-tag">GAP</span> <code>Patient340BEligibility</code> model (patient_id, covered_entity_id, effective_date, expiry_date, verification_method)</li>
+      <li><span class="gap-tag">GAP</span> Eligibility determination service with CE EHR data import</li>
+    </ul>
+  </div>
+
+  <div class="detail-panel" id="step-3">
+    <h4>Step 3: Drug 340B Eligibility Check</h4>
+    <p>Not all drugs are 340B-eligible. Check the NDC against the HRSA ceiling price list and verify 340B stock is available.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> <code>ProductPricing.cost_basis</code> JSONB &mdash; add <code>340b_ceiling_price</code></li>
+      <li><span class="gap-tag">GAP</span> HRSA ceiling price list import (quarterly update)</li>
+      <li><span class="gap-tag">GAP</span> NDC-level 340B eligibility check service</li>
+    </ul>
+  </div>
+
+  <div class="detail-panel" id="step-4">
+    <h4>Step 4: Duplicate Discount Check (CRITICAL)</h4>
+    <p style="color:var(--red); font-weight:600;">Federal law prohibits using BOTH 340B pricing AND Medicaid drug rebates for the same prescription.</p>
+    <p>If the patient's primary payer is Medicaid, the pharmacy MUST use standard (non-340B) inventory and standard billing. Using 340B inventory for a Medicaid patient creates a "duplicate discount" &mdash; the manufacturer would be paying the 340B discount AND the Medicaid rebate. This is the #1 compliance risk in 340B.</p>
+    <ul class="item-list">
+      <li><span class="gap-tag">GAP</span> Payer type identification (Medicaid BIN/PCN lookup)</li>
+      <li><span class="gap-tag">GAP</span> <code>DuplicateDiscountCheck</code> model &mdash; audit record of each check</li>
+      <li><span class="gap-tag">GAP</span> Hard-stop preventing 340B dispense for Medicaid patients</li>
+    </ul>
+  </div>
+
+  <div class="detail-panel" id="step-5">
+    <h4>Step 5: Inventory Source Decision</h4>
+    <p>The split billing engine selects the inventory source. If all checks pass, dispense from 340B lot (FEFO within 340B lots). If any check fails, dispense from standard lot.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> <code>InventoryStockService</code> with FEFO logic in <code>decrement()</code></li>
+      <li><span class="gap-tag">GAP</span> Filter lots by <code>acquisition_source</code> before FEFO sort</li>
+      <li><span class="gap-tag">GAP</span> Fallback: if no 340B stock, use standard and flag for 340B PO replenishment</li>
+    </ul>
+  </div>
+
+  <div class="detail-panel" id="step-6">
+    <h4>Step 6: Dispense from Selected Source</h4>
+    <p>Use the existing <code>InventoryStockService.adjust()</code> to decrement from the chosen lot. The <code>InventoryTransaction</code> records the unit cost at the 340B ceiling price.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> <code>InventoryStockService.adjust()</code> with lot tracking</li>
+      <li><span class="exists-tag">EXISTS</span> <code>InventoryTransaction</code> records <code>unit_cost</code> and <code>balance_after</code></li>
+      <li><span class="gap-tag">GAP</span> Record <code>acquisition_source</code> on the transaction</li>
+      <li><span class="gap-tag">GAP</span> Record covered_entity_id on the transaction for HRSA audit</li>
+    </ul>
+  </div>
+
+  <div class="detail-panel" id="step-7">
+    <h4>Step 7: Submit Claim with 340B Pricing</h4>
+    <p>When dispensing from 340B inventory, the claim is submitted with <code>basis_of_cost="06"</code> (340B Program Price) and <code>ingredient_cost</code> set to the 340B acquisition cost.</p>
+    <ul class="item-list">
+      <li><span class="exists-tag">EXISTS</span> <code>ClaimRequest.basis_of_cost</code> field &mdash; just set to "06" instead of "01"</li>
+      <li><span class="exists-tag">EXISTS</span> NCPDP builder emits field DN on the wire</li>
+      <li><span class="gap-tag">GAP</span> Auto-set basis_of_cost="06" when 340B lot is selected</li>
+      <li><span class="gap-tag">GAP</span> Store <code>program_type="340b"</code> on <code>PharmacyClaim</code> record</li>
+    </ul>
+  </div>
+
+  <div class="detail-panel" id="step-8">
+    <h4>Step 8: TPA Accumulation Record</h4>
+    <p>After dispensing, record the transaction in the TPA accumulator for the covered entity's compliance reporting. The TPA reconciles 340B dispenses with replenishment orders.</p>
+    <ul class="item-list">
+      <li><span class="gap-tag">GAP</span> <code>TPAAccumulatorRecord</code> model (dispense_date, patient_id, ndc, quantity, claim_id, covered_entity_id)</li>
+      <li><span class="gap-tag">GAP</span> TPA file export service (CSV/pipe-delimited per TPA spec)</li>
+      <li><span class="gap-tag">GAP</span> Scheduled file generation (daily/weekly per contract)</li>
+      <li><span class="gap-tag">GAP</span> Inbound replenishment authorization import</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ==================== SECTION 4: SPLIT BILLING ==================== -->
+<div class="section" id="sec-split">
+  <h1>Split Billing Decision Tree</h1>
+  <p class="desc">At point-of-dispense, the split billing engine runs through 5 sequential checks to determine whether an Rx qualifies for 340B pricing. Click each decision node for details on the business rule and code integration.</p>
+
+  <div class="flow-container" style="padding:24px;">
+    <div class="dtree">
+
+      <!-- Q1 -->
+      <div class="dnode" onclick="toggleDetail('dq1')">
+        <div class="q"><span class="q-num">Q1</span> Is the covered entity registered with this pharmacy?</div>
+      </div>
+      <div class="detail-panel" id="dq1">
+        <p>Check if the prescribing covered entity has an active contract with this CareLink pharmacy location. Requires <code>CoveredEntityContract</code> model with pharmacy_id, covered_entity_id, effective_date, expiry_date.</p>
+        <p style="margin-top:8px"><strong>Code:</strong> <code>cl.program_340b.has_active_contract(pharmacy_id, covered_entity_id)</code></p>
+      </div>
+      <div class="dbranch">
+        <div class="dbranch-item no">
+          <div class="dbranch-label no">NO</div>
+          <div class="dbranch-result result-standard">Bill as <strong>STANDARD</strong> &mdash; <code>basis_of_cost="01"</code><br>No contract = no 340B eligibility for any Rx from this CE.</div>
+        </div>
+        <div class="dbranch-item yes">
+          <div class="dbranch-label yes">YES &darr; Continue</div>
+        </div>
+      </div>
+
+      <!-- Q2 -->
+      <div class="dnode" onclick="toggleDetail('dq2')" style="margin-left:32px;">
+        <div class="q"><span class="q-num">Q2</span> Is the patient a "patient of the covered entity"?</div>
+      </div>
+      <div class="detail-panel" id="dq2">
+        <p>HRSA three-prong test: (1) established relationship with CE, (2) prescriber is CE-affiliated, (3) CE maintains care responsibility. Check <code>Patient340BEligibility</code> record for active eligibility window.</p>
+        <p style="margin-top:8px"><strong>Code:</strong> <code>cl.program_340b.check_patient_eligibility(patient_id, covered_entity_id, date_of_service)</code></p>
+      </div>
+      <div class="dbranch" style="margin-left:32px;">
+        <div class="dbranch-item no">
+          <div class="dbranch-label no">NO</div>
+          <div class="dbranch-result result-standard">Bill as <strong>STANDARD</strong> &mdash; <code>basis_of_cost="01"</code><br>Patient does not meet HRSA patient definition for this CE.</div>
+        </div>
+        <div class="dbranch-item yes">
+          <div class="dbranch-label yes">YES &darr; Continue</div>
+        </div>
+      </div>
+
+      <!-- Q3 -->
+      <div class="dnode" onclick="toggleDetail('dq3')" style="margin-left:64px;">
+        <div class="q"><span class="q-num">Q3</span> Was the drug purchased at 340B ceiling price?</div>
+      </div>
+      <div class="detail-panel" id="dq3">
+        <p>Check if the pharmacy has 340B-acquired inventory for this NDC. Look for <code>InventoryLot</code> records with <code>acquisition_source='340b'</code> and positive stock. Also verify the NDC is on the HRSA ceiling price list.</p>
+        <p style="margin-top:8px"><strong>Code:</strong> <code>cl.inventory.stock.get_by_source(product_id, acquisition_source='340b')</code></p>
+      </div>
+      <div class="dbranch" style="margin-left:64px;">
+        <div class="dbranch-item no">
+          <div class="dbranch-label no">NO</div>
+          <div class="dbranch-result result-standard">Bill as <strong>STANDARD</strong> &mdash; <code>basis_of_cost="01"</code><br>No 340B stock available. Flag for replenishment on next PO.</div>
+        </div>
+        <div class="dbranch-item yes">
+          <div class="dbranch-label yes">YES &darr; Continue</div>
+        </div>
+      </div>
+
+      <!-- Q4 -->
+      <div class="dnode" onclick="toggleDetail('dq4')" style="margin-left:96px; border-color: rgba(248,81,73,0.4);">
+        <div class="q"><span class="q-num" style="color:var(--red)">Q4</span> <span style="color:var(--red)">Is the primary payer Medicaid?</span></div>
+      </div>
+      <div class="detail-panel" id="dq4">
+        <p style="color:var(--red); font-weight:600;">CRITICAL: Duplicate Discount Prohibition (Section 340B(a)(5)(A))</p>
+        <p>Federal law prohibits manufacturers from paying both the 340B discount and the Medicaid drug rebate for the same unit. If the patient has Medicaid as primary, MUST use standard inventory.</p>
+        <p style="margin-top:8px"><strong>Code:</strong> <code>cl.program_340b.is_medicaid_payer(bin_number, pcn)</code> &mdash; checks against Medicaid BIN/PCN registry</p>
+      </div>
+      <div class="dbranch" style="margin-left:96px;">
+        <div class="dbranch-item yes">
+          <div class="dbranch-label no" style="color:var(--red)">YES (Medicaid)</div>
+          <div class="dbranch-result result-standard">Bill as <strong>STANDARD</strong> &mdash; <code>basis_of_cost="01"</code><br><strong style="color:var(--red)">Duplicate discount prohibition.</strong> Use standard inventory. Manufacturer collects Medicaid rebate instead.</div>
+        </div>
+        <div class="dbranch-item yes">
+          <div class="dbranch-label yes">NO (Non-Medicaid) &darr; Continue</div>
+        </div>
+      </div>
+
+      <!-- Q5 -->
+      <div class="dnode" onclick="toggleDetail('dq5')" style="margin-left:128px;">
+        <div class="q"><span class="q-num">Q5</span> Is there sufficient 340B inventory on hand?</div>
+      </div>
+      <div class="detail-panel" id="dq5">
+        <p>Final check: does the 340B lot have enough quantity to fill this Rx? Uses FEFO (First-Expired-First-Out) within 340B lots only.</p>
+        <p style="margin-top:8px"><strong>Code:</strong> <code>cl.inventory.stock.check_availability(product_id, quantity, acquisition_source='340b')</code></p>
+      </div>
+      <div class="dbranch" style="margin-left:128px;">
+        <div class="dbranch-item no">
+          <div class="dbranch-label no">NO</div>
+          <div class="dbranch-result result-standard">Bill as <strong>STANDARD</strong> &mdash; <code>basis_of_cost="01"</code><br>Insufficient 340B stock. Dispense from standard. Trigger 340B replenishment order.</div>
+        </div>
+        <div class="dbranch-item yes">
+          <div class="dbranch-label yes">YES</div>
+          <div class="dbranch-result result-340b">
+            <strong style="color:var(--teal);">&#9733; Bill as 340B</strong> &mdash; <code>basis_of_cost="06"</code><br>
+            Dispense from 340B lot (FEFO) &bull; Set ingredient_cost to 340B acquisition price &bull; Record in TPA accumulator &bull; Log for HRSA audit
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 5: INVENTORY SEGREGATION ==================== -->
+<div class="section" id="sec-inventory">
+  <h1>Inventory Segregation</h1>
+  <p class="desc">340B requires tracking drug acquisition source. Two approaches exist: virtual segregation (recommended) uses database-level tracking; physical segregation uses separate storage locations. CareLink's existing lot system supports both.</p>
+
+  <div class="grid-2">
+    <div class="card no-hover" style="border-color: rgba(45,212,191,0.4);">
+      <span class="badge badge-teal">RECOMMENDED</span>
+      <h4>Virtual Segregation</h4>
+      <p>Same physical shelf, different lot records tagged by <code>acquisition_source</code>. Most contract pharmacies use this approach.</p>
+      <ul class="item-list">
+        <li><strong>How it works:</strong> Each <code>InventoryLot</code> gets an <code>acquisition_source</code> field ("standard" or "340b"). At dispense, the split billing engine filters lots by source before applying FEFO.</li>
+        <li><strong>Pros:</strong> Lower operational overhead, no duplicate shelf space, leverages existing composite unique constraint</li>
+        <li><strong>Cons:</strong> Requires disciplined data entry when receiving 340B POs</li>
+        <li><strong>CareLink fit:</strong> <code>InventoryStock</code> already has composite unique (product_id, location_id, lot_id) &mdash; different lots on the same shelf are already separate stock records</li>
+      </ul>
+    </div>
+    <div class="card no-hover">
+      <span class="badge badge-orange">ALTERNATIVE</span>
+      <h4>Physical Segregation</h4>
+      <p>Separate storage locations for 340B vs standard stock. Simpler conceptually but operationally heavier.</p>
+      <ul class="item-list">
+        <li><strong>How it works:</strong> Create dedicated <code>InventoryLocation</code> records (e.g., "SHELF-340B-A1"). All 340B stock goes to 340B locations. Standard stock to standard locations.</li>
+        <li><strong>Pros:</strong> Easy to audit (physical inspection), clear separation</li>
+        <li><strong>Cons:</strong> Duplicate shelf space, more complex receiving, harder for high-volume pharmacies</li>
+        <li><strong>CareLink fit:</strong> <code>InventoryLocation</code> model supports this but doubles location management overhead</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Schema Extensions Required</h2>
+
+  <div class="schema-box">
+<span class="comment">-- Existing model (extend)</span>
+<span class="model-name">InventoryLot</span>
+    <span class="field-exists">id, product_id, lot_number, expiration_date, serial_number, ...</span>
+    <span class="field-new">+ acquisition_source: str          -- "standard" | "340b" | "wac"</span>
+    <span class="field-new">+ covered_entity_id: UUID | null   -- FK to CoveredEntity (null for standard)</span>
+    <span class="field-new">+ ceiling_price_at_acquisition: Decimal | null</span>
+
+<span class="comment">-- Existing model (extend)</span>
+<span class="model-name">InventoryPurchaseOrder</span>
+    <span class="field-exists">id, supplier_id, status, order_date, ...</span>
+    <span class="field-new">+ is_340b_order: bool = false</span>
+    <span class="field-new">+ covered_entity_id: UUID | null</span>
+
+<span class="comment">-- Existing model (extend)</span>
+<span class="model-name">InventoryPurchaseOrderLine</span>
+    <span class="field-exists">id, purchase_order_id, product_id, quantity_ordered, ...</span>
+    <span class="field-new">+ acquisition_source: str = "standard"</span>
+
+<span class="comment">-- Existing model (extend)</span>
+<span class="model-name">InventoryTransaction</span>
+    <span class="field-exists">id, product_id, lot_id, quantity, unit_cost, balance_after, ...</span>
+    <span class="field-new">+ acquisition_source: str | null</span>
+    <span class="field-new">+ covered_entity_id: UUID | null</span>
+
+<span class="comment">-- New model</span>
+<span class="model-name">CoveredEntity</span>
+    <span class="field-new">  id: UUID</span>
+    <span class="field-new">  opa_id: str              -- HRSA OPA Identification Code</span>
+    <span class="field-new">  name: str</span>
+    <span class="field-new">  entity_type: str         -- "hospital" | "fqhc" | "dsh" | "cah" | ...</span>
+    <span class="field-new">  address, city, state, zip</span>
+    <span class="field-new">  is_active: bool</span>
+
+<span class="comment">-- New model</span>
+<span class="model-name">CoveredEntityContract</span>
+    <span class="field-new">  id: UUID</span>
+    <span class="field-new">  covered_entity_id: FK &rarr; CoveredEntity</span>
+    <span class="field-new">  pharmacy_id: FK &rarr; Pharmacy</span>
+    <span class="field-new">  effective_date: date</span>
+    <span class="field-new">  expiry_date: date | null</span>
+    <span class="field-new">  tpa_name: str            -- "340B ESP" | "Sentry" | "Macro Helix"</span>
+    <span class="field-new">  tpa_config: JSONB        -- TPA-specific settings</span>
+  </div>
+</div>
+
+<!-- ==================== SECTION 6: COMPLIANCE ==================== -->
+<div class="section" id="sec-compliance">
+  <h1>Compliance &amp; Audit</h1>
+  <p class="desc">340B has significant compliance requirements enforced by HRSA audits. Contract pharmacies must maintain comprehensive records and exchange data with covered entities' TPAs.</p>
+
+  <div class="grid">
+    <div class="card no-hover" style="border-color: rgba(248,81,73,0.3);">
+      <span class="badge badge-red">HIGH RISK</span>
+      <h4>Duplicate Discount Prevention</h4>
+      <p>Cannot bill Medicaid rebate AND use 340B pricing. The #1 cause of 340B audit findings. Need real-time payer check before selecting inventory source.</p>
+      <p style="margin-top:8px; font-size:11px; color:var(--text2);"><strong>Model:</strong> <code>DuplicateDiscountCheck</code> &mdash; records every check with result, payer info, timestamp</p>
+    </div>
+
+    <div class="card no-hover" style="border-color: rgba(248,81,73,0.3);">
+      <span class="badge badge-red">HIGH RISK</span>
+      <h4>HRSA Audit Trail</h4>
+      <p>Every 340B dispense must be traceable: patient eligibility determination &rarr; inventory source &rarr; claim submission &rarr; pricing. HRSA audits cover 3+ years of records.</p>
+      <p style="margin-top:8px; font-size:11px; color:var(--text2);"><strong>Leverage:</strong> Existing <code>InventoryTransaction</code> + <code>AuditLog</code> + new <code>acquisition_source</code> fields</p>
+    </div>
+
+    <div class="card no-hover" style="border-color: rgba(210,153,34,0.3);">
+      <span class="badge badge-orange">REQUIRED</span>
+      <h4>TPA File Exchange</h4>
+      <p>Contract pharmacies send accumulator files to the CE's TPA (e.g., 340B ESP, Sentry, Macro Helix). TPA sends back replenishment authorizations. Typically daily or weekly.</p>
+      <p style="margin-top:8px; font-size:11px; color:var(--text2);"><strong>Model:</strong> <code>TPAAccumulatorRecord</code> + file export service (CSV/pipe-delimited per TPA spec)</p>
+    </div>
+
+    <div class="card no-hover" style="border-color: rgba(210,153,34,0.3);">
+      <span class="badge badge-orange">REQUIRED</span>
+      <h4>Ceiling Price Compliance</h4>
+      <p>Acquisition cost must not exceed HRSA ceiling price. Validate at PO receipt time. HRSA publishes ceiling prices quarterly &mdash; need automated import.</p>
+      <p style="margin-top:8px; font-size:11px; color:var(--text2);"><strong>Store in:</strong> <code>ProductPricing.cost_basis["340b_ceiling_price"]</code> + quarterly update service</p>
+    </div>
+
+    <div class="card no-hover" style="border-color: rgba(210,153,34,0.3);">
+      <span class="badge badge-orange">REQUIRED</span>
+      <h4>Contract Pharmacy Agreements</h4>
+      <p>Valid written contract required between pharmacy and each covered entity. Track effective dates, renewal schedules, and auto-alert on expiry.</p>
+      <p style="margin-top:8px; font-size:11px; color:var(--text2);"><strong>Model:</strong> <code>CoveredEntityContract</code> with pharmacy_id, effective/expiry dates, TPA config</p>
+    </div>
+
+    <div class="card no-hover">
+      <span class="badge badge-blue">IMPORTANT</span>
+      <h4>Patient Definition Compliance</h4>
+      <p>"Patient of the covered entity" has specific HRSA-defined criteria: established relationship, CE provider encounter, ongoing care responsibility. Pharmacy must document eligibility determination.</p>
+      <p style="margin-top:8px; font-size:11px; color:var(--text2);"><strong>Model:</strong> <code>Patient340BEligibility</code> with verification_method, effective/expiry dates</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 7: STORIES & GAPS ==================== -->
+<div class="section" id="sec-stories">
+  <h1>User Stories &amp; Gaps</h1>
+  <p class="desc">9 user stories mapped to required code changes. 2 stories are in the current CSV backlog; 7 are inferred from 340B program requirements. All are at 0% implementation.</p>
+
+  <table>
+    <thead>
+      <tr><th>#</th><th>User Story</th><th>Source</th><th>Status</th><th>Key Code Changes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>See 340B vs non-340B inventory separately</td><td><span class="badge badge-blue">CSV</span></td><td><span class="badge badge-red">0%</span></td><td><code>InventoryLot.acquisition_source</code>, API query filter, frontend inventory view with source toggle</td></tr>
+      <tr><td>2</td><td>Exchange accumulation files with TPA</td><td><span class="badge badge-blue">CSV</span></td><td><span class="badge badge-red">0%</span></td><td><code>TPAAccumulatorRecord</code> model, file export service, scheduled generation job</td></tr>
+      <tr><td>3</td><td>Register covered entities and manage contracts</td><td><span class="badge badge-purple">Inferred</span></td><td><span class="badge badge-red">0%</span></td><td><code>CoveredEntity</code> + <code>CoveredEntityContract</code> models, CRUD service, admin UI</td></tr>
+      <tr><td>4</td><td>Determine patient 340B eligibility</td><td><span class="badge badge-purple">Inferred</span></td><td><span class="badge badge-red">0%</span></td><td><code>Patient340BEligibility</code> model, eligibility service, patient detail panel</td></tr>
+      <tr><td>5</td><td>Track 340B drug acquisition on purchase orders</td><td><span class="badge badge-purple">Inferred</span></td><td><span class="badge badge-red">0%</span></td><td><code>InventoryPurchaseOrder.is_340b_order</code>, PO line acquisition_source, receiving validation</td></tr>
+      <tr><td>6</td><td>Split billing at point of dispense</td><td><span class="badge badge-purple">Inferred</span></td><td><span class="badge badge-red">0%</span></td><td><code>SplitBillingService</code>, dispensing workflow integration, lot source filter in FEFO</td></tr>
+      <tr><td>7</td><td>Submit 340B claims with correct pricing</td><td><span class="badge badge-purple">Inferred</span></td><td><span class="badge badge-red">0%</span></td><td>Auto-set <code>basis_of_cost="06"</code>, <code>PharmacyClaim.program_type</code>, ingredient_cost = ceiling price</td></tr>
+      <tr><td>8</td><td>Prevent duplicate discounts (Medicaid check)</td><td><span class="badge badge-purple">Inferred</span></td><td><span class="badge badge-red">0%</span></td><td>Medicaid BIN/PCN registry, <code>DuplicateDiscountCheck</code> model, hard-stop in workflow</td></tr>
+      <tr><td>9</td><td>Generate HRSA audit compliance reports</td><td><span class="badge badge-purple">Inferred</span></td><td><span class="badge badge-red">0%</span></td><td>HRSA audit report generator, 340B savings dashboard, dispense-level traceability</td></tr>
+    </tbody>
+  </table>
+
+  <h2>New Files Required</h2>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header">
+      <span>carelink-pms/carelink/program_340b/ (New Module)</span>
+      <span class="chevron">&#9654;</span>
+    </div>
+    <div class="expandable-body">
+      <code>__init__.py</code> &mdash; Module init<br>
+      <code>models.py</code> &mdash; CoveredEntity, CoveredEntityContract, Patient340BEligibility, TPAAccumulatorRecord, DuplicateDiscountCheck<br>
+      <code>schemas.py</code> &mdash; Pydantic request/response schemas for all models<br>
+      <code>service.py</code> &mdash; Program340BService (registered as cl.program_340b)<br>
+      <code>eligibility_service.py</code> &mdash; Patient eligibility determination logic<br>
+      <code>split_billing_service.py</code> &mdash; Split billing decision engine<br>
+      <code>tpa_service.py</code> &mdash; TPA file generation and import
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header">
+      <span>carelink-backend/app/routers/program_340b.py (New Router)</span>
+      <span class="chevron">&#9654;</span>
+    </div>
+    <div class="expandable-body">
+      <code>GET /api/340b/covered-entities</code> &mdash; List covered entities<br>
+      <code>POST /api/340b/covered-entities</code> &mdash; Register new CE<br>
+      <code>GET /api/340b/contracts</code> &mdash; List contracts for this pharmacy<br>
+      <code>POST /api/340b/contracts</code> &mdash; Create CE contract<br>
+      <code>GET /api/340b/eligibility/{patient_id}</code> &mdash; Check patient eligibility<br>
+      <code>POST /api/340b/eligibility</code> &mdash; Record eligibility determination<br>
+      <code>POST /api/340b/split-billing/evaluate</code> &mdash; Run split billing decision<br>
+      <code>GET /api/340b/accumulator</code> &mdash; List TPA records<br>
+      <code>POST /api/340b/accumulator/export</code> &mdash; Generate TPA file<br>
+      <code>GET /api/340b/reports/audit</code> &mdash; HRSA audit report<br>
+      <code>GET /api/340b/reports/savings</code> &mdash; 340B savings dashboard data
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header">
+      <span>Existing Files to Modify</span>
+      <span class="chevron">&#9654;</span>
+    </div>
+    <div class="expandable-body">
+      <code>carelink-pms/carelink/__init__.py</code> &mdash; Add <code>cl.program_340b</code> lazy property<br>
+      <code>carelink-pms/carelink/inventory/models.py</code> &mdash; Add acquisition_source, covered_entity_id to InventoryLot/Transaction<br>
+      <code>carelink-pms/carelink/inventory/stock_service.py</code> &mdash; Add source filter to FEFO decrement logic<br>
+      <code>carelink-pms/carelink/claims_switch/models.py</code> &mdash; Add program_type, basis_of_cost fields to PharmacyClaim<br>
+      <code>carelink-pms/carelink/claims_switch/schemas.py</code> &mdash; Add program_type to PricingInfo<br>
+      <code>carelink-pms/carelink/products/models.py</code> &mdash; Document 340B ceiling price in cost_basis structure<br>
+      <code>carelink-backend/app/main.py</code> &mdash; Register program_340b router
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 8: ROADMAP ==================== -->
+<div class="section" id="sec-roadmap">
+  <h1>Implementation Roadmap</h1>
+  <p class="desc">4-phase implementation plan spanning 8 weeks. Each phase builds on the previous one. All phases are currently at 0%.</p>
+
+  <div class="stats-row">
+    <div class="stat-box"><div class="num" style="color:var(--teal)">4</div><div class="label">Phases</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--orange)">~8</div><div class="label">Weeks estimated</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--purple)">5</div><div class="label">New models</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--green)">11</div><div class="label">New API endpoints</div></div>
+    <div class="stat-box"><div class="num" style="color:var(--accent)">7</div><div class="label">Files to modify</div></div>
+  </div>
+
+  <div id="roadmap-phases"></div>
+
+  <h2>Dependency Graph</h2>
+  <div class="flow-container">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:12px; width:100%;">
+      <div class="flow-wrap">
+        <div class="node program340b" style="min-width:200px;">Phase 1: Foundation<span class="sub">Models + schema extensions</span></div>
+      </div>
+      <div class="arrow-down">&darr; <span class="arrow-label">Models must exist before services</span></div>
+      <div class="flow-wrap">
+        <div class="node program340b" style="min-width:200px;">Phase 2: Core Logic<span class="sub">Eligibility + split billing + duplicate discount</span></div>
+      </div>
+      <div class="arrow-down">&darr; <span class="arrow-label">Services must exist before workflow integration</span></div>
+      <div class="flow-wrap">
+        <div class="node program340b" style="min-width:200px;">Phase 3: Workflow &amp; Claims<span class="sub">Rx gate + TPA files + claim routing</span></div>
+      </div>
+      <div class="arrow-down">&darr; <span class="arrow-label">Backend complete before UI</span></div>
+      <div class="flow-wrap">
+        <div class="node frontend" style="min-width:200px;">Phase 4: Reporting &amp; UI<span class="sub">HRSA reports + frontend views + API router</span></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Phase Details</h2>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header">
+      <span style="color:var(--teal)">Phase 1: Foundation (Weeks 1-2)</span>
+      <span class="chevron">&#9654;</span>
+    </div>
+    <div class="expandable-body">
+      <strong>Goal:</strong> Create the 340B module skeleton and extend existing models.<br><br>
+      <strong>New files:</strong><br>
+      &bull; <code>carelink-pms/carelink/program_340b/__init__.py</code><br>
+      &bull; <code>carelink-pms/carelink/program_340b/models.py</code> &mdash; CoveredEntity, CoveredEntityContract, Patient340BEligibility, TPAAccumulatorRecord, DuplicateDiscountCheck<br>
+      &bull; <code>carelink-pms/carelink/program_340b/schemas.py</code> &mdash; All Pydantic schemas<br>
+      &bull; <code>carelink-pms/carelink/program_340b/service.py</code> &mdash; Program340BService (basic CRUD)<br><br>
+      <strong>Modifications:</strong><br>
+      &bull; <code>inventory/models.py</code> &mdash; Add <code>acquisition_source</code>, <code>covered_entity_id</code>, <code>ceiling_price_at_acquisition</code> to InventoryLot<br>
+      &bull; <code>inventory/models.py</code> &mdash; Add <code>is_340b_order</code>, <code>covered_entity_id</code> to InventoryPurchaseOrder<br>
+      &bull; <code>claims_switch/models.py</code> &mdash; Add <code>program_type</code>, <code>basis_of_cost</code> to PharmacyClaim<br>
+      &bull; <code>carelink/__init__.py</code> &mdash; Register <code>cl.program_340b</code> lazy property<br><br>
+      <strong>Tests:</strong> Model CRUD tests, schema validation tests, constraint tests<br>
+      <strong>Dependencies:</strong> None (pure additions)
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header">
+      <span style="color:var(--teal)">Phase 2: Core Logic (Weeks 3-4)</span>
+      <span class="chevron">&#9654;</span>
+    </div>
+    <div class="expandable-body">
+      <strong>Goal:</strong> Implement the three core 340B decision services.<br><br>
+      <strong>New files:</strong><br>
+      &bull; <code>program_340b/eligibility_service.py</code> &mdash; Patient 340B eligibility determination (three-prong test)<br>
+      &bull; <code>program_340b/split_billing_service.py</code> &mdash; Split billing decision engine (5-question tree)<br>
+      &bull; <code>program_340b/duplicate_discount_service.py</code> &mdash; Medicaid duplicate discount prevention<br><br>
+      <strong>Modifications:</strong><br>
+      &bull; <code>inventory/stock_service.py</code> &mdash; Add <code>acquisition_source</code> filter to FEFO decrement<br>
+      &bull; <code>claims_switch/schemas.py</code> &mdash; Add <code>program_type</code> to PricingInfo<br><br>
+      <strong>Tests:</strong> Service logic tests, eligibility edge cases, split billing decision paths<br>
+      <strong>Dependencies:</strong> Phase 1 models
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header">
+      <span style="color:var(--teal)">Phase 3: Workflow &amp; Claims (Weeks 5-6)</span>
+      <span class="chevron">&#9654;</span>
+    </div>
+    <div class="expandable-body">
+      <strong>Goal:</strong> Integrate 340B into the prescription and claim workflows.<br><br>
+      <strong>New files:</strong><br>
+      &bull; <code>program_340b/tpa_service.py</code> &mdash; TPA accumulator file generation/import<br><br>
+      <strong>Modifications:</strong><br>
+      &bull; Prescription workflow &mdash; Add 340B eligibility gate<br>
+      &bull; eRx intake &mdash; Parse <code>OfficeOfPharmacyAffairsID</code> from incoming NCPDP SCRIPT messages<br>
+      &bull; Claims switch service &mdash; Auto-set <code>basis_of_cost="06"</code> when dispensing from 340B lot<br>
+      &bull; Dispensing workflow &mdash; Integrate split billing decision before inventory decrement<br><br>
+      <strong>Tests:</strong> End-to-end workflow tests, TPA file format validation<br>
+      <strong>Dependencies:</strong> Phase 2 services
+    </div>
+  </div>
+
+  <div class="expandable" onclick="this.classList.toggle('open')">
+    <div class="expandable-header">
+      <span style="color:var(--teal)">Phase 4: Reporting &amp; UI (Weeks 7-8)</span>
+      <span class="chevron">&#9654;</span>
+    </div>
+    <div class="expandable-body">
+      <strong>Goal:</strong> Build the API router, frontend views, and audit reports.<br><br>
+      <strong>New files:</strong><br>
+      &bull; <code>carelink-backend/app/routers/program_340b.py</code> &mdash; 11 API endpoints<br>
+      &bull; <code>carelink-frontend/src/hooks/use-340b.ts</code> &mdash; React Query hooks<br>
+      &bull; <code>carelink-frontend/src/types/program-340b.ts</code> &mdash; TypeScript interfaces<br>
+      &bull; Frontend tab components for 340B management<br><br>
+      <strong>Features:</strong><br>
+      &bull; HRSA audit report generation (dispense-level detail)<br>
+      &bull; 340B inventory view (filtered by acquisition source)<br>
+      &bull; 340B eligibility panel on patient detail tab<br>
+      &bull; Split billing indicator on dispensing screen<br>
+      &bull; 340B savings dashboard<br>
+      &bull; Covered entity management admin panel<br><br>
+      <strong>Tests:</strong> API endpoint tests, hook tests<br>
+      <strong>Dependencies:</strong> Phase 3 workflows
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.querySelectorAll('.detail-panel').forEach(p => p.classList.remove('open'));
+}
+
+function toggleDetail(id) {
+  const panel = document.getElementById(id);
+  if (!panel) return;
+  const wasOpen = panel.classList.contains('open');
+  panel.parentElement.querySelectorAll('.detail-panel').forEach(p => p.classList.remove('open'));
+  if (!wasOpen) panel.classList.add('open');
+}
+
+// Roadmap phase progress bars
+const phases = [
+  { name: 'Phase 1: Foundation', desc: 'New 340B module, schema extensions, CoveredEntity/Contract models', pct: 0, weeks: '1-2', color: 'var(--teal)' },
+  { name: 'Phase 2: Core Logic', desc: 'Eligibility service, split billing engine, duplicate discount prevention', pct: 0, weeks: '3-4', color: 'var(--teal)' },
+  { name: 'Phase 3: Workflow & Claims', desc: 'Rx workflow gate, TPA file exchange, auto-set basis_of_cost="06"', pct: 0, weeks: '5-6', color: 'var(--teal)' },
+  { name: 'Phase 4: Reporting & UI', desc: 'API router, HRSA audit reports, frontend views, savings dashboard', pct: 0, weeks: '7-8', color: 'var(--accent)' },
+];
+
+const roadmapContainer = document.getElementById('roadmap-phases');
+if (roadmapContainer) {
+  phases.forEach(p => {
+    const el = document.createElement('div');
+    el.style.cssText = 'margin: 12px 0;';
+    el.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:baseline; font-size:14px; margin-bottom:4px;">
+        <span style="font-weight:600;">${p.name} <span style="color:var(--text2); font-weight:400; font-size:12px;">(Weeks ${p.weeks})</span></span>
+        <span style="color:var(--text2); font-size:12px;">${p.pct}%</span>
+      </div>
+      <div style="font-size:12px; color:var(--text2); margin-bottom:6px;">${p.desc}</div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:${p.pct}%; background:${p.color};"></div>
+      </div>
+    `;
+    roadmapContainer.appendChild(el);
+  });
+}
+</script>
+</body>
+</html>

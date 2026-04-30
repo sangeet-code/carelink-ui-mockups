@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1400">
+<title>CareLink — Observability Plan: Opus-subagent-heavy rx-flow migration</title>
+<style>
+:root{
+  --bg:#F5F0EB;--surface:#FDFBF8;--surface2:#f7f3ef;--surface3:#efe9e2;
+  --border:rgba(120,100,80,.12);--border-strong:rgba(120,100,80,.25);
+  --text:#3B3530;--text2:#7A7168;--text3:#9e958c;
+  --accent:#5B7FA4;--accent2:#3E5F7E;--accent-bg:rgba(91,127,164,.08);
+  --green:#2e7d32;--green-bg:#f1f8f4;--green-border:#c8e6c9;
+  --red:#d32f2f;--red-bg:#ffebee;--red-border:#ef9a9a;
+  --yellow:#ed6c02;--yellow-bg:#fff3e0;--yellow-border:#ffe0b2;
+  --blue:#1976d2;--blue-bg:#e3f2fd;--blue-border:#90caf9;
+  --purple:#7b1fa2;--purple-bg:rgba(123,31,162,.06);--purple-border:rgba(123,31,162,.2);
+  --radius:8px;--radius-lg:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.5}
+.header{background:var(--accent2);color:#fff;padding:20px 32px}
+.header h1{font-size:22px;font-weight:700}
+.header p{font-size:13px;opacity:.85;margin-top:4px}
+
+.layout{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 90px)}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:20px 0;overflow-y:auto;position:sticky;top:0;height:calc(100vh - 90px)}
+.sidebar h3{font-size:11px;text-transform:uppercase;color:var(--text3);padding:0 24px;margin-bottom:8px;letter-spacing:.5px}
+.sidebar .phase{padding:10px 24px;cursor:pointer;border-left:3px solid transparent;font-weight:600;font-size:13px;color:var(--text);transition:all .15s}
+.sidebar .phase:hover{background:var(--surface2)}
+.sidebar .phase.active{background:var(--accent-bg);border-left-color:var(--accent);color:var(--accent2)}
+.sidebar .phase .sub{font-size:11px;color:var(--text2);font-weight:400;margin-top:2px}
+.sidebar .phase .tag{font-size:10px;color:var(--accent);font-weight:700;margin-right:6px}
+
+.main{padding:28px 40px 80px;max-width:1100px;overflow-x:hidden}
+.phase-content{display:none}
+.phase-content.active{display:block}
+
+h2.phase-title{font-size:22px;font-weight:700;color:var(--accent2);margin-bottom:4px}
+p.phase-sub{font-size:13px;color:var(--text2);margin-bottom:24px}
+
+.pr-card{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.pr-card h3{font-size:15px;font-weight:700;color:var(--accent2);margin-bottom:4px;display:flex;align-items:center;gap:10px}
+.pr-card .pr-tag{font-size:10px;background:var(--accent2);color:#fff;padding:2px 8px;border-radius:10px;font-weight:700;letter-spacing:.3px}
+.pr-card .pr-est{font-size:11px;color:var(--text3);margin-left:auto;font-weight:400}
+.pr-card p{font-size:12px;margin:10px 0;color:var(--text)}
+.pr-card code{background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px;font-family:ui-monospace,monospace}
+.pr-card ul{margin:6px 0 6px 18px}
+.pr-card li{font-size:12px;margin:4px 0}
+.pr-card .label{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:3px;margin-right:8px;margin-bottom:4px}
+.pr-card .label.files{background:var(--blue-bg);color:var(--blue)}
+.pr-card .label.tests{background:var(--yellow-bg);color:var(--yellow)}
+.pr-card .label.rollback{background:var(--red-bg);color:var(--red)}
+.pr-card .label.exit{background:var(--green-bg);color:var(--green)}
+.pr-card .label.spike{background:var(--purple-bg);color:var(--purple)}
+.pr-card .section{margin:12px 0 6px;display:flex;align-items:flex-start;gap:8px}
+.pr-card .section-body{flex:1;font-size:12px}
+
+.callout{padding:12px 16px;border-radius:var(--radius);margin:12px 0;font-size:12px}
+.callout.info{background:var(--blue-bg);border:1px solid var(--blue-border);color:var(--blue)}
+.callout.warn{background:var(--yellow-bg);border:1px solid var(--yellow-border);color:var(--yellow)}
+.callout.good{background:var(--green-bg);border:1px solid var(--green-border);color:var(--green)}
+.callout.bad{background:var(--red-bg);border:1px solid var(--red-border);color:var(--red)}
+.callout b{font-weight:700}
+
+.table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px}
+.table th{background:var(--accent2);color:#fff;padding:10px 14px;text-align:left}
+.table td{padding:8px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+.table tr:nth-child(even) td{background:var(--surface2)}
+.table code{background:var(--surface3);padding:1px 4px;border-radius:3px}
+
+.dep-graph{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);padding:20px;font-family:ui-monospace,monospace;font-size:12px;line-height:1.8;white-space:pre;overflow-x:auto}
+
+.rules-list{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);padding:18px;margin:16px 0}
+.rules-list li{font-size:13px;margin:8px 0;padding-left:4px}
+.rules-list li b{color:var(--accent2)}
+
+.empirical{background:var(--purple-bg);border:2px solid var(--purple-border);border-radius:var(--radius);padding:14px 18px;margin:12px 0;font-size:12px}
+.empirical h4{color:var(--purple);font-size:13px;margin-bottom:6px}
+
+.blocks{font-size:11px;color:var(--red);margin-top:8px}
+.blocks b{text-transform:uppercase;letter-spacing:.4px}
+
+/* Prompt anatomy section */
+.anatomy-columns{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:16px 0}
+.anatomy-col{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);padding:16px}
+.anatomy-title{font-size:12px;font-weight:700;color:var(--accent2);letter-spacing:1.2px;text-transform:uppercase}
+.anatomy-caption{font-size:11px;color:var(--text2);margin:4px 0 12px;font-style:italic}
+.band-stack{display:flex;flex-direction:column;gap:1px;border:1px solid var(--border);border-radius:4px;overflow:hidden}
+.band{padding:7px 10px;font-size:11px;font-weight:600;color:#1a1a1a;display:flex;justify-content:space-between;align-items:center;line-height:1.3}
+.band span{font-size:10px;opacity:.75;font-weight:400;margin-left:8px;white-space:nowrap}
+.monolith-annot{margin-top:14px;font-size:11px;color:var(--red);line-height:1.8;padding:10px;background:var(--red-bg);border-radius:4px;border:1px solid var(--red-border)}
+.monolith-annot div{display:flex;align-items:flex-start;gap:6px}
+.orch-box{background:var(--purple-bg);border:2px solid var(--purple-border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px}
+.orch-title{font-size:11px;font-weight:700;color:var(--purple);letter-spacing:1px;text-transform:uppercase}
+.orch-content{font-size:11px;color:var(--text);margin-top:6px;line-height:1.55}
+.orch-tools{margin-top:6px;font-family:ui-monospace,monospace;font-size:10px;color:var(--purple)}
+.experts-row{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px}
+.expert-mini{background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--accent);border-radius:4px;padding:8px 10px}
+.expert-mini .em-name{font-size:11px;font-weight:700;color:var(--accent2);margin-bottom:3px;font-family:ui-monospace,monospace}
+.expert-mini .em-tools{font-size:9px;color:var(--text2);margin-bottom:4px;line-height:1.4}
+.expert-mini .em-io{font-size:10px;color:var(--accent);font-family:ui-monospace,monospace}
+.em-gain{margin-top:14px;font-size:11px;color:var(--green);line-height:1.8;padding:10px;background:var(--green-bg);border-radius:4px;border:1px solid var(--green-border)}
+.em-gain div{display:flex;align-items:flex-start;gap:6px}
+
+.section-sub{font-size:15px;color:var(--accent2);margin:36px 0 12px;font-weight:700;border-bottom:1px solid var(--border-strong);padding-bottom:6px}
+
+.surface-matrix{width:100%;border-collapse:collapse;font-size:10px;margin:10px 0}
+.surface-matrix th,.surface-matrix td{border:1px solid var(--border);padding:5px 6px;text-align:center}
+.surface-matrix th{background:var(--accent2);color:#fff;font-weight:600;writing-mode:vertical-rl;text-orientation:mixed;padding:8px 4px;min-width:22px}
+.surface-matrix th.row{background:var(--surface2);color:var(--text);text-align:left;min-width:150px;writing-mode:horizontal-tb;font-weight:600;font-family:ui-monospace,monospace}
+.surface-matrix th.plain{writing-mode:horizontal-tb;min-width:60px}
+.surface-matrix .allow{background:var(--green-bg);color:var(--green);font-weight:700}
+.surface-matrix .deny{background:var(--red-bg);color:var(--red);opacity:.5}
+.surface-matrix .allow::after{content:"✓"}
+.surface-matrix .deny::after{content:"·"}
+
+.prompt-excerpt{background:var(--surface);border:1.5px solid var(--border-strong);border-left:4px solid var(--accent);border-radius:var(--radius);padding:14px 18px;margin:12px 0;font-family:ui-monospace,monospace;font-size:11px;line-height:1.7;white-space:pre-wrap;position:relative}
+.prompt-excerpt .label{display:block;font-family:system-ui,sans-serif;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px dashed var(--border)}
+.prompt-excerpt.monolith-style{border-left-color:#607d8b}
+.prompt-excerpt.monolith-style .label{color:#607d8b}
+.prompt-excerpt.orchestrator-style{border-left-color:var(--purple)}
+.prompt-excerpt.orchestrator-style .label{color:var(--purple)}
+.prompt-excerpt.expert-style{border-left-color:var(--green)}
+.prompt-excerpt.expert-style .label{color:var(--green)}
+.prompt-excerpt .hilite{background:rgba(255,213,79,.3);padding:0 2px;border-radius:2px}
+.prompt-excerpt .concern-tag{display:inline-block;font-size:9px;padding:1px 5px;border-radius:8px;background:var(--accent);color:#fff;margin-left:6px;font-family:system-ui,sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+
+.flow-compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}
+.flow-col{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);padding:14px 16px}
+.flow-col h4{font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
+.flow-step{padding:6px 10px;margin:4px 0;font-size:11px;line-height:1.5;border-radius:0 4px 4px 0;border-left:3px solid var(--accent);background:var(--surface2)}
+.flow-step.muted{background:transparent;color:var(--text2);border-left-style:dashed}
+.flow-step.hitl{border-left-color:var(--red);background:var(--red-bg)}
+.flow-step.expert{border-left-color:var(--green);background:var(--green-bg)}
+.flow-step.restish{font-family:ui-monospace,monospace;color:var(--accent2)}
+.flow-step .sn{display:inline-block;width:18px;height:18px;background:var(--accent);color:#fff;text-align:center;line-height:18px;border-radius:50%;font-size:10px;font-weight:700;margin-right:6px;font-family:system-ui,sans-serif}
+
+.metrics-compare{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0}
+.metrics-compare th{background:var(--accent2);color:#fff;padding:10px 12px;text-align:left}
+.metrics-compare td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+.metrics-compare .metric-name{font-weight:600;color:var(--text)}
+.metrics-compare .mono-val{font-family:ui-monospace,monospace;color:var(--red);font-size:11px}
+.metrics-compare .opt-b-val{font-family:ui-monospace,monospace;color:var(--green);font-size:11px}
+.metrics-compare .verdict{font-size:10px;color:var(--text2);font-style:italic;margin-top:3px}
+
+/* Ready-to-paste prompts */
+.prompt-card{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);margin:14px 0;overflow:hidden}
+.prompt-card-header{background:var(--accent2);color:#fff;padding:10px 16px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.prompt-card-header .prp-tag{font-size:10px;background:rgba(255,255,255,.15);padding:2px 8px;border-radius:10px;letter-spacing:.4px}
+.prompt-block{background:#1a1e26;color:#e6edf3;padding:14px 18px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word;border:none}
+.prompt-block .cmt{color:#8b949e;font-style:italic}
+.prompt-block .hdr{color:#79c0ff;font-weight:700}
+.prompt-block .warn{color:#f85149;font-weight:700}
+.prompt-block .ok{color:#7ee787}
+.usage-card{background:var(--green-bg);border:1px solid var(--green-border);border-left:4px solid var(--green);border-radius:var(--radius);padding:14px 18px;margin:16px 0;font-size:13px;line-height:1.6}
+.usage-card b{color:var(--green)}
+.sub-table{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0}
+.sub-table th{background:var(--accent2);color:#fff;padding:8px 12px;text-align:left}
+.sub-table td{padding:6px 12px;border-bottom:1px solid var(--border);font-family:ui-monospace,monospace;font-size:11px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Observability Plan &mdash; Opus-subagent-heavy rx-flow migration</h1>
+  <p>Four tiers. Each independently shippable. Stacks from JSONL (zero config) to SDK state observer (full SLO surface).</p>
+</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h3>Start here</h3>
+    <div class="phase active" onclick="showPhase(0)"><span class="tag">OVR</span>Overview<div class="sub">Goal + mental model</div></div>
+    <div class="phase" onclick="showPhase(1)"><span class="tag">FLOW</span>Data flow diagram<div class="sub">Where telemetry lives</div></div>
+    <h3 style="margin-top:20px">Tiers</h3>
+    <div class="phase" onclick="showPhase(2)"><span class="tag">T0</span>JSONL parser<div class="sub">Zero-config retroactive</div></div>
+    <div class="phase" onclick="showPhase(3)"><span class="tag">T1</span>OTEL env flip<div class="sub">Live streaming metrics</div></div>
+    <div class="phase" onclick="showPhase(4)"><span class="tag">T2</span>Hooks<div class="sub">Bespoke event log</div></div>
+    <div class="phase" onclick="showPhase(5)"><span class="tag">T3</span>SDK state observer<div class="sub">Expert-scoped SLOs</div></div>
+    <h3 style="margin-top:20px">Reference</h3>
+    <div class="phase" onclick="showPhase(6)"><span class="tag">SEQ</span>Sequence + landing</div>
+    <div class="phase" onclick="showPhase(7)"><span class="tag">AC</span>Acceptance criteria</div>
+  </aside>
+
+  <main class="main">
+
+<!-- OVERVIEW -->
+<div class="phase-content active" id="p-0">
+  <h2 class="phase-title">Overview</h2>
+  <p class="phase-sub">Get session-level telemetry for the Option B migration that matches the reference stats block below &mdash; applied to the workflow we&rsquo;ve been running across Phase 0 and Phase 1, where a primary coding agent is dispatching opus subagents heavily.</p>
+
+  <div class="callout good"><b>Companion to:</b> <code>migration-playbook.md</code> (the PR roadmap) and <code>handoff.md</code> (the phase state). This doc does not change any code &mdash; it describes <b>what to build</b> and <b>when each piece lands alongside which migration PR</b>.</div>
+
+  <h3 class="section-sub">The reference we&rsquo;re aiming at</h3>
+  <pre class="dep-graph">Stats for job 4501bd2f-dc67-48e9-af81-8e884dd6070a
+Tool calls: 186 total
+  Bash: 114
+  Read: 20
+  Glob: 16
+  Write: 14
+  Agent (subagent invocations): 13
+  TodoWrite: 8
+  ToolSearch: 1
+tool_results received: 195 &mdash; of which 40 were errors (21% error rate)
+Thinking &amp; output
+  Thinking blocks: 303 (~15,935 chars of reasoning)
+  Assistant text deltas: 175 (~10,325 chars of user-facing output)
+Interactive gates
+  AskUserQuestion rounds: 8 (7 answered so far; 1 still open)
+  Bash approval prompts: 11 (all approved, all hot-path)
+Duration (first &rarr; last status event, job still running)
+  Wall-clock: 1,473.7 s &asymp; 24.6 min
+  ~20.0 min (81%) in running
+  ~4.5 min (19%) in waiting_hot (blocked on user)
+  Status flipped 38 times; entered waiting_hot 19 separate times</pre>
+
+  <h3 class="section-sub">The mental model</h3>
+  <p>Claude Code emits observability data through four separate channels. Each is independently enableable; each unlocks a different slice of the reference stats. The cheapest channel covers ~80% of the surface.</p>
+  <ol class="rules-list">
+    <li><b>JSONL transcripts.</b> Every session writes one long <code>.jsonl</code> file, one typed event per line. Primary at <code>~/.claude/projects/&lt;project-hash&gt;/&lt;session-id&gt;.jsonl</code>, subagents at <code>/private/tmp/claude-501/&lt;project-hash&gt;/&lt;session&gt;/tasks/&lt;agent-id&gt;.output</code>. Always on.</li>
+    <li><b>OpenTelemetry.</b> Claude Code has first-class OTEL support. Set a handful of env vars and it emits <code>claude_code.*</code> metrics and logs to any OTLP endpoint.</li>
+    <li><b>Hooks.</b> <code>~/.claude/settings.json</code> can register <code>PreToolUse</code> / <code>PostToolUse</code> / <code>SessionStart</code> / <code>SessionEnd</code> / <code>UserPromptSubmit</code> / <code>Notification</code> hooks that pipe JSON into a shell command. Right place for bespoke event streams.</li>
+    <li><b>Agent SDK events.</b> <code>claude_agent_sdk.query()</code> (used inside our <code>invoke_expert</code> custom tool) yields typed messages (<code>AssistantMessage</code>, <code>UserMessage</code>, <code>ResultMessage</code>, <code>SystemMessage</code>). A thin wrapper produces exact state-flip counts and per-expert latencies.</li>
+  </ol>
+
+  <div class="callout info"><b>Rule of thumb:</b> JSONL gives you retroactive analysis of anything that has already happened. OTEL gives you live streams. Hooks give you bespoke logging. SDK events give you the fine-grained state machine that produces the &ldquo;status flipped 38 times&rdquo; number.</div>
+
+  <h3 class="section-sub">Non-goals for this doc</h3>
+  <ul class="rules-list">
+    <li>No code changes in this PR &mdash; this is plan-only.</li>
+    <li>No new Python or npm dependencies.</li>
+    <li>No installed services (local collector is optional; direct-to-hosted-OTLP works).</li>
+    <li>No edits to <code>.claude/settings.json</code> here &mdash; Tier 2 lands that.</li>
+  </ul>
+</div>
+
+<!-- DATA FLOW -->
+<div class="phase-content" id="p-1">
+  <h2 class="phase-title">Data flow &mdash; where each number comes from</h2>
+  <p class="phase-sub">Four telemetry sources funnel into one analysis surface. Each source unlocks specific lines of the reference stats block.</p>
+
+  <div class="dep-graph">                            SESSION RUNNING
+                                  &#x2502;
+        &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x253C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+        &#x2502;             &#x2502;            &#x2502;            &#x2502;            &#x2502;
+   &#x250C;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x2510;   &#x250C;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;  &#x250C;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;  &#x250C;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;    &#x250C;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+   &#x2502;  JSONL   &#x2502;   &#x2502;   OTEL   &#x2502;  &#x2502;  Hooks   &#x2502;  &#x2502;  SDK       &#x2502;    &#x2502; Tracing &#x2502;
+   &#x2502; transcript&#x2502;   &#x2502;  env vars &#x2502;  &#x2502; settings  &#x2502;  &#x2502; query()    &#x2502;    &#x2502;  (all)  &#x2502;
+   &#x2502; (TIER 0) &#x2502;   &#x2502; (TIER 1) &#x2502;  &#x2502; (TIER 2) &#x2502;  &#x2502; iter       &#x2502;    &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
+   &#x2514;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;   &#x2514;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;  &#x2514;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;  &#x2502; (TIER 3)  &#x2502;
+       &#x2502;                &#x2502;              &#x2502;          &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
+       &#x2502;                &#x2502;              &#x2502;               &#x2502;
+       &#x25BC;                &#x25BC;              &#x25BC;               &#x25BC;
+  tool-call           live gauges      per-tool dur   expert state
+  counts, errors,     tokens, errors,  exit code,     flips, retries,
+  thinking chars,     session dur      session        per-expert
+  AskUserQuestion                      markers        latency
+  rounds, wall-clock
+       &#x2502;                &#x2502;              &#x2502;               &#x2502;
+       &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
+                                       &#x2502;
+                                       &#x25BC;
+                           &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+                           &#x2502;  Grafana panels     &#x2502;
+                           &#x2502;  +                  &#x2502;
+                           &#x2502;  jq one-liners      &#x2502;
+                           &#x2502;  over .jsonl files  &#x2502;
+                           &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;</div>
+
+  <h3 class="section-sub">Which tier covers which reference-stat line</h3>
+  <table class="table">
+    <thead><tr><th style="width:42%">Reference stat line</th><th style="width:12%">Tier 0</th><th style="width:12%">Tier 1</th><th style="width:12%">Tier 2</th><th style="width:12%">Tier 3</th></tr></thead>
+    <tbody>
+      <tr><td>Tool calls by name (Bash/Read/Glob/Write/Agent/TodoWrite/ToolSearch)</td><td style="color:var(--green);font-weight:700">YES</td><td style="color:var(--green);font-weight:700">YES</td><td style="color:var(--green);font-weight:700">YES</td><td>&mdash;</td></tr>
+      <tr><td>tool_results received + error count (21% error rate)</td><td style="color:var(--green);font-weight:700">YES</td><td>partial</td><td style="color:var(--green);font-weight:700">YES</td><td>partial</td></tr>
+      <tr><td>Thinking blocks + chars</td><td style="color:var(--green);font-weight:700">YES</td><td>&mdash;</td><td>&mdash;</td><td>partial</td></tr>
+      <tr><td>Assistant text deltas + chars</td><td style="color:var(--green);font-weight:700">YES</td><td>&mdash;</td><td>&mdash;</td><td>partial</td></tr>
+      <tr><td>AskUserQuestion rounds</td><td style="color:var(--green);font-weight:700">YES</td><td>&mdash;</td><td style="color:var(--green);font-weight:700">YES</td><td>&mdash;</td></tr>
+      <tr><td>Bash approval prompts (count + outcome)</td><td>partial</td><td style="color:var(--green);font-weight:700">YES</td><td style="color:var(--green);font-weight:700">YES</td><td>&mdash;</td></tr>
+      <tr><td>Wall-clock first &rarr; last event</td><td style="color:var(--green);font-weight:700">YES</td><td style="color:var(--green);font-weight:700">YES</td><td style="color:var(--green);font-weight:700">YES</td><td>partial</td></tr>
+      <tr><td>% running vs. waiting_hot</td><td>&mdash;</td><td>partial</td><td>partial</td><td style="color:var(--green);font-weight:700">YES</td></tr>
+      <tr><td>Status flipped 38 times; entered waiting_hot 19 separate times</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td style="color:var(--green);font-weight:700">YES</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- TIER 0 -->
+<div class="phase-content" id="p-2">
+  <h2 class="phase-title">Tier 0 &mdash; JSONL transcript parser</h2>
+  <p class="phase-sub">Reproduce ~80% of the reference stats block from any completed session, retroactively, with zero Claude Code configuration.</p>
+
+  <div class="pr-card">
+    <h3><span class="pr-tag">TIER 0</span>50-line Python parser over existing JSONL<span class="pr-est">&sim;1 hour</span></h3>
+
+    <div class="section"><span class="label files">Goal</span><div class="section-body">Given a session id or a path to a <code>.jsonl</code> transcript, print a stats block that mirrors the reference &mdash; tool-call counts, error count, thinking/text chars, AskUserQuestion rounds, wall-clock.</div></div>
+
+    <div class="section"><span class="label files">Data source</span><div class="section-body">
+      <ul>
+        <li>Primary session &rarr; <code>~/.claude/projects/&lt;project-hash&gt;/&lt;session-id&gt;.jsonl</code></li>
+        <li>Subagent outputs &rarr; <code>/private/tmp/claude-501/&lt;project-hash&gt;/&lt;session&gt;/tasks/&lt;agent-id&gt;.output</code></li>
+        <li>Each line is a typed event: <code>user</code>, <code>assistant</code>, <code>tool_use</code>, <code>tool_result</code>, <code>thinking</code></li>
+      </ul>
+    </div></div>
+
+    <div class="section"><span class="label files">Implementation</span><div class="section-body">
+      A ~50-line Python script at <code>scripts/observability/parse_transcript.py</code> (ships in a later code PR, not this doc). Reads JSONL line by line, groups by event <code>type</code>, counts, sums, prints a table. Accepts either a session id OR a path.
+    </div></div>
+
+    <div class="section"><span class="label exit">Covers</span><div class="section-body">
+      <ul>
+        <li>Tool calls by name (filter <code>tool_use</code>, group by <code>name</code>)</li>
+        <li><code>tool_results</code> count + error count (<code>tool_result.is_error === true</code>)</li>
+        <li>Thinking block count + total chars (<code>thinking</code> events)</li>
+        <li>Assistant text delta count + chars (<code>assistant.message.content[].type === "text"</code>)</li>
+        <li>AskUserQuestion rounds (<code>tool_use.name === "AskUserQuestion"</code>)</li>
+        <li>Wall-clock = last event ts &minus; first event ts</li>
+      </ul>
+    </div></div>
+
+    <div class="section"><span class="label rollback">Does NOT cover</span><div class="section-body">Per-state duration (running vs. waiting_hot), state-flip counts, live streaming. Those need Tier 1 or Tier 3.</div></div>
+
+    <div class="section"><span class="label exit">Landing position</span><div class="section-body"><b>Before PR 2.1</b> &mdash; no dependency on the registry or any expert. Ship as a drive-by during Phase 0&ndash;1 or as a small follow-on to PR 1.</div></div>
+  </div>
+
+  <div class="callout good"><b>Why this first:</b> it retroactively explains the 14 subagent transcripts that already exist from the Phase 0&ndash;1 session. One hour of work unlocks 80% of the reference stats block on history you already have.</div>
+</div>
+
+<!-- TIER 1 -->
+<div class="phase-content" id="p-3">
+  <h2 class="phase-title">Tier 1 &mdash; OpenTelemetry env-var flip</h2>
+  <p class="phase-sub">Live streaming metrics via Claude Code&rsquo;s built-in OTEL support.</p>
+
+  <div class="pr-card">
+    <h3><span class="pr-tag">TIER 1</span>Set 4 env vars, stand up a local collector<span class="pr-est">&sim;30 min + 1 h dashboard</span></h3>
+
+    <div class="section"><span class="label files">Goal</span><div class="section-body">Token burn, tool usage, session duration, API errors streaming live into Grafana (or any OTLP backend).</div></div>
+
+    <div class="section"><span class="label files">Env vars</span><div class="section-body">
+<pre class="dep-graph">CLAUDE_CODE_ENABLE_TELEMETRY=1
+OTEL_METRICS_EXPORTER=otlp
+OTEL_LOGS_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318</pre>
+    </div></div>
+
+    <div class="section"><span class="label files">Collector</span><div class="section-body">Simplest path: <code>brew install otelcol-contrib</code>, drop a 20-line <code>otel-collector-config.yaml</code> at <code>scripts/observability/otel-collector-config.yaml</code> with an OTLP receiver + Prometheus exporter. Pair with a Grafana container or Grafana Cloud. Easier remote option: point directly at Honeycomb or Grafana Cloud and skip the local collector.</div></div>
+
+    <div class="section"><span class="label exit">Covers</span><div class="section-body">
+      <ul>
+        <li>Token counters (input / output / cache hits / cache creation) as live gauges</li>
+        <li>Tool usage counters by tool name (matches the &ldquo;Bash: 114, Read: 20, &hellip;&rdquo; breakdown)</li>
+        <li>Session duration histograms</li>
+        <li>User decision counters (approved / denied permission prompts)</li>
+        <li>API error counters by error class</li>
+      </ul>
+      All metrics prefix <code>claude_code.*</code>.
+    </div></div>
+
+    <div class="section"><span class="label rollback">Does NOT cover</span><div class="section-body">Fine-grained state transitions (running &harr; waiting_hot &harr; idle), thinking/output char totals. Those still come from Tier 0 or Tier 3.</div></div>
+
+    <div class="section"><span class="label exit">Landing position</span><div class="section-body"><b>Alongside PR 2.1</b> &mdash; registry loader PR is the first time multiple experts might run concurrently in a session; live metrics become worth having. Could also land earlier &mdash; the env vars are safe to set on any version.</div></div>
+  </div>
+
+  <div class="callout info"><b>Minimal starter dashboard:</b> 4 Grafana panels &mdash; (1) tool usage by name, (2) token burn over time, (3) error rate, (4) active sessions. Build the rest as needs surface.</div>
+</div>
+
+<!-- TIER 2 -->
+<div class="phase-content" id="p-4">
+  <h2 class="phase-title">Tier 2 &mdash; Hooks for bespoke event logging</h2>
+  <p class="phase-sub">Capture events the built-in channels don&rsquo;t emit &mdash; per-command Bash duration, per-tool success/failure at the tool boundary, approval-prompt outcomes.</p>
+
+  <div class="pr-card">
+    <h3><span class="pr-tag">TIER 2</span>settings.json hooks + 15-line sink script<span class="pr-est">&sim;45 min</span></h3>
+
+    <div class="section"><span class="label files">Goal</span><div class="section-body">Which Bash commands fail most? How long does pytest take? When did the user get an approval prompt and did they approve or deny? Hooks answer all three.</div></div>
+
+    <div class="section"><span class="label files">Implementation</span><div class="section-body">Add a <code>hooks</code> block to <code>~/.claude/settings.json</code> registering <code>PreToolUse</code> + <code>PostToolUse</code> commands that pipe the JSON stdin into a sink script at <code>scripts/observability/hook-sink.sh</code>. Sink appends one line per event to <code>~/claude-code-events.jsonl</code> (or forwards to the Tier 1 OTEL collector).</div></div>
+
+    <div class="section"><span class="label exit">Covers</span><div class="section-body">
+      <ul>
+        <li>Per-command Bash duration + exit code</li>
+        <li>Per-tool success/failure timestamped to the second</li>
+        <li><code>SessionStart</code> / <code>SessionEnd</code> markers for session-level derived metrics</li>
+        <li><code>UserPromptSubmit</code> markers for &ldquo;time since last user message&rdquo; windows</li>
+        <li>Notification events (the moments the CLI drew the user&rsquo;s attention)</li>
+      </ul>
+    </div></div>
+
+    <div class="section"><span class="label rollback">Does NOT cover</span><div class="section-body">Anything inside the model &mdash; thinking char counts, output char counts. Hooks only fire on the tool boundary.</div></div>
+
+    <div class="section"><span class="label exit">Landing position</span><div class="section-body"><b>Alongside PR 3</b> (orchestrator rewrite). That&rsquo;s the first PR where the runtime shape changes enough to need pre/post telemetry comparison, and where custom hooks can tag which orchestrator version was active when a tool fired.</div></div>
+  </div>
+
+  <div class="callout warn"><b>Hook scripts can block or break sessions.</b> A slow <code>PostToolUse</code> hook adds latency to every tool call; a crashing one can brick the session. Two mitigations: (1) append-only to a local file, never do network I/O inline; (2) wrap the body in <code>{ &hellip; } || true</code> so a hook error never surfaces as a non-zero exit.</div>
+</div>
+
+<!-- TIER 3 -->
+<div class="phase-content" id="p-5">
+  <h2 class="phase-title">Tier 3 &mdash; SDK state observer for <code>invoke_expert</code></h2>
+  <p class="phase-sub">The final 20% of the reference stats block. Exact &ldquo;status flipped 38 times; entered waiting_hot 19 separate times&rdquo; granularity, scoped to expert calls. This is the SLO surface for production.</p>
+
+  <div class="pr-card">
+    <h3><span class="pr-tag">TIER 3</span>Thin wrapper around <code>query()</code>, emits via the Tier 1 pipeline<span class="pr-est">&sim;3&ndash;4 h</span></h3>
+
+    <div class="section"><span class="label files">Goal</span><div class="section-body">Per-expert state-flip count, time in running vs. waiting vs. idle, retry count, token usage. Labels every metric with <code>expert_id</code>.</div></div>
+
+    <div class="section"><span class="label files">Implementation</span><div class="section-body"><code>carelink-pms/carelink/agi/observability.py</code> &mdash; a context manager wrapping <code>claude_agent_sdk.query()</code> (the call PR 1 uses inside <code>invoke_expert</code>). Timestamps every yielded message, increments state counters on transitions, emits metrics via the OTEL pipeline from Tier 1. ~100 lines.</div></div>
+
+    <div class="section"><span class="label files">Metric names</span><div class="section-body">
+      <ul>
+        <li><code>carelink.expert.call.duration_seconds</code> &mdash; histogram, labeled <code>{expert_id, outcome}</code></li>
+        <li><code>carelink.expert.state_flips</code> &mdash; counter, labeled <code>{expert_id}</code></li>
+        <li><code>carelink.expert.retry_count</code> &mdash; counter, labeled <code>{expert_id, reason}</code></li>
+        <li><code>carelink.expert.waiting_seconds</code> &mdash; gauge</li>
+      </ul>
+    </div></div>
+
+    <div class="section"><span class="label exit">Covers</span><div class="section-body">
+      <ul>
+        <li>Time spent in each state per expert call</li>
+        <li>State flip count per expert call</li>
+        <li>Per-expert latency histograms</li>
+        <li>Per-expert token usage, error count, retry count</li>
+        <li>Per-expert input-schema-validation-failure rate</li>
+      </ul>
+    </div></div>
+
+    <div class="section"><span class="label rollback">Does NOT cover</span><div class="section-body">Anything outside <code>invoke_expert</code>. Orchestrator-level state (idle while waiting for the user between expert calls) still comes from Tier 0 or Tier 2.</div></div>
+
+    <div class="section"><span class="label exit">Landing position</span><div class="section-body"><b>With PR 2.1</b> (preferred) or PR 3, whichever hits first. PR 2.1 is the natural home because <code>invoke_expert</code> is already changing there &mdash; a good moment to wire in metric labels. If PR 2.1 lands without it, fold into PR 3 before the orchestrator rewrite goes live.</div></div>
+  </div>
+
+  <div class="callout bad"><b>SDK message type drift.</b> We hit this during Phase 1: <code>rate_limit_event</code> appeared without being in the documented type list. Tier 3&rsquo;s observer must tolerate unknown types &mdash; log a WARN, not raise. Add a test that feeds a synthetic unknown-type message through the observer and asserts no exception. This is a hard rule.</div>
+</div>
+
+<!-- SEQUENCE + LANDING -->
+<div class="phase-content" id="p-6">
+  <h2 class="phase-title">Sequence + landing plan</h2>
+  <p class="phase-sub">The tiers stack. Each is useful alone; each adds a layer. Map to existing migration PRs &mdash; no new PR numbers introduced.</p>
+
+  <h3 class="section-sub">Recommended sequence</h3>
+  <table class="table">
+    <thead><tr><th style="width:14%">Tier</th><th style="width:28%">When to ship</th><th style="width:28%">Prerequisite</th><th>Reward</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>T0</b> JSONL parser</td>
+        <td>Before PR 2.1 (or drive-by during Phase 0&ndash;1)</td>
+        <td>None &mdash; transcripts already exist</td>
+        <td>80% of reference stats, retroactively, on any past session</td>
+      </tr>
+      <tr>
+        <td><b>T1</b> OTEL env flip</td>
+        <td>Alongside PR 2.1</td>
+        <td>Local collector or OTLP endpoint (free)</td>
+        <td>Live token burn, tool frequency, error rate, session duration</td>
+      </tr>
+      <tr>
+        <td><b>T2</b> Hooks</td>
+        <td>Alongside PR 3</td>
+        <td>Tier 1 collector (recommended sink)</td>
+        <td>Per-tool duration + exit, session markers, approval-prompt tracking</td>
+      </tr>
+      <tr>
+        <td><b>T3</b> SDK state observer</td>
+        <td>With PR 2.1 or PR 3</td>
+        <td>Tier 1 (emits to same OTLP pipeline)</td>
+        <td>Exact state-flip counts, per-expert latency, SLO surface</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout good"><b>Stacking property:</b> Tier 0 on its own is useful. Tier 0 + Tier 1 covers most day-to-day monitoring. Tier 0 + Tier 1 + Tier 2 + Tier 3 is the full reference stats block plus production SLO.</div>
+
+  <h3 class="section-sub">Mapping to rx-flow migration PRs</h3>
+  <table class="table">
+    <thead><tr><th style="width:14%">Tier</th><th style="width:20%">Migration PR</th><th>Why there</th></tr></thead>
+    <tbody>
+      <tr><td>T0</td><td>Any time after PR 1</td><td>PR 1 is when subagent transcripts start appearing; the parser immediately has something interesting to analyze</td></tr>
+      <tr><td>T1</td><td>PR 2.1</td><td>Registry loader is the first time multiple experts might run concurrently; live metrics become worth having</td></tr>
+      <tr><td>T2</td><td>PR 3</td><td>Orchestrator rewrite is the first PR where the runtime shape changes enough to need pre/post telemetry comparison</td></tr>
+      <tr><td>T3</td><td>PR 2.1 (preferred) or PR 3</td><td><code>invoke_expert</code> is the SDK call we care about; instrument it where it first reads from a real registry</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="section-sub">Risks &amp; caveats</h3>
+  <div class="callout warn"><b>OTEL collector version mismatch.</b> Claude Code&rsquo;s metric schema evolves; pin <code>otelcol-contrib</code> to a recent version (&ge; 0.90) and re-validate metric names after any Claude Code upgrade. Cheapest check: grep for <code>claude_code.</code> after every upgrade.</div>
+  <div class="callout warn"><b>Hook scripts can block or break sessions.</b> Keep the sink append-only, wrap in <code>|| true</code>.</div>
+  <div class="callout bad"><b>SDK message type drift.</b> Tier 3 must tolerate unknown types &mdash; log WARN, not raise. Covered by a synthetic-unknown-type test.</div>
+  <div class="callout warn"><b>Subagent transcripts live under <code>/private/tmp/</code>.</b> That directory is ephemeral; macOS purges it on some boots. Tier 0 should run against recent sessions only, or a Tier 2 <code>SessionEnd</code> hook should copy them aside to <code>~/.claude/projects/&lt;hash&gt;/subagents/</code>.</div>
+  <div class="callout warn"><b>OTEL and hooks can double-count.</b> If Tier 2 hooks forward to the same OTLP endpoint as Tier 1, tool-usage counters double. Either (a) route hooks to a separate metric namespace, or (b) stop emitting tool-usage counters via OTEL once hooks are on.</div>
+  <div class="callout info"><b>Project hashes differ across machines.</b> <code>~/.claude/projects/&lt;project-hash&gt;/</code> uses a hash derived from the absolute cwd. Laptop transcripts won&rsquo;t collate with CI&rsquo;s unless canonicalized or copied. Not urgent.</div>
+</div>
+
+<!-- ACCEPTANCE -->
+<div class="phase-content" id="p-7">
+  <h2 class="phase-title">Acceptance criteria</h2>
+  <p class="phase-sub">How we&rsquo;ll know each tier is done. Every criterion is empirically verifiable.</p>
+
+  <table class="table">
+    <thead><tr><th style="width:20%">Tier</th><th>Done when&hellip;</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Tier 0</b><br>JSONL parser</td>
+        <td>One command (<code>python scripts/observability/parse_transcript.py &lt;session-id&gt;</code>) prints the reference-stats-block equivalent for any of the 14 subagent transcripts produced during the Phase 0&ndash;1 session.</td>
+      </tr>
+      <tr>
+        <td><b>Tier 1</b><br>OTEL env flip</td>
+        <td><code>claude_code.tool.usage.count{tool="Bash"}</code> appears in a Grafana panel during a live session. <code>claude_code.token.usage.count{type="input"}</code> climbs as the session runs.</td>
+      </tr>
+      <tr>
+        <td><b>Tier 2</b><br>Hooks</td>
+        <td><code>~/claude-code-events.jsonl</code> has one line per tool call for a session just completed. A <code>jq</code> one-liner produces per-tool error rate.</td>
+      </tr>
+      <tr>
+        <td><b>Tier 3</b><br>SDK state observer</td>
+        <td>Grafana panel shows <code>carelink.expert.call.duration_seconds</code> broken out by <code>expert_id</code>, covering &ge; 2 experts in a live session. A second panel shows state-flip count as a time series.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="section-sub">What this doc does NOT authorize</h3>
+  <ul class="rules-list">
+    <li>Code changes to <code>carelink-pms/</code>, <code>carelink-backend/</code>, <code>carelink-frontend/</code>, or the Claude Code harness (plan-only; implementation lands in later PRs).</li>
+    <li>New Python or npm dependencies (Tier 3 reuses whatever OTLP exporter already ships with the <code>opentelemetry</code> package the SDK pulls in).</li>
+    <li>Installed services (local collector is optional; direct-to-hosted-OTLP is supported).</li>
+    <li>Changes to <code>.claude/settings.json</code> &mdash; that lands as part of the Tier 2 PR.</li>
+  </ul>
+
+  <div class="callout good"><b>Ship Tier 0 first.</b> One hour of work unlocks 80% of the reference stats block retroactively on sessions that have already happened. The rest follows the migration&rsquo;s natural cadence.</div>
+</div>
+
+  </main>
+</div>
+
+<script>
+function showPhase(n){
+  document.querySelectorAll('.phase-content').forEach(t=>{t.classList.toggle('active',t.id==='p-'+n);});
+  document.querySelectorAll('.sidebar .phase').forEach(t=>{
+    var oc=t.getAttribute('onclick')||'';
+    t.classList.toggle('active',oc==='showPhase('+n+')');
+  });
+  window.scrollTo(0,0);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CareLink AGI — Where We Stand (Per-Instance Tenancy + POC Decision Flow)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --bg-code: #f6f8fa;
+    --border: #d0d7de;
+    --border-strong: #afb8c1;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --text-faint: #8c959f;
+    --vercel: #57606a;
+    --carelink-now: #cf222e;
+    --carelink-target: #1a7f37;
+    --info: #0969da;
+    --warn: #cf222e;
+    --good: #1a7f37;
+    --neutral: #57606a;
+    --org: #0969da;
+    --pharmacy: #1a7f37;
+    --user: #bf8700;
+    --session: #8250df;
+    --code-text: #24292f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.55;
+    font-size: 15px;
+  }
+  header {
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 32px 20px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
+  header .meta { color: var(--text-muted); font-size: 13px; }
+  header .intent {
+    margin-top: 12px;
+    color: var(--text);
+    max-width: 880px;
+  }
+  nav.tabs {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  nav.tabs button {
+    background: transparent;
+    border: 0;
+    padding: 14px 18px;
+    font-size: 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active {
+    color: var(--text);
+    border-bottom-color: var(--info);
+  }
+  main {
+    padding: 32px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  section.panel {
+    display: none;
+    animation: fadein 0.2s ease;
+  }
+  section.panel.active { display: block; }
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  h2 { font-size: 20px; margin: 0 0 16px; font-weight: 600; }
+  h3 { font-size: 16px; margin: 24px 0 10px; font-weight: 600; }
+  h4 { font-size: 13.5px; margin: 18px 0 8px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  p { margin: 0 0 12px; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--bg-code);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--code-text);
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--code-text);
+  }
+  .callout {
+    border-left: 4px solid var(--info);
+    background: #ddf4ff;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 14px;
+  }
+  .callout.warn {
+    border-left-color: var(--warn);
+    background: #ffebe9;
+  }
+  .callout.good {
+    border-left-color: var(--good);
+    background: #dafbe1;
+  }
+  .callout strong { font-weight: 600; }
+
+  /* === 3-column comparison matrix === */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 200px 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 16px 0;
+    font-size: 13px;
+  }
+  .compare-grid > div {
+    background: white;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .compare-grid > div:hover { background: var(--bg-alt); }
+  .compare-grid > div.active { background: #fff8c5; }
+  .compare-grid .header {
+    background: var(--bg-alt);
+    font-weight: 600;
+    cursor: default;
+    text-align: center;
+    padding: 12px;
+  }
+  .compare-grid .header:hover { background: var(--bg-alt); }
+  .compare-grid .header-vercel { color: var(--vercel); border-top: 3px solid var(--vercel); }
+  .compare-grid .header-carelink-now { color: var(--carelink-now); border-top: 3px solid var(--carelink-now); }
+  .compare-grid .header-carelink-target { color: var(--carelink-target); border-top: 3px solid var(--carelink-target); }
+  .compare-grid .row-label {
+    background: var(--bg-alt);
+    font-weight: 600;
+    cursor: default;
+    font-size: 13px;
+  }
+  .compare-grid .row-label:hover { background: var(--bg-alt); }
+  .compare-grid .cell-summary {
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  .compare-grid .cell-tag {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+    margin-right: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .cell-tag.same { background: var(--good); }
+  .cell-tag.differs { background: var(--warn); }
+  .cell-tag.absent { background: var(--neutral); }
+  .cell-tag.partial { background: var(--user); }
+
+  .compare-detail {
+    margin-top: 16px;
+    padding: 16px 18px;
+    background: var(--bg-alt);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    min-height: 120px;
+  }
+  .compare-detail .detail-content { display: none; }
+  .compare-detail .detail-content.active { display: block; }
+  .compare-detail h4 {
+    margin: 0 0 8px;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .detail-actor-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .actor-tag {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+  .actor-tag.vercel { background: var(--vercel); }
+  .actor-tag.now { background: var(--carelink-now); }
+  .actor-tag.target { background: var(--carelink-target); }
+
+  /* === Instance model diagram === */
+  .instance-frame {
+    border: 2px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin: 12px 0;
+    background: white;
+  }
+  .instance-frame.shared {
+    border-color: var(--vercel);
+    background: var(--bg-alt);
+  }
+  .instance-frame.org-x { border-color: var(--org); }
+  .instance-frame.org-y { border-color: var(--pharmacy); }
+  .instance-frame .frame-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .instance-frame.shared .frame-label { color: var(--vercel); }
+  .instance-frame.org-x .frame-label { color: var(--org); }
+  .instance-frame.org-y .frame-label { color: var(--pharmacy); }
+  .instance-frame .frame-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .instance-stack {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+  }
+  .instance-piece {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .instance-piece:hover {
+    border-color: var(--info);
+    background: #ddf4ff;
+  }
+  .instance-piece.active {
+    border-color: var(--info);
+    background: #ddf4ff;
+    box-shadow: 0 0 0 2px var(--info) inset;
+  }
+  .instance-piece .piece-label {
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .instance-piece .piece-detail {
+    color: var(--text-muted);
+    font-size: 11.5px;
+  }
+  .instance-pharmacies {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+  }
+  .pharmacy-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    background: var(--bg-alt);
+    margin-bottom: 4px;
+    font-size: 12.5px;
+  }
+  .pharmacy-row .ph-label {
+    background: var(--pharmacy);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+
+  /* === POC cards === */
+  .poc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .poc-card {
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .poc-card:hover {
+    border-color: var(--info);
+  }
+  .poc-card.recommended {
+    border-color: var(--good);
+  }
+  .poc-card.recommended::before {
+    content: "RECOMMENDED";
+    position: absolute;
+    top: -10px;
+    right: 12px;
+    background: var(--good);
+    color: white;
+    padding: 2px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 10px;
+    letter-spacing: 0.5px;
+  }
+  .poc-card.active {
+    border-color: var(--info);
+    box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.18);
+  }
+  .poc-card .poc-id {
+    display: inline-block;
+    background: var(--info);
+    color: white;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .poc-card.recommended .poc-id { background: var(--good); }
+  .poc-card .poc-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .poc-card .poc-time {
+    color: var(--text-muted);
+    font-size: 12.5px;
+    margin-bottom: 10px;
+  }
+  .poc-card .poc-summary {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .poc-card .poc-validates {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .poc-card .poc-validates strong { color: var(--text); }
+  .poc-detail {
+    margin-top: 16px;
+    padding: 18px 20px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    min-height: 200px;
+  }
+  .poc-detail .detail-content { display: none; }
+  .poc-detail .detail-content.active { display: block; }
+  .poc-detail h4 {
+    margin: 0 0 12px;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .poc-detail .detail-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 13px;
+  }
+  .poc-detail .detail-row:last-child { border-bottom: 0; }
+  .poc-detail .detail-row .label {
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+  .poc-detail ul { margin: 4px 0 0; padding-left: 18px; }
+
+  /* === Gaps map === */
+  .gap-filter {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .gap-filter button {
+    padding: 6px 14px;
+    border: 1px solid var(--border-strong);
+    background: white;
+    border-radius: 16px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .gap-filter button.active {
+    background: var(--info);
+    color: white;
+    border-color: var(--info);
+  }
+  .gap-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 16px 0;
+  }
+  .gap-row {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .gap-row:hover { background: var(--bg-alt); }
+  .gap-row.active { background: var(--bg-alt); }
+  .gap-row .gap-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13.5px;
+  }
+  .gap-row .gap-id {
+    font-family: ui-monospace, monospace;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 12px;
+    min-width: 32px;
+  }
+  .gap-row .gap-title {
+    font-weight: 600;
+    flex: 1;
+  }
+  .gap-row .badge {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  .badge.severity-critical { background: #ffebe9; color: #82071e; }
+  .badge.severity-major { background: #fff8c5; color: #4d2d00; }
+  .badge.severity-minor { background: var(--bg-alt); color: var(--text-muted); }
+  .badge.status-resolved { background: #dafbe1; color: #0a3622; }
+  .badge.status-reduced { background: #ddf4ff; color: #0a3069; }
+  .badge.status-unchanged { background: var(--bg-alt); color: var(--text-muted); }
+  .gap-row .gap-detail {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .gap-row.active .gap-detail { display: block; }
+  .gap-row .gap-meta {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* === Decision path === */
+  .decision-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 16px 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .decision-step {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    gap: 14px;
+    align-items: start;
+  }
+  .decision-step:last-child { border-bottom: 0; }
+  .decision-step:hover { background: var(--bg-alt); }
+  .decision-step.active { background: var(--bg-alt); }
+  .decision-step .step-num {
+    background: var(--info);
+    color: white;
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    text-align: center;
+    border-radius: 14px;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .decision-step .step-content .step-title {
+    font-weight: 600;
+    font-size: 14.5px;
+    margin-bottom: 4px;
+  }
+  .decision-step .step-content .step-tagline {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .decision-step .step-content .step-detail {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    font-size: 13px;
+  }
+  .decision-step.active .step-content .step-detail { display: block; }
+  .decision-step .step-status {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  table th, table td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table th { background: var(--bg-alt); font-weight: 600; }
+
+  .legend-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 8px 0;
+  }
+  .legend-row .swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+  .footer-note {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CareLink AGI — Where We Stand</h1>
+  <div class="meta">2026-04-29 - Per-instance tenancy clarification + POC decision flow + gap map.</div>
+  <div class="intent">Three architectures (Vercel open-agents, CareLink today, CareLink target). Five POC options with concrete tradeoffs. Fifteen gaps mapped to severity and per-instance impact. One linear decision path. Click anything to expand.</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="compare" class="active">1. Three architectures</button>
+  <button data-tab="instance">2. Instance model (clarified)</button>
+  <button data-tab="poc">3. POC options</button>
+  <button data-tab="gaps">4. Gaps map</button>
+  <button data-tab="decision">5. Decision path</button>
+</nav>
+
+<main>
+
+<!-- =============================================================== TAB 1: COMPARE -->
+<section class="panel active" data-panel="compare">
+  <h2>Three architectures, side by side</h2>
+  <p>Click any cell to see why the row matters and what the difference implies. Tags: <span class="cell-tag same">SAME</span> structurally identical, <span class="cell-tag partial">PARTIAL</span> shape ports but substrate differs, <span class="cell-tag differs">DIFFERS</span> wrong-fit, <span class="cell-tag absent">ABSENT</span> not present.</p>
+
+  <div class="compare-grid" id="compare-grid">
+    <div class="header"></div>
+    <div class="header header-vercel">Vercel open-agents</div>
+    <div class="header header-carelink-now">CareLink today (HEAD)</div>
+    <div class="header header-carelink-target">CareLink target</div>
+
+    <div class="row-label">Tenancy model</div>
+    <div data-cell="tenancy-vercel" class="cell-summary"><span class="cell-tag absent">absent</span>Single-user. Every row FK'd to <code>users.id</code>. No org/team/tenant table.</div>
+    <div data-cell="tenancy-now" class="cell-summary"><span class="cell-tag partial">partial</span>Single-org singleton. <code>org_id</code> baked at construction across 26+ services.</div>
+    <div data-cell="tenancy-target" class="cell-summary"><span class="cell-tag same">structural</span>Per-org instance. Each org = own backend + DB + FS + AGI runtime. Pharmacies live inside.</div>
+
+    <div class="row-label">Subagent dispatch</div>
+    <div data-cell="dispatch-vercel" class="cell-summary"><span class="cell-tag same">same</span><code>task</code> tool + AI SDK <code>experimental_context</code>. 3 hard-coded subagents.</div>
+    <div data-cell="dispatch-now" class="cell-summary"><span class="cell-tag same">same</span><code>invoke_expert</code> MCP + Pydantic envelopes. 8 experts, MD-loaded, validated.</div>
+    <div data-cell="dispatch-target" class="cell-summary"><span class="cell-tag same">same</span><code>invoke_expert</code> stays canonical. Phase D infeasibility verdict locked.</div>
+
+    <div class="row-label">Memory / cross-run learning</div>
+    <div data-cell="memory-vercel" class="cell-summary"><span class="cell-tag absent">none</span>Sandbox FS = memory. No vector store, no episodic, no TTL. Skills are static MD prompts.</div>
+    <div data-cell="memory-now" class="cell-summary"><span class="cell-tag partial">partial</span>Aspirational. Workspace dirs created, populated, <code>rmtree</code>'d. No persistence.</div>
+    <div data-cell="memory-target" class="cell-summary"><span class="cell-tag differs">differs</span>Append-only entries, signed, 14d TTL. <strong>Substrate undecided</strong>: FS vs Postgres.</div>
+
+    <div class="row-label">HITL / approvals</div>
+    <div data-cell="hitl-vercel" class="cell-summary"><span class="cell-tag partial">partial</span>Inline <code>ask_user_question</code> client tool. Workflow resumes on next user msg. No durable park.</div>
+    <div data-cell="hitl-now" class="cell-summary"><span class="cell-tag partial">partial</span><code>UserQuestionGate</code> + <code>ToolApprovalGate</code> + Inngest cold-revive. Session-scoped queue.</div>
+    <div data-cell="hitl-target" class="cell-summary"><span class="cell-tag same">extends</span>Pharmacy-scoped queue. <code>/pharmacies/{pid}/approvals</code>. Cross-machine handoff for free.</div>
+
+    <div class="row-label">Workflow definition</div>
+    <div data-cell="workflow-vercel" class="cell-summary"><span class="cell-tag differs">differs</span>TS files + <code>"use workflow"</code> directive. Build-time codegen. No registry.</div>
+    <div data-cell="workflow-now" class="cell-summary"><span class="cell-tag absent">none</span>Hardcoded rx-flow path. 3 orchestrator prompts in TS frontend (~1,225 LoC).</div>
+    <div data-cell="workflow-target" class="cell-summary"><span class="cell-tag differs">new</span>YAML manifests + registry + selector. Adding a workflow = data, not code.</div>
+
+    <div class="row-label">Access control</div>
+    <div data-cell="access-vercel" class="cell-summary"><span class="cell-tag differs">differs</span><code>userId</code> equality only. No RBAC, no Permit.io, no policy layer.</div>
+    <div data-cell="access-now" class="cell-summary"><span class="cell-tag partial">partial</span>Permit.io at backend endpoints. <strong>Not consulted at AGI layer</strong>.</div>
+    <div data-cell="access-target" class="cell-summary"><span class="cell-tag differs">new</span>6-layer projection from Permit.io. Cached InvokerContext per session.</div>
+
+    <div class="row-label">Session lease</div>
+    <div data-cell="lease-vercel" class="cell-summary"><span class="cell-tag same">same</span><code>claimLifecycleLease</code> Postgres CAS in ~30 LoC. Reference implementation.</div>
+    <div data-cell="lease-now" class="cell-summary"><span class="cell-tag partial">partial</span>In-memory dict <code>cl._agi_clients[sid]</code>. Process-local. Multi-replica breaks.</div>
+    <div data-cell="lease-target" class="cell-summary"><span class="cell-tag same">CAS</span>DB-backed lease + 15s heartbeat + take-over. Mirrors Vercel pattern.</div>
+
+    <div class="row-label">Durability / cold-revive</div>
+    <div data-cell="durability-vercel" class="cell-summary"><span class="cell-tag differs">differs</span>Vercel Workflow (proprietary). Workflow-step-level checkpointing.</div>
+    <div data-cell="durability-now" class="cell-summary"><span class="cell-tag same">solid</span>Inngest cold-revive (887 LoC). Two functions: HITL drain + approval drain. Battle-tested.</div>
+    <div data-cell="durability-target" class="cell-summary"><span class="cell-tag same">extends</span>Same Inngest pattern + new TTL sweeper cron + chat session sweeper (already shipped).</div>
+
+    <div class="row-label">Subagent registry shape</div>
+    <div data-cell="registry-vercel" class="cell-summary"><span class="cell-tag differs">differs</span>Hard-coded TS object literal (`SUBAGENT_REGISTRY`). Editing = code change.</div>
+    <div data-cell="registry-now" class="cell-summary"><span class="cell-tag same">good</span>MD loader + 4 validation gates. Filename invariants. Schema dotted-path resolution.</div>
+    <div data-cell="registry-target" class="cell-summary"><span class="cell-tag same">extends</span>Same loader. Workflow YAML references experts by ID. Cross-validation at registry init.</div>
+
+    <div class="row-label">Type contracts</div>
+    <div data-cell="contracts-vercel" class="cell-summary"><span class="cell-tag absent">none</span>No typed envelopes between agents. XML-in-prose passed and parsed.</div>
+    <div data-cell="contracts-now" class="cell-summary"><span class="cell-tag same">good</span>Pydantic at every expert boundary. 16 contract models. Loose-on-output, retry-on-drift.</div>
+    <div data-cell="contracts-target" class="cell-summary"><span class="cell-tag same">extends</span>New workflows declare new contract files. Same loose-on-output convention.</div>
+
+    <div class="row-label">Skill manifest format</div>
+    <div data-cell="skills-vercel" class="cell-summary"><span class="cell-tag same">good</span><code>SKILL.md</code> Zod-validated frontmatter. <strong>Reusable shape.</strong></div>
+    <div data-cell="skills-now" class="cell-summary"><span class="cell-tag same">good</span>Skills as MD with frontmatter. Frontend renders from registry.</div>
+    <div data-cell="skills-target" class="cell-summary"><span class="cell-tag same">extend</span>Adopt SKILL.md frontmatter shape if going workflows-as-YAML route.</div>
+  </div>
+
+  <div class="compare-detail" id="compare-detail">
+    <div class="detail-content active" data-cell="default">
+      <h4>Click any cell above</h4>
+      <p style="margin: 0; color: var(--text-muted);">Each cell expands here with the why-it-matters and the implication for our POC scope.</p>
+    </div>
+
+    <div class="detail-content" data-cell="tenancy-vercel">
+      <h4>Vercel: Single-user, no tenancy at all</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p>Their <code>apps/web/lib/db/schema.ts</code> has 14+ tables. Every domain row is FK'd directly to <code>users.id</code>. No <code>organizations</code>, no <code>teams</code>, no <code>tenant_id</code>. By design — the app is an open-source clone-template for an individual developer's "personal Devin." For multi-tenant retrofit: nothing reusable. Forking would mean rebuilding the schema.</p>
+      <p><strong>Implication for us:</strong> not a forkable foundation. The patterns inside (lease, subagent dispatch) are reusable; the chassis isn't.</p>
+    </div>
+
+    <div class="detail-content" data-cell="tenancy-now">
+      <h4>CareLink today: Single-org singleton, deployed once</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p><code>CareLink.__init__</code> takes a config with <code>org_id: str</code>. 26+ services constructed with that org_id baked in (<code>self.db, self._authz, self._config.org_id</code> at every constructor). Today's deploy is one process, one org_id, one DB.</p>
+      <p>This works fine because we run ONE org today (Demo Pharmacy / Asepha). The architecture is implicitly single-tenant — never had to think about it.</p>
+      <p><strong>Implication:</strong> the per-instance target preserves this. Every singleton stays single-org. No 26-service refactor needed.</p>
+    </div>
+
+    <div class="detail-content" data-cell="tenancy-target">
+      <h4>CareLink target: Per-instance tenancy</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p>Each org gets their own deployment: own backend process, own DB, own FS root, own GCS bucket, own Inngest worker, own Permit.io tenant. The CareLink Python package + the FastAPI backend ship as a deployable unit; provisioning a new org = provisioning a new instance.</p>
+      <p>Inside an instance: pharmacies are first-class entities in the DB. Users (employees) are members of one or more pharmacies via PharmacyStaff. PHI boundary = pharmacy. Cross-org = physically impossible (no shared anything).</p>
+      <p><strong>What this resolves:</strong> the singleton refactor concern (G1, C1) is RESOLVED — every instance is single-org by construction. <strong>What this introduces:</strong> deployment provisioning, rolling updates across N instances, per-org Permit.io tenant management.</p>
+    </div>
+
+    <div class="detail-content" data-cell="dispatch-vercel">
+      <h4>Vercel: task tool + AI SDK</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p><code>packages/agent/tools/task.ts</code> dispatches to <code>SUBAGENT_REGISTRY</code> (3 entries: explorer, executor, design). Each subagent is its own <code>ToolLoopAgent</code> with its own toolset. Parent's history isolated from child's tool calls — only summary returns. Uses AI SDK's <code>experimental_context</code> for context propagation.</p>
+      <p><strong>Implication:</strong> the field has converged on this pattern. Confirmation our <code>invoke_expert</code> shape is correct, not novel.</p>
+    </div>
+
+    <div class="detail-content" data-cell="dispatch-now">
+      <h4>CareLink today: invoke_expert MCP + Pydantic</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p><code>tools.py:682-792</code> <code>invoke_expert</code>. In-process MCP tool. Spawns expert subprocess via <code>_spawn_expert_agent</code> with the expert MD body as system prompt. Returns Pydantic-validated <code>BaseExpertOutput</code> on success, typed envelope <code>{"status": "failed", ...}</code> on second drift. Single-shot retry with schema-injected nudge.</p>
+      <p>Phase D spike (2026-04-27) concluded native <code>agents=</code> can't replace this — typed envelope substitution requires MCP, not built-in Agent tool.</p>
+      <p><strong>Implication:</strong> stays canonical. Same shape as Vercel's, with stronger typing.</p>
+    </div>
+
+    <div class="detail-content" data-cell="dispatch-target">
+      <h4>CareLink target: invoke_expert preserved</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p>Phase D verdict means we keep <code>invoke_expert</code>. Future: workflow YAML declares which experts the orchestrator can invoke. The orchestrator's invoke_expert enum is filtered at session creation by InvokerContext (L3 access layer). MCP boundary enforces.</p>
+    </div>
+
+    <div class="detail-content" data-cell="memory-vercel">
+      <h4>Vercel: No persistent memory</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p>Sandbox filesystem IS the memory. Per-session state in chat_messages (JSONB), sessions.cachedDiff (JSONB), sandbox snapshots. Skills are static MD prompts (closer to slash-commands than memory). No vector store, no episodic.</p>
+      <p><strong>Implication:</strong> their model is "the repo is your memory." Useless for our cross-session pharmacy-operational learning. Don't look here.</p>
+    </div>
+
+    <div class="detail-content" data-cell="memory-now">
+      <h4>CareLink today: Aspirational memories</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p>Every expert MD references <code>memories/&lt;bucket&gt;/&lt;key&gt;.md</code>. <code>service.py</code> creates the dirs at session start, populates them as workspace, then <code>rmtree</code>'s at <code>finalize_session</code>. <strong>No persistence.</strong> The "cross-run learning" is prose — operationally false.</p>
+      <p><strong>Implication:</strong> implementing a real memory layer is the largest single load-bearing piece of the multi-tenancy work.</p>
+    </div>
+
+    <div class="detail-content" data-cell="memory-target">
+      <h4>CareLink target: Append-only with TTL</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p>Per-pharmacy memories (patients, prescribers, insurance) + per-org memories (tools, drugs). Append-only entries with comment-fence signing. 14d TTL via Inngest cron. Read-side projection at session start (manifest = audit record).</p>
+      <p><strong>Substrate undecided:</strong></p>
+      <ul>
+        <li><strong>Filesystem</strong> (current design): <code>open(path, 'a')</code> on shared FS. Closer to today's MD prose feel. Concurrency on NFS/Filestore is unreliable; scale concerns at 1000s of files per pharmacy.</li>
+        <li><strong>Postgres rows</strong> (alternative): one row per <code>(pharmacy_id, bucket, key, entry)</code>. ACID, cheap TTL via DELETE. LLMs read via <code>restish carelink list-memories</code>. Less natural; more durable.</li>
+      </ul>
+      <p>Per-instance tenancy doesn't change the substrate decision — it just means each org's substrate is isolated.</p>
+    </div>
+
+    <div class="detail-content" data-cell="hitl-vercel">
+      <h4>Vercel: Inline question, not durable park</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p><code>ask_user_question</code> is a client-side tool with no <code>execute</code>. Workflow yields with <code>state: "input-available"</code>. UI renders form. Answer comes back as next user msg in the same chat. Cross-machine: yes, via Vercel Workflow durability. But it's <strong>chat-bound interactivity</strong>, not "park for 3 days waiting on a fax response."</p>
+      <p><strong>Reusable shape:</strong> their <code>questions[]</code> schema is a clean inline-HITL UX standard. Worth borrowing for fast in-chat HITL inside the AI assistant workflow (separate from durable approvals).</p>
+    </div>
+
+    <div class="detail-content" data-cell="hitl-now">
+      <h4>CareLink today: Two gates + Inngest cold-revive</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p><code>UserQuestionGate</code> (mints question_id on arm) + <code>ToolApprovalGate</code> (parks Bash). Hot path: 60s in-memory wait. Cold path: subprocess exits, status flips to <code>waiting_cold</code>, Inngest <code>func_cold_approval_drain</code> resumes when decision arrives. Battle-tested (cancel-engine sprint shipped 2 weeks ago).</p>
+      <p>Today: queue is session-scoped — answer routes back to the originating session by ID. Multi-machine handoff works through Inngest re-spawning.</p>
+    </div>
+
+    <div class="detail-content" data-cell="hitl-target">
+      <h4>CareLink target: Pharmacy-scoped queue</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p><code>GET /pharmacies/{pid}/approvals</code> → list of pending approvals at that pharmacy. Any qualified user (role ∩ required_roles ≠ ∅) can decide. Cross-machine "for free" — Bob's laptop sees Alice's approval row in the queue. Both initiator and approver audited.</p>
+      <p>Implementation: extends today's gates. Add <code>pharmacy_id</code> column to <code>agi_pending_approvals</code>. New router endpoint. Race condition handled via SELECT FOR UPDATE + status check.</p>
+    </div>
+
+    <div class="detail-content" data-cell="workflow-vercel">
+      <h4>Vercel: TS directive-based, no registry</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p><code>"use workflow"</code> + <code>"use step"</code> directives at function entry. Vercel Workflow SDK statically analyzes and generates a manifest. Two workflows hardcoded: <code>runAgentWorkflow</code> (chat) and <code>sandboxLifecycleWorkflow</code> (hibernation). Adding a new one = TS file + directive. No version field, no rollback.</p>
+      <p><strong>Implication:</strong> opposite direction from us. Their build-time codegen is platform-bound. Not portable.</p>
+    </div>
+
+    <div class="detail-content" data-cell="workflow-now">
+      <h4>CareLink today: Hardcoded rx-flow + 3 TS prompts</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p>rx-flow is the only "workflow." Its orchestrator prompt lives in <code>system-prompt-templates.ts</code> (1,225 LoC, 3 orchestrators after cancel-engine sprint: <code>newrx-orchestrator</code>, <code>rx-renewal-response-orchestrator</code>, <code>rx-cancel-rx-orchestrator</code>). Backend at <code>routers/agi.py:208</code> plumbs <code>body.system_prompt</code> through.</p>
+      <p>Schema changes to <code>BaseExpertOutput</code> can silently desync from what the frontend tells the LLM.</p>
+    </div>
+
+    <div class="detail-content" data-cell="workflow-target">
+      <h4>CareLink target: YAML manifests + registry + selector</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p>Workflow becomes a top-level entity: <code>id, description, orchestrator_prompt, experts[], required_roles, memory_scope, hitl_approval_required_for_verbs</code>. Three workflows planned: rx-flow, claims-flow (future), chat (orchestrator-only).</p>
+      <p>Adding a workflow = data, not code. Drop YAML + orchestrator MD, reference existing experts, org admin enables it.</p>
+      <p><strong>Open question:</strong> YAML vs Python <code>WorkflowSpec</code> dataclass. YAML wins on "non-engineers can edit" (overstated for engineering-grade workflows). Dataclass wins on IDE help, type safety, no new tooling. <strong>If YAML, mirror Vercel's <code>SKILL.md</code> frontmatter shape</strong> for ecosystem compatibility (~50 LoC of Pydantic).</p>
+    </div>
+
+    <div class="detail-content" data-cell="access-vercel">
+      <h4>Vercel: userId equality only</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p><code>chat.ts</code>: <code>if (sessionRecord.userId !== params.userId) throw new Error("Unauthorized")</code>. That's the entire model. Plus <code>users.isAdmin</code> for an admin panel.</p>
+      <p><strong>Implication:</strong> wrong-fit by 6 layers. Don't reference for access control.</p>
+    </div>
+
+    <div class="detail-content" data-cell="access-now">
+      <h4>CareLink today: Permit.io at backend, not at AGI</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p><code>PermitClient.check()</code> exists at <code>integrations/permit/client.py:24</code>. Role permissions cached. <code>get_permissions_matrix</code> exposed for admin UI. Used at backend endpoints (e.g., <code>cl.patients.create</code> checks).</p>
+      <p><strong>But:</strong> AGI doesn't query Permit.io for verb projection. The orchestrator can't fail-fast deny unauthorized verbs — that gate doesn't exist. Backend RBAC is the ONLY layer today.</p>
+    </div>
+
+    <div class="detail-content" data-cell="access-target">
+      <h4>CareLink target: 6-layer projection</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p>L0 (org reachable, structural via per-instance) + L1 (JWT validated) + L2 (workflow startable) + L3 (expert invocable, filtered at MCP boundary) + L4 (verb permitted, PreToolUse hook) + L5 (approver authorized) + L6 (Backend RBAC, authoritative).</p>
+      <p>InvokerContext projected from Permit.io once at session start. Cached for session lifetime. Permit.io webhook → invalidate. Layers 0-5 fail-fast advisory; L6 is single source of truth.</p>
+      <p><strong>Per-instance simplifies:</strong> L0 = "is this user reaching the right instance?" = handled by subdomain routing at the load balancer, not by application code.</p>
+      <p><strong>POC-C validates this entire surface.</strong></p>
+    </div>
+
+    <div class="detail-content" data-cell="lease-vercel">
+      <h4>Vercel: claimLifecycleLease (reference)</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p><code>apps/web/app/workflows/sandbox-lifecycle.ts::claimLifecycleLease</code>. ~30 LoC. Postgres compare-and-swap: write <code>lifecycleRunId</code> to session row, re-read to verify ownership. Take-over via same CAS. Clean reference; not portable (TS/Drizzle), but the shape is what we want.</p>
+      <p><strong>Direct reuse:</strong> read this before implementing <code>sessions/lease.py</code>.</p>
+    </div>
+
+    <div class="detail-content" data-cell="lease-now">
+      <h4>CareLink today: In-memory dict (process-local)</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p><code>cl._agi_clients[session_id] = client</code> at <code>routers/agi.py:257-259</code>. Python dict on the CareLink singleton. Today this works because we run a single uvicorn. Two replicas behind a load balancer would break sessions immediately.</p>
+      <p><strong>Implication:</strong> safe for now. Per-instance + single-replica-per-instance also keeps this safe. The lease is only required when an instance scales horizontally.</p>
+    </div>
+
+    <div class="detail-content" data-cell="lease-target">
+      <h4>CareLink target: DB-backed lease + heartbeat</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p>15s heartbeat extends, 60s expiry. Take-over via force-acquire. Lease columns on <code>agi_sessions</code>: <code>holder_machine_id</code>, <code>holder_actor_id</code>, <code>expires_at</code>.</p>
+      <p><strong>Per-instance reframes priority:</strong> if an instance is single-replica (most small orgs), the lease is unnecessary. Defer this until an instance actually scales horizontally. Today the in-memory dict is fine per-instance.</p>
+    </div>
+
+    <div class="detail-content" data-cell="durability-vercel">
+      <h4>Vercel: Vercel Workflow (proprietary)</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p>Vercel Workflow SDK provides workflow-step-level checkpointing. If a worker dies mid-stream, the run resumes. Platform-bound.</p>
+      <p><strong>Implication:</strong> their durability story is locked to Vercel platform. Not portable. We have Inngest for the same job — both ours and theirs converged on "durable function runtime" but different vendors.</p>
+    </div>
+
+    <div class="detail-content" data-cell="durability-now">
+      <h4>CareLink today: Inngest cold-revive</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p><code>integrations/inngest/agi_cold_revive.py</code> (887 LoC). Two functions: <code>func_cold_revive_drain</code> (HITL question answers) + <code>func_cold_approval_drain</code> (approval decisions). <code>retries=2</code>, per-function concurrency, timeouts. Battle-tested by the cancel-engine sprint.</p>
+      <p>Plus the new <code>sessions/sweeper.py</code> (171 LoC, shipped 2026-04-28) for 24h chat session cleanup. Pattern is reusable for the 14d memory TTL sweeper.</p>
+    </div>
+
+    <div class="detail-content" data-cell="durability-target">
+      <h4>CareLink target: Same Inngest pattern</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p>Inngest stays. Add memory TTL sweeper cron (every 6h, walks each pharmacy's memory tree). Per-instance: each org's Inngest worker only sees that org's events. No cross-instance dispatch needed.</p>
+    </div>
+
+    <div class="detail-content" data-cell="registry-vercel">
+      <h4>Vercel: Hard-coded TS object</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p><code>SUBAGENT_REGISTRY</code> in <code>packages/agent/subagents/registry.ts</code> is a TS object literal with 3 entries. Adding a subagent = editing the package. They have a loader-driven discovery for skills (<code>skills/discovery.ts</code>) but didn't apply it to subagents.</p>
+      <p><strong>Their mistake.</strong> We already have loader-driven; don't regress.</p>
+    </div>
+
+    <div class="detail-content" data-cell="registry-now">
+      <h4>CareLink today: MD loader + 4 gates</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p><code>ExpertRegistry</code> at <code>agents/registry.py:183-442</code>. 4 validation gates: filename==id, no duplicates, schema dotted-paths resolve to BaseModel subclass, <code>claude</code> CLI on PATH. Auto-discovers <code>*.md</code> from filesystem.</p>
+      <p>Shared <code>SHARED_EXPERT_PREAMBLE_MD</code> prepended idempotently to every expert at load time.</p>
+    </div>
+
+    <div class="detail-content" data-cell="registry-target">
+      <h4>CareLink target: Workflow YAML refs experts</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p>Workflow YAML lists expert IDs in its <code>experts:</code> field. <code>workflows/registry.py</code> validates: every referenced expert exists in <code>agents/registry</code>; every restish verb is known; required_roles are valid; orchestrator prompt MD exists. Cross-validation at registry init.</p>
+    </div>
+
+    <div class="detail-content" data-cell="contracts-vercel">
+      <h4>Vercel: No typed envelopes</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p>Each subagent ends with an XML output template. Orchestrator parses tags textually at runtime. When a subagent forgets to close a tag or renames a field, nothing fails fast. They accept this; their domain (code generation) is loss-tolerant.</p>
+      <p>Pydantic only at HTTP boundary, not between agents.</p>
+    </div>
+
+    <div class="detail-content" data-cell="contracts-now">
+      <h4>CareLink today: Pydantic at every boundary</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p>16 contract models in <code>contracts/rx_flow.py</code> (908 LoC). Output side deliberately loose: <code>status: Optional[str] = "success"</code>, <code>notes</code> accepts list/str and joins, defaults everywhere. One retry on validation drift; second failure → typed <code>{"status": "failed", ...}</code> envelope.</p>
+      <p>HITL routing depends on <code>status == "hitl_required"</code> + <code>human_questions</code> shape. Drift catches at the boundary.</p>
+    </div>
+
+    <div class="detail-content" data-cell="contracts-target">
+      <h4>CareLink target: Same convention</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p>New workflows (claims-flow) declare new contracts files when their experts have new I/O shapes. Same loose-on-output, retry-on-drift convention. Existing rx-flow contracts unchanged.</p>
+    </div>
+
+    <div class="detail-content" data-cell="skills-vercel">
+      <h4>Vercel: SKILL.md frontmatter (REUSABLE)</h4>
+      <div class="detail-actor-row"><span class="actor-tag vercel">Vercel</span></div>
+      <p>Zod-validated YAML frontmatter on each <code>SKILL.md</code>: <code>name, description, version, allowed-tools, user-invocable, disable-model-invocation, context, agent</code>.</p>
+      <p>Separate <code>vercel-labs/skills</code> repo + <code>npx skills</code> CLI + a "skills ecosystem" Vercel is pushing. <strong>If we adopt this same frontmatter shape on our workflow manifests, we get free interop with the broader skills ecosystem.</strong> Total port: ~50 LoC of Pydantic.</p>
+    </div>
+
+    <div class="detail-content" data-cell="skills-now">
+      <h4>CareLink today: MD with frontmatter (similar)</h4>
+      <div class="detail-actor-row"><span class="actor-tag now">CareLink now</span></div>
+      <p>Each expert MD has frontmatter: <code>id, description, domain, version, tools, allowed_restish_commands, can_advance_phase, can_ask_user, input_schema, output_schema, model, max_turns, skill_subset</code>. Validated at registry init.</p>
+      <p>Shape is similar to Vercel's but custom — fields don't 1:1 align.</p>
+    </div>
+
+    <div class="detail-content" data-cell="skills-target">
+      <h4>CareLink target: Adopt SKILL.md shape (if YAML)</h4>
+      <div class="detail-actor-row"><span class="actor-tag target">CareLink target</span></div>
+      <p>If we go workflows-as-YAML, mirror SKILL.md's frontmatter convention for ecosystem compatibility. Doesn't constrain semantics; just naming. Free upside.</p>
+    </div>
+  </div>
+
+  <h3>What converged independently (the "we're not weird" finding)</h3>
+  <ul>
+    <li><strong>Subagent dispatch as a tool call</strong> — Vercel's <code>task</code>, ours <code>invoke_expert</code>. Same shape, independent arrival.</li>
+    <li><strong>Subagent context isolation</strong> — parent's history doesn't include child's tool_use blocks; only the summary returns. Both implementations.</li>
+    <li><strong>Lease via DB compare-and-swap</strong> — their <code>claimLifecycleLease</code> is the same shape we proposed. ~30 LoC reference.</li>
+    <li><strong>Skill manifest format</strong> — both have YAML frontmatter on MD files for capability declarations.</li>
+    <li><strong>Durability via external workflow runtime</strong> — them: Vercel Workflow. Us: Inngest. Same pattern, different vendor.</li>
+  </ul>
+
+  <h3>Where they have nothing to teach us</h3>
+  <ul>
+    <li>Multi-tenancy — single-user-only.</li>
+    <li>Cross-session memory — sandbox FS only.</li>
+    <li>Access control — userId equality.</li>
+    <li>Workflow definition format — TS directives + build-time codegen.</li>
+    <li>HITL durability — chat-bound only.</li>
+  </ul>
+</section>
+
+<!-- =============================================================== TAB 2: INSTANCE -->
+<section class="panel" data-panel="instance">
+  <h2>Instance model — clarified</h2>
+  <p>Each org gets their own CareLink deployment. Inside an instance: pharmacies + users + sessions. Cross-org = physically impossible. Click any piece for the implication.</p>
+
+  <div class="callout good">
+    <strong>What this resolves:</strong> the singleton refactor risk (G1, C1) is no longer a concern. Each instance keeps the existing single-org singleton pattern. The architecture you sketched ("they get their own carelink package/backend and DB") is the deployment shape, and the design HTML's "DB-per-org" naming was misleading — the truth is closer to "deploy-per-org."
+  </div>
+
+  <div class="instance-frame shared">
+    <div class="frame-label">Platform layer (shared, sealed at deploy time)</div>
+    <div class="frame-name">CareLink Platform Code</div>
+    <div class="instance-stack">
+      <div class="instance-piece" data-piece="platform-pkg">
+        <div class="piece-label">carelink Python package</div>
+        <div class="piece-detail">code, no state</div>
+      </div>
+      <div class="instance-piece" data-piece="platform-experts">
+        <div class="piece-label">Expert MD catalog</div>
+        <div class="piece-detail">8+ rx-flow experts</div>
+      </div>
+      <div class="instance-piece" data-piece="platform-skills">
+        <div class="piece-label">Skill library</div>
+        <div class="piece-detail">SKILL.md files</div>
+      </div>
+      <div class="instance-piece" data-piece="platform-workflows">
+        <div class="piece-label">Workflow templates</div>
+        <div class="piece-detail">YAML or dataclasses</div>
+      </div>
+      <div class="instance-piece" data-piece="platform-rbac">
+        <div class="piece-label">Permission templates</div>
+        <div class="piece-detail">role × verb defaults</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align: center; color: var(--text-faint); margin: 12px 0; font-size: 13px;">  ↓  deployment provisioning (k8s namespace / Cloud Run service / Fly app per org)  ↓</div>
+
+  <div class="instance-frame org-x">
+    <div class="frame-label">Org X instance</div>
+    <div class="frame-name">Acme Pharmacy Group</div>
+    <div class="instance-stack">
+      <div class="instance-piece" data-piece="orgx-backend">
+        <div class="piece-label">FastAPI backend</div>
+        <div class="piece-detail">port 8000, single org_id</div>
+      </div>
+      <div class="instance-piece" data-piece="orgx-agi">
+        <div class="piece-label">AGI runtime</div>
+        <div class="piece-detail">orchestrator + experts</div>
+      </div>
+      <div class="instance-piece" data-piece="orgx-db">
+        <div class="piece-label">Postgres DB</div>
+        <div class="piece-detail">orgx_db</div>
+      </div>
+      <div class="instance-piece" data-piece="orgx-fs">
+        <div class="piece-label">Filesystem</div>
+        <div class="piece-detail">workspaces + memories</div>
+      </div>
+      <div class="instance-piece" data-piece="orgx-inngest">
+        <div class="piece-label">Inngest worker</div>
+        <div class="piece-detail">cold-revive + sweepers</div>
+      </div>
+      <div class="instance-piece" data-piece="orgx-permit">
+        <div class="piece-label">Permit.io tenant</div>
+        <div class="piece-detail">org-scoped policy</div>
+      </div>
+    </div>
+    <div class="instance-pharmacies">
+      <div class="pharmacy-row"><span class="ph-label">Pharmacy</span><strong>P1 — Downtown</strong> · 5 employees, alice (tech), bob (pharmacist)</div>
+      <div class="pharmacy-row"><span class="ph-label">Pharmacy</span><strong>P2 — Westside</strong> · 3 employees, carol (admin@P2 + tech@P1)</div>
+      <div class="pharmacy-row"><span class="ph-label">Pharmacy</span><strong>P3 — Specialty</strong> · 12 employees</div>
+    </div>
+  </div>
+
+  <div class="instance-frame org-y">
+    <div class="frame-label">Org Y instance</div>
+    <div class="frame-name">Bayside Independent</div>
+    <div class="instance-stack">
+      <div class="instance-piece" data-piece="orgy-backend">
+        <div class="piece-label">FastAPI backend</div>
+        <div class="piece-detail">port 8000, isolated</div>
+      </div>
+      <div class="instance-piece" data-piece="orgy-agi">
+        <div class="piece-label">AGI runtime</div>
+        <div class="piece-detail">orchestrator + experts</div>
+      </div>
+      <div class="instance-piece" data-piece="orgy-db">
+        <div class="piece-label">Postgres DB</div>
+        <div class="piece-detail">orgy_db (separate)</div>
+      </div>
+      <div class="instance-piece" data-piece="orgy-fs">
+        <div class="piece-label">Filesystem</div>
+        <div class="piece-detail">isolated mount</div>
+      </div>
+      <div class="instance-piece" data-piece="orgy-inngest">
+        <div class="piece-label">Inngest worker</div>
+        <div class="piece-detail">isolated event stream</div>
+      </div>
+      <div class="instance-piece" data-piece="orgy-permit">
+        <div class="piece-label">Permit.io tenant</div>
+        <div class="piece-detail">isolated policy</div>
+      </div>
+    </div>
+    <div class="instance-pharmacies">
+      <div class="pharmacy-row"><span class="ph-label">Pharmacy</span><strong>P1 — Main St</strong> · 2 employees</div>
+    </div>
+  </div>
+
+  <div id="piece-detail" style="margin-top: 16px; padding: 16px 18px; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 6px; min-height: 120px;">
+    <div class="detail-content active" data-piece="default">
+      <h4 style="margin: 0 0 8px;">Click any piece above</h4>
+      <p style="margin: 0; color: var(--text-muted);">Each piece expands here with its purpose and what's per-instance vs shared.</p>
+    </div>
+    <div class="detail-content" data-piece="platform-pkg" style="display: none;">
+      <h4 style="margin: 0 0 8px;">CareLink Python package — shared, sealed</h4>
+      <p>The codebase. Same git ref, same Docker image, deployed per-org. No per-org forks.</p>
+      <p>Per-org configuration is environment + DB + Permit.io tenant — never code.</p>
+    </div>
+    <div class="detail-content" data-piece="platform-experts" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Expert MD catalog — shared</h4>
+      <p>8 expert MDs (intake, data-entry, clinical-checklist, dur, billing, fulfillment, shipping, rejection-classifier) ship inside the package. All instances run the same set.</p>
+      <p>Org-specific behavior comes from workflow YAML overrides (disable an expert; raise approval thresholds), not from forking the MDs.</p>
+    </div>
+    <div class="detail-content" data-piece="platform-skills" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Skill library — shared</h4>
+      <p>SKILL.md files inside the package. Bundled at deploy time. Same versions everywhere.</p>
+    </div>
+    <div class="detail-content" data-piece="platform-workflows" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Workflow templates — shared</h4>
+      <p>rx-flow, claims-flow (future), chat. YAML manifests OR Python dataclasses, decided in POC-D. Per-instance overrides apply at session creation, not at the manifest level.</p>
+    </div>
+    <div class="detail-content" data-piece="platform-rbac" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Permission templates — shared</h4>
+      <p>Default role × verb policy ships with the package. Org admins can override per their Permit.io tenant.</p>
+      <p>Each instance's Permit.io tenant is initialized from the templates at provisioning.</p>
+    </div>
+    <div class="detail-content" data-piece="orgx-backend" style="display: none;">
+      <h4 style="margin: 0 0 8px;">FastAPI backend — per-instance</h4>
+      <p>Single uvicorn process. <code>org_id</code> baked at startup from environment. No multi-org routing inside; subdomain routing happens at the load balancer.</p>
+      <p><strong>Existing code unchanged.</strong> The 26+ services constructed with <code>config.org_id</code> stay exactly as they are.</p>
+    </div>
+    <div class="detail-content" data-piece="orgx-agi" style="display: none;">
+      <h4 style="margin: 0 0 8px;">AGI runtime — per-instance</h4>
+      <p>Orchestrator + experts spawn from the same singleton. Sessions, workspaces, and memory all live within this instance's storage.</p>
+    </div>
+    <div class="detail-content" data-piece="orgx-db" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Postgres DB — per-instance, isolated</h4>
+      <p>orgx_db. AGI tables (<code>agi_sessions</code>, <code>agi_pending_approvals</code>, audit log) live alongside core tables (<code>users</code>, <code>pharmacies</code>, <code>patients</code>, etc.).</p>
+      <p>Cross-org SQL injection physically impossible — there's no connection to another org's DB.</p>
+      <p>Alembic migrations: per-instance, run during deploy. N migrations across N instances is just standard rolling deploy.</p>
+    </div>
+    <div class="detail-content" data-piece="orgx-fs" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Filesystem — per-instance</h4>
+      <p>Workspace tmpdirs (today: <code>/tmp/agi-workspace/</code>, target: <code>/var/lib/carelink/workspace/</code>) + canonical memory store (target: <code>/var/lib/carelink/memory/</code>).</p>
+      <p>Per-instance means no shared FS mount required. <strong>Big simplification:</strong> the design's "shared FS for cross-replica cold-revive" is unnecessary if the instance is single-replica.</p>
+    </div>
+    <div class="detail-content" data-piece="orgx-inngest" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Inngest worker — per-instance</h4>
+      <p>Each instance's Inngest worker only sees that instance's events. Per-org event isolation = no cross-org event leakage.</p>
+      <p>Adds one TTL sweeper cron for the 14d memory expiration (when memory layer ships).</p>
+    </div>
+    <div class="detail-content" data-piece="orgx-permit" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Permit.io tenant — per-instance</h4>
+      <p>Each instance has its own Permit.io tenant key. Roles + permissions managed per-org.</p>
+      <p>Provisioning a new org instance = provisioning a new Permit.io tenant + seeding from platform templates.</p>
+    </div>
+    <div class="detail-content" data-piece="orgy-backend" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Org Y backend — fully isolated</h4>
+      <p>Same code as Org X. Different process, different DB, different env. Bug in Org X's deploy doesn't affect Org Y.</p>
+    </div>
+    <div class="detail-content" data-piece="orgy-agi" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Org Y AGI — fully isolated</h4>
+      <p>Cannot see Org X's sessions, memories, audit. Period.</p>
+    </div>
+    <div class="detail-content" data-piece="orgy-db" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Org Y DB — fully isolated</h4>
+      <p>Separate Postgres connection. Cross-org analytics requires explicit ETL pipelines (future concern, not v1).</p>
+    </div>
+    <div class="detail-content" data-piece="orgy-fs" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Org Y FS — fully isolated</h4>
+      <p>Separate mount or separate disk. No path collision with Org X.</p>
+    </div>
+    <div class="detail-content" data-piece="orgy-inngest" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Org Y Inngest — fully isolated</h4>
+      <p>Separate event stream. Cold-revive events for Org X never reach Org Y's worker.</p>
+    </div>
+    <div class="detail-content" data-piece="orgy-permit" style="display: none;">
+      <h4 style="margin: 0 0 8px;">Org Y Permit.io — fully isolated</h4>
+      <p>Different tenant key, different policy. Org Y's admin doesn't see Org X's roles.</p>
+    </div>
+  </div>
+
+  <h3>Pharmacies inside an instance</h3>
+  <p>Pharmacies are first-class entities in the org's DB. The PHI boundary is policy-enforced (Permit.io rule + read-side memory scoping), not structural.</p>
+
+  <table>
+    <tr><th>Layer</th><th>Boundary type</th><th>What protects it</th></tr>
+    <tr><td>Org</td><td><strong>Structural</strong> (per-instance)</td><td>Separate process, DB, FS, Inngest, Permit.io tenant. Cross-org physically impossible.</td></tr>
+    <tr><td>Pharmacy</td><td><strong>Policy</strong></td><td>Permit.io <code>pharmacy_id</code> attribute on permissions + read-side memory scoping at session start. Cross-pharmacy within same org requires the user to have a PharmacyStaff entry at both.</td></tr>
+  </table>
+
+  <h3>Users at multiple pharmacies (your example)</h3>
+  <p>"Carol can be admin@P1 and pharmacist@P2 in Org X." This works because:</p>
+  <ul>
+    <li>User row in OrgX's DB. <code>PharmacyStaff</code> many-to-many junction with role-per-pharmacy.</li>
+    <li>At login: Carol picks which pharmacy she's acting at (or default = primary). Session pinned to that pharmacy_id at creation.</li>
+    <li>To switch pharmacies mid-session: re-auth (open question #1). Simple model, avoids context-switch edge cases.</li>
+    <li>Permit.io check: Carol@P1 has admin role → matrix says she can <code>create-pt</code>. Carol@P2 has pharmacist role → matrix says she needs HITL for <code>reverse-claim</code>.</li>
+  </ul>
+
+  <h3>What's still open</h3>
+  <ul>
+    <li><strong>Provisioning model:</strong> k8s namespace, Cloud Run service, Fly app, or Vercel project per org? Each has tradeoffs.</li>
+    <li><strong>Auth-to-instance routing:</strong> subdomain (<code>orgx.carelink.com</code>), tenant header, or central auth that redirects? Probably subdomain.</li>
+    <li><strong>Updates / rolling release:</strong> N instances need coordinated alembic + code deploy. Standard ops problem.</li>
+    <li><strong>Resource cost per instance:</strong> small org = wasted overhead. Multi-tenant lite (e.g. multiple small orgs share a process via DB switching) is a future concern.</li>
+  </ul>
+</section>
+
+<!-- =============================================================== TAB 3: POC OPTIONS -->
+<section class="panel" data-panel="poc">
+  <h2>Five POC candidates</h2>
+  <p>Each POC validates ONE pattern with the smallest blast radius. Click a card for full scope, time estimate, and what it doesn't validate. Per-instance tenancy is assumed background — POCs run inside one instance.</p>
+
+  <div class="poc-grid" id="poc-grid">
+    <div class="poc-card recommended" data-poc="C">
+      <div class="poc-id">POC-C</div>
+      <div class="poc-title">Permit.io InvokerContext projection</div>
+      <div class="poc-time">~1 week scope</div>
+      <div class="poc-summary">At session start, project actor's full verb permissions from Permit.io into a Pydantic <code>InvokerContext</code>. Pin to <code>extra_data.invoker</code>. Read-only — no enforcement yet.</div>
+      <div class="poc-validates"><strong>Validates:</strong> projection shape, cache strategy, JWT-to-actor flow.</div>
+    </div>
+
+    <div class="poc-card" data-poc="A">
+      <div class="poc-id">POC-A</div>
+      <div class="poc-title">Add pharmacy_id to AGISession</div>
+      <div class="poc-time">~1 week scope</div>
+      <div class="poc-summary">Schema migration: add <code>pharmacy_id</code> column. Plumb through session creation. Use it in audit events. No enforcement yet.</div>
+      <div class="poc-validates"><strong>Validates:</strong> pharmacy-scoping pattern composes with current code.</div>
+    </div>
+
+    <div class="poc-card" data-poc="D">
+      <div class="poc-id">POC-D</div>
+      <div class="poc-title">Workflows YAML for rx-flow</div>
+      <div class="poc-time">~1 week scope</div>
+      <div class="poc-summary">Replace today's hardcoded rx-flow expert list with a YAML manifest. Move orchestrator prompt out of frontend TS into <code>workflows/orchestrator_prompts/rx-flow.md</code>.</div>
+      <div class="poc-validates"><strong>Validates:</strong> data-not-code pattern, registry shape.</div>
+    </div>
+
+    <div class="poc-card" data-poc="E">
+      <div class="poc-id">POC-E</div>
+      <div class="poc-title">Pharmacy-scoped approvals queue</div>
+      <div class="poc-time">~1.5 weeks scope</div>
+      <div class="poc-summary">Add <code>/pharmacies/{pid}/approvals</code> endpoints. Route existing parked approvals through them. Race-condition-safe decide.</div>
+      <div class="poc-validates"><strong>Validates:</strong> queue model, race condition handling, cross-machine HITL.</div>
+    </div>
+
+    <div class="poc-card" data-poc="B">
+      <div class="poc-id">POC-B</div>
+      <div class="poc-title">Memory canonical store, single bucket</div>
+      <div class="poc-time">~2 weeks scope</div>
+      <div class="poc-summary">Pick ONE bucket (drugs). Postgres-backed. Append-only entries. Read-side projection at session start. 14d TTL cron. One expert (clinical-checklist) writes.</div>
+      <div class="poc-validates"><strong>Validates:</strong> persistence, append-only, TTL, manifest-as-audit.</div>
+    </div>
+  </div>
+
+  <div class="poc-detail" id="poc-detail">
+    <div class="detail-content active" data-poc="default">
+      <h4>Click a POC card above</h4>
+      <p style="margin: 0; color: var(--text-muted);">Each card expands here with full scope, code touchpoints, time estimate, what it does and doesn't validate, dependencies.</p>
+    </div>
+
+    <div class="detail-content" data-poc="C">
+      <h4>POC-C — Permit.io InvokerContext projection (RECOMMENDED)</h4>
+      <div class="detail-row"><div class="label">Scope</div><div>At <code>POST /sessions</code>, query Permit.io for the actor's full role × verb permissions across all known verbs. Wrap in a Pydantic <code>InvokerContext</code> model. Persist to <code>agi_sessions.extra_data["invoker"]</code>. Expose via internal helper <code>cl.agi.get_invoker_context(session_id)</code>. <strong>No enforcement yet</strong> — just projection + pinning.</div></div>
+      <div class="detail-row"><div class="label">Why first</div><div>Validates the most uncertain pattern: cache invalidation, JWT→actor→permission flow, Permit.io projection shape. Smallest blast radius. No new HTTP surface beyond the model.</div></div>
+      <div class="detail-row"><div class="label">Code touched</div><div>
+        <ul>
+          <li><strong>NEW</strong>: <code>carelink/agi/permissions/projector.py</code> (~150 LoC)</li>
+          <li><strong>NEW</strong>: <code>carelink/agi/permissions/models.py</code> — <code>InvokerContext</code> Pydantic (~80 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>service.py::create_session</code> — call projector, pin to extra_data (~10 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>routers/agi.py::create_session</code> — pass JWT to projector (~5 LoC)</li>
+          <li><strong>NEW</strong>: <code>tests/section3_integrations/test_invoker_context.py</code> — 6-8 hermetic tests with fake Permit (~150 LoC)</li>
+        </ul>
+      </div></div>
+      <div class="detail-row"><div class="label">What it does NOT validate</div><div>Enforcement (no L4 hook yet). Pharmacy scoping. Cache invalidation timing. Memory layer.</div></div>
+      <div class="detail-row"><div class="label">Dependencies</div><div>None. Permit.io is already integrated (<code>cl._permit</code> at <code>__init__.py:56</code>). PMS test fixtures already mock it.</div></div>
+      <div class="detail-row"><div class="label">Outcome</div><div>Proves the projection shape. Sets the foundation for layers 3, 4, 5 to be added later. Easy to revert if shape is wrong.</div></div>
+    </div>
+
+    <div class="detail-content" data-poc="A">
+      <h4>POC-A — Add pharmacy_id to AGISession</h4>
+      <div class="detail-row"><div class="label">Scope</div><div>Alembic migration: add <code>pharmacy_id String(255) NULL</code> to <code>agi_sessions</code>. Update <code>AGISession</code> model. <code>create_session</code> accepts <code>pharmacy_id</code> in body, validates user has PharmacyStaff entry at it, persists. Surface in audit events.</div></div>
+      <div class="detail-row"><div class="label">Why important</div><div>Pharmacy is the PHI boundary. Every other multi-tenancy decision hinges on having this column. Currently we infer pharmacy from PharmacyStaff lookups; making it explicit on the session row simplifies everything downstream.</div></div>
+      <div class="detail-row"><div class="label">Code touched</div><div>
+        <ul>
+          <li><strong>NEW</strong>: alembic migration (~30 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>models.py::AGISession</code> — add column (~3 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>service.py::create_session</code> — accept + validate (~30 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>routers/agi.py</code> — request body schema (~10 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>carelink-frontend/src/hooks/use-agi-session.ts</code> — pass pharmacy_id from store</li>
+          <li><strong>EXTEND</strong>: tests for null/invalid/valid pharmacy_id paths</li>
+        </ul>
+      </div></div>
+      <div class="detail-row"><div class="label">What it does NOT validate</div><div>Enforcement based on pharmacy. Memory scoping. Permit.io integration.</div></div>
+      <div class="detail-row"><div class="label">Dependencies</div><div>None. Standalone schema change.</div></div>
+      <div class="detail-row"><div class="label">Outcome</div><div>Foundation column ready for POC-C, POC-E, and memory work. Cheapest POC.</div></div>
+    </div>
+
+    <div class="detail-content" data-poc="D">
+      <h4>POC-D — Workflows YAML for rx-flow</h4>
+      <div class="detail-row"><div class="label">Scope</div><div>Define <code>workflows/definitions/rx-flow.yaml</code>. Define <code>workflows/orchestrator_prompts/rx-flow.md</code> (move from frontend TS). Build <code>workflows/registry.py</code> (loader + validator). Build <code>workflows/selector.py</code> (workflow_id → projected session config). Wire into <code>service.py::create_session</code>. Frontend reads workflow list from new <code>GET /workflows</code> endpoint.</div></div>
+      <div class="detail-row"><div class="label">Why this</div><div>Validates the data-not-code pattern. Unblocks claims-flow + chat workflows. Removes the orchestrator-prompt-in-frontend desync risk.</div></div>
+      <div class="detail-row"><div class="label">Code touched</div><div>
+        <ul>
+          <li><strong>NEW</strong>: <code>workflows/definitions/rx-flow.yaml</code> (~30 LoC)</li>
+          <li><strong>NEW</strong>: <code>workflows/orchestrator_prompts/rx-flow.md</code> (port from TS)</li>
+          <li><strong>NEW</strong>: <code>workflows/registry.py</code> (~150 LoC)</li>
+          <li><strong>NEW</strong>: <code>workflows/selector.py</code> (~100 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>service.py::create_session</code> — consume manifest (~30 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>routers/agi.py</code> — new <code>GET /workflows</code> (~20 LoC)</li>
+          <li><strong>UPDATE</strong>: <code>system-prompt-templates.ts</code> — remove the rx-flow orchestrator (~600 LoC removed)</li>
+          <li><strong>UPDATE</strong>: <code>use-agi-session.ts</code> — fetch workflow list from API instead of inline</li>
+        </ul>
+      </div></div>
+      <div class="detail-row"><div class="label">What it does NOT validate</div><div>Multi-workflow runtime (only rx-flow exists). YAML schema completeness for chat or claims-flow. Org-level overrides.</div></div>
+      <div class="detail-row"><div class="label">Dependencies</div><div>None. The 3 orchestrator prompts in TS today (newrx + renewal-response + cancel-rx) — porting all 3 in one go is bigger; just port newrx for the POC.</div></div>
+      <div class="detail-row"><div class="label">Outcome</div><div>Workflow shape proven. Adding claims-flow becomes a YAML + MD addition.</div></div>
+      <div class="detail-row"><div class="label">Decision</div><div>Manifest format: YAML (with SKILL.md frontmatter convention) OR Python <code>@workflow</code> dataclass. Recommend Python dataclass for v1 (less new tooling), keep YAML on the table for v2.</div></div>
+    </div>
+
+    <div class="detail-content" data-poc="E">
+      <h4>POC-E — Pharmacy-scoped approvals queue</h4>
+      <div class="detail-row"><div class="label">Scope</div><div><code>GET /pharmacies/{pid}/approvals</code> returns pending approvals at that pharmacy. <code>POST /pharmacies/{pid}/approvals/{aid}/decide</code> validates approver authorization (PharmacyStaff at pid + role match), atomic decide. Audit captures both initiator + approver. Frontend Pending Approvals tab.</div></div>
+      <div class="detail-row"><div class="label">Why useful</div><div>Validates the queue model + race condition handling. Unblocks cross-machine HITL handoff scenarios. Immediately useful (today's UI is session-only).</div></div>
+      <div class="detail-row"><div class="label">Code touched</div><div>
+        <ul>
+          <li><strong>NEW</strong>: <code>hitl/approvals_resource.py</code> (~250 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>agi_pending_approvals</code> table — add pharmacy_id, required_roles columns (depends on POC-A)</li>
+          <li><strong>EXTEND</strong>: <code>routers/agi.py</code> — 2 new endpoints (~80 LoC)</li>
+          <li><strong>EXTEND</strong>: frontend — new tab component, hook (<code>use-pharmacy-approvals.ts</code>)</li>
+          <li><strong>NEW</strong>: tests for race condition (concurrent decide), wrong-role decide, wrong-pharmacy decide</li>
+        </ul>
+      </div></div>
+      <div class="detail-row"><div class="label">What it does NOT validate</div><div>Memory persistence. Permit.io role projection (uses today's role lookup).</div></div>
+      <div class="detail-row"><div class="label">Dependencies</div><div>POC-A (pharmacy_id on session and on approval row). Recommend stacking on top of POC-A.</div></div>
+      <div class="detail-row"><div class="label">Outcome</div><div>Real cross-machine HITL handoff. Proves SELECT FOR UPDATE + status check pattern.</div></div>
+    </div>
+
+    <div class="detail-content" data-poc="B">
+      <h4>POC-B — Memory canonical store, single bucket</h4>
+      <div class="detail-row"><div class="label">Scope</div><div>Pick ONE bucket: <code>drugs/&lt;ndc&gt;</code>. Postgres-backed (chosen as substrate for the POC). Append-only entries with <code>(actor_id, role, session_id, ts)</code>. Read-side projection at session start: copy matching rows into <code>workspace/memories/drugs/</code>. Append at session end. 14d TTL via Inngest cron. One expert (clinical-checklist) writes. Manifest = audit record.</div></div>
+      <div class="detail-row"><div class="label">Why this scope</div><div>Validates persistence + append-only + TTL + projection in 2 weeks. Single bucket avoids the "what does each expert reference" inventory work. Postgres avoids the FS concurrency uncertainty.</div></div>
+      <div class="detail-row"><div class="label">Code touched</div><div>
+        <ul>
+          <li><strong>NEW</strong>: alembic migration — <code>agi_memories</code> table</li>
+          <li><strong>NEW</strong>: <code>memory/store.py</code> (~200 LoC)</li>
+          <li><strong>NEW</strong>: <code>memory/selector.py</code> (~100 LoC)</li>
+          <li><strong>NEW</strong>: <code>memory/merger.py</code> (~150 LoC)</li>
+          <li><strong>NEW</strong>: <code>memory/ttl.py</code> + Inngest cron (~80 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>service.py::create_session</code> — invoke selector at session start (~20 LoC)</li>
+          <li><strong>EXTEND</strong>: <code>service.py::finalize_session</code> — invoke merger before rmtree (~20 LoC)</li>
+          <li><strong>NEW</strong>: tests for snapshot, merge, append-only invariant, TTL sweep</li>
+        </ul>
+      </div></div>
+      <div class="detail-row"><div class="label">What it does NOT validate</div><div>FS substrate (only Postgres). Multi-bucket scope rules. Pharmacy-scoped memories (only drugs is org-scope today). Permit.io integration.</div></div>
+      <div class="detail-row"><div class="label">Dependencies</div><div>None directly. Recommend POC-A first if you want pharmacy-scoped buckets in the same POC.</div></div>
+      <div class="detail-row"><div class="label">Outcome</div><div>Single largest design uncertainty resolved. Memory shape proven. Easy to extend to other buckets.</div></div>
+    </div>
+  </div>
+
+  <h3>Stacking suggestion (if appetite is bigger than 1 POC)</h3>
+  <p>The POCs aren't independent — three of them stack cleanly:</p>
+  <pre>POC-A (pharmacy_id) → POC-C (InvokerContext) → POC-E (pharmacy queue)
+                ~3.5 weeks combined, validates the entire access-control + HITL surface.</pre>
+  <p>POC-B (memory) can run in parallel — different code surface, no dependency.</p>
+  <p>POC-D (workflow YAML) is the most disruptive — recommend after POC-A/C/E land, when we have a clean home for the orchestrator prompt to land in.</p>
+
+  <h3>What POCs to NOT run yet</h3>
+  <ul>
+    <li><strong>Session lease + multi-replica</strong> — defer until an instance actually scales horizontally. Per-instance with single-replica is fine on the in-memory dict.</li>
+    <li><strong>service.py decomposition</strong> — happens naturally as the new modules absorb logic. Don't schedule it.</li>
+    <li><strong>Memory pinning / cross-org learning / audit warehouse fan-out</strong> — phase 2/3 concerns.</li>
+  </ul>
+</section>
+
+<!-- =============================================================== TAB 4: GAPS MAP -->
+<section class="panel" data-panel="gaps">
+  <h2>Gaps map — 15 findings, with per-instance impact</h2>
+  <p>Each gap from the deep dive, mapped to severity and how the per-instance tenancy clarification affects it. Filter to focus.</p>
+
+  <div class="gap-filter" id="gap-filter-severity">
+    <button data-filter="all" class="active">All severities</button>
+    <button data-filter="critical">Critical</button>
+    <button data-filter="major">Major</button>
+    <button data-filter="minor">Minor</button>
+  </div>
+
+  <div class="gap-filter" id="gap-filter-status">
+    <button data-status="all" class="active">All statuses</button>
+    <button data-status="resolved">Resolved by per-instance</button>
+    <button data-status="reduced">Reduced</button>
+    <button data-status="unchanged">Unchanged</button>
+  </div>
+
+  <div class="gap-list" id="gap-list">
+    <div class="gap-row" data-severity="critical" data-status="resolved" data-gap="G1">
+      <div class="gap-header">
+        <span class="gap-id">G1</span>
+        <span class="gap-title">CareLink singleton refactor for multi-org</span>
+        <span class="badge severity-critical">critical</span>
+        <span class="badge status-resolved">resolved by per-instance</span>
+      </div>
+      <div class="gap-detail">
+        <p>The singleton bakes <code>org_id</code> at construction across 26+ services. The earlier "DB-per-org with routing middleware" framing implied a months-scale singleton refactor. <strong>Per-instance resolves this:</strong> each instance is single-org by deployment, the singleton stays exactly as it is.</p>
+        <div class="gap-meta">Resolved by: instance model. Action: update HTML design doc to clarify the intent is "deploy-per-org" not "route-per-org."</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="critical" data-status="unchanged" data-gap="POC">
+      <div class="gap-header">
+        <span class="gap-id">G12</span>
+        <span class="gap-title">POC migration path is missing</span>
+        <span class="badge severity-critical">critical</span>
+        <span class="badge status-unchanged">unchanged</span>
+      </div>
+      <div class="gap-detail">
+        <p>The design has 6 sequencing options, none of them is a 1-2 week POC scope. We need to pick a slice that validates the riskiest pattern with the smallest blast radius.</p>
+        <div class="gap-meta">Resolved by: picking POC-C (or POC-A+C+E stack). Tab 3 has the candidates.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="major" data-status="unchanged" data-gap="G3">
+      <div class="gap-header">
+        <span class="gap-id">G3</span>
+        <span class="gap-title">invoke_expert filter for L3 (expert invocable)</span>
+        <span class="badge severity-major">major</span>
+        <span class="badge status-unchanged">unchanged</span>
+      </div>
+      <div class="gap-detail">
+        <p>Today <code>invoke_expert</code> accepts ANY expert_id. To enforce L3, we need to either constrain the MCP tool's enum at session-spawn (rebuild MCP per session) or runtime-check inside the tool against InvokerContext. The doc says "filter at MCP boundary" without saying which.</p>
+        <div class="gap-meta">Addressed by: a follow-up POC after C lands. Add the runtime check first (lower risk), then move to enum constraint if the LLM is confused by deny-after-call patterns.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="major" data-status="reduced" data-gap="G4">
+      <div class="gap-header">
+        <span class="gap-id">G4</span>
+        <span class="gap-title">Memory append-only on shared FS has concurrency holes</span>
+        <span class="badge severity-major">major</span>
+        <span class="badge status-reduced">reduced</span>
+      </div>
+      <div class="gap-detail">
+        <p><code>open(path, 'a')</code> on NFS/Filestore is not atomic with respect to other writers. flock semantics on managed NFS unreliable. Two simultaneous merges to <code>patient-9c.md</code> can interleave bytes. "Diff vs manifest" silently drops edits to existing entries — LLM doesn't know.</p>
+        <p><strong>Per-instance reduction:</strong> within an instance, contention is bounded by that instance's session count. One small org may never see concurrent writes to the same key. The problem is real but smaller.</p>
+        <div class="gap-meta">Resolved by: choose Postgres substrate (POC-B) instead of FS, OR add per-key file locks via Postgres advisory locks (FS substrate).</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="major" data-status="unchanged" data-gap="G5">
+      <div class="gap-header">
+        <span class="gap-id">G5</span>
+        <span class="gap-title">HITL approval queue race condition</span>
+        <span class="badge severity-major">major</span>
+        <span class="badge status-unchanged">unchanged</span>
+      </div>
+      <div class="gap-detail">
+        <p>"Any qualified user at this pharmacy can pick up" — but if 2 pharmacists click "approve" simultaneously, behavior is undefined. Need <code>SELECT FOR UPDATE</code> + status check + atomic transition.</p>
+        <div class="gap-meta">Addressed by: POC-E.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="major" data-status="unchanged" data-gap="G2">
+      <div class="gap-header">
+        <span class="gap-id">G2</span>
+        <span class="gap-title">JWT trust ordering is wrong in the doc</span>
+        <span class="badge severity-major">major</span>
+        <span class="badge status-unchanged">unchanged</span>
+      </div>
+      <div class="gap-detail">
+        <p>L0 says "structural via DB connection routing." L1 says "WorkOS JWT validation." But you can't trust <code>JWT.org_id</code> until L1 validates the signature. Spec ordering is wrong.</p>
+        <p><strong>Per-instance update:</strong> L0 becomes "is this user reaching the right instance?" — handled by subdomain routing at the load balancer (validation comes from JWT signature too). L1 still must precede any trust of JWT claims.</p>
+        <div class="gap-meta">Resolved by: 1-line spec correction in the design HTML doc.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="major" data-status="unchanged" data-gap="G7">
+      <div class="gap-header">
+        <span class="gap-id">G7</span>
+        <span class="gap-title">Workflow versioning + expert MD drift</span>
+        <span class="badge severity-major">major</span>
+        <span class="badge status-unchanged">unchanged</span>
+      </div>
+      <div class="gap-detail">
+        <p>Pin workflow version at session creation — fine. But workflow YAML references expert MDs by ID. If MD content changes mid-session, is the running session reading the old or new MD? Today MDs are loaded at registry init.</p>
+        <div class="gap-meta">Addressed by: snapshot the expert MD content hashes alongside the workflow version pin. Add to POC-D.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="major" data-status="unchanged" data-gap="G9">
+      <div class="gap-header">
+        <span class="gap-id">G9</span>
+        <span class="gap-title">Permit.io projection cache invalidation</span>
+        <span class="badge severity-major">major</span>
+        <span class="badge status-unchanged">unchanged</span>
+      </div>
+      <div class="gap-detail">
+        <p>"Cached for session lifetime" — but permission revocation mid-session has zero spec. 4h ceiling for re-auth is mentioned in flow detail, not design rules. Permit.io webhook → invalidate cache → next check refreshes — none of this is wired today.</p>
+        <div class="gap-meta">Addressed by: extension to POC-C (cache invalidation strategy).</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="major" data-status="reduced" data-gap="G14">
+      <div class="gap-header">
+        <span class="gap-id">G14</span>
+        <span class="gap-title">6-layer access control latency budget</span>
+        <span class="badge severity-major">major</span>
+        <span class="badge status-reduced">reduced</span>
+      </div>
+      <div class="gap-detail">
+        <p>L4 (PreToolUse on Bash) fires per tool_use. If it consults Permit.io live, that's network round-trips. Verify projection covers ALL verbs.</p>
+        <p><strong>Per-instance reduction:</strong> Permit.io tenant is per-instance, lower latency baseline.</p>
+        <div class="gap-meta">Resolved by: POC-C's projection covers all verbs cached; L4 reads from cache.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="minor" data-status="resolved" data-gap="G7lease">
+      <div class="gap-header">
+        <span class="gap-id">G7L</span>
+        <span class="gap-title">Lease abandonment + multi-replica</span>
+        <span class="badge severity-minor">minor</span>
+        <span class="badge status-resolved">resolved by per-instance</span>
+      </div>
+      <div class="gap-detail">
+        <p>The lease design only matters if an instance scales horizontally. Per-instance with single-replica makes the in-memory dict safe.</p>
+        <div class="gap-meta">Resolved by: defer DB-backed lease until horizontal scaling is needed for a single instance.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="minor" data-status="resolved" data-gap="G15">
+      <div class="gap-header">
+        <span class="gap-id">G15</span>
+        <span class="gap-title">Shared FS infrastructure dependency</span>
+        <span class="badge severity-minor">minor</span>
+        <span class="badge status-resolved">resolved by per-instance</span>
+      </div>
+      <div class="gap-detail">
+        <p>The original design said "shared FS for cross-replica cold-revive." Per-instance with single-replica means no shared FS mount needed. Local <code>/var/lib/carelink/</code> is fine.</p>
+        <div class="gap-meta">Resolved by: don't provision GCP Filestore for v1. Add it only when an instance needs horizontal scaling.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="minor" data-status="unchanged" data-gap="G6">
+      <div class="gap-header">
+        <span class="gap-id">G6</span>
+        <span class="gap-title">Memory TTL vs pinning interaction</span>
+        <span class="badge severity-minor">minor</span>
+        <span class="badge status-unchanged">unchanged</span>
+      </div>
+      <div class="gap-detail">
+        <p>14d TTL is naive. Pinning is "Phase 2." Some memories should be evergreen. If we ship TTL first, we'll lose memories that should never expire.</p>
+        <div class="gap-meta">Addressed by: ship TTL with a "pinned" flag column from day one. Default false. Phase 2 surfaces pinning UX.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="minor" data-status="unchanged" data-gap="G8">
+      <div class="gap-header">
+        <span class="gap-id">G8</span>
+        <span class="gap-title">Workflow versioning shape unclear</span>
+        <span class="badge severity-minor">minor</span>
+        <span class="badge status-unchanged">unchanged</span>
+      </div>
+      <div class="gap-detail">
+        <p>Pin workflow version at session creation. But the version field itself isn't specced in the YAML.</p>
+        <div class="gap-meta">Addressed by: add <code>version: int</code> to YAML schema in POC-D. Bump on breaking change.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="minor" data-status="reduced" data-gap="G10">
+      <div class="gap-header">
+        <span class="gap-id">G10</span>
+        <span class="gap-title">Audit log fan-out to global warehouse</span>
+        <span class="badge severity-minor">minor</span>
+        <span class="badge status-reduced">reduced</span>
+      </div>
+      <div class="gap-detail">
+        <p>Per-instance: each org's audit lives in its own DB. HIPAA platform-wide audit becomes ETL from N instances to a global warehouse — cleaner shape.</p>
+        <div class="gap-meta">Addressed by: future ETL pipeline. Each instance's audit is HIPAA-compliant in isolation.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="minor" data-status="unchanged" data-gap="G11">
+      <div class="gap-header">
+        <span class="gap-id">G11</span>
+        <span class="gap-title">Chat workflow has zero experts (chat.yaml)</span>
+        <span class="badge severity-minor">minor</span>
+        <span class="badge status-unchanged">unchanged</span>
+      </div>
+      <div class="gap-detail">
+        <p>Chat orchestrator answers directly. But it declares <code>memory_scope.read: [tools, drugs]</code> — for an orchestrator with no <code>invoke_expert</code> calls, what does it do with these memories? No Pydantic envelope to detect drift either.</p>
+        <div class="gap-meta">Addressed by: defer chat workflow until POC-D rx-flow shape is proven. Chat is a special-case workflow, not the canonical one.</div>
+      </div>
+    </div>
+
+    <div class="gap-row" data-severity="minor" data-status="unchanged" data-gap="G13">
+      <div class="gap-header">
+        <span class="gap-id">G13</span>
+        <span class="gap-title">Role changes mid-session</span>
+        <span class="badge severity-minor">minor</span>
+        <span class="badge status-unchanged">unchanged</span>
+      </div>
+      <div class="gap-detail">
+        <p>If Carol is demoted from pharmacist to technician at P1 mid-session, current session may continue with cached old permissions.</p>
+        <div class="gap-meta">Addressed by: Permit.io webhook → invalidate cache → next L4 check refreshes. Tied to G9.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== TAB 5: DECISION PATH -->
+<section class="panel" data-panel="decision">
+  <h2>Decision path — six steps to "we have a POC running"</h2>
+  <p>Linear sequence. Click any step to see what's in / out of scope and what the next step depends on.</p>
+
+  <div class="decision-flow" id="decision-flow">
+    <div class="decision-step active" data-step="1">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <div class="step-title">Confirm per-instance tenancy as the deployment model</div>
+        <div class="step-tagline">The clarification you raised — explicit yes/no needed before anything else.</div>
+        <div class="step-detail">
+          <p><strong>What:</strong> agree that each org gets their own CareLink deployment (process + DB + FS + Inngest + Permit.io tenant). Update the HTML design doc to use the term "deploy-per-org" instead of "DB-per-org with routing."</p>
+          <p><strong>Resolves:</strong> G1 (singleton refactor), C1 (months-scale risk), G7L (lease deferred), G15 (shared FS deferred).</p>
+          <p><strong>Open follow-ups (not blocking POC):</strong> provisioning model (k8s namespace? Cloud Run service? Fly app?), subdomain routing, rolling-update orchestration, resource cost per instance.</p>
+          <p><strong>Action:</strong> 1-line confirmation. Then update <code>agi-architecture-overview.html</code> tenancy tab.</p>
+        </div>
+      </div>
+      <div class="step-status">decision needed</div>
+    </div>
+
+    <div class="decision-step" data-step="2">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <div class="step-title">Decide memory substrate: FS vs Postgres</div>
+        <div class="step-tagline">Single largest design uncertainty. Affects POC-B scope.</div>
+        <div class="step-detail">
+          <p><strong>FS pros:</strong> closest to today's MD prose feel. LLM reads files naturally.</p>
+          <p><strong>FS cons:</strong> concurrency on shared FS unreliable, scale concerns at 1000s of files per pharmacy, TTL sweep is O(N) file walks. Per-instance reduces concurrency contention but doesn't eliminate it.</p>
+          <p><strong>Postgres pros:</strong> ACID, transactional TTL via DELETE, queryable for compliance, easier observability.</p>
+          <p><strong>Postgres cons:</strong> LLM accesses via restish (less natural), MD prose feel lost.</p>
+          <p><strong>Recommendation:</strong> Postgres. Less risk, easier ops, easier observability. The "natural prose" advantage is small.</p>
+          <p><strong>Action:</strong> decide. Then POC-B scope locks.</p>
+        </div>
+      </div>
+      <div class="step-status">decision needed</div>
+    </div>
+
+    <div class="decision-step" data-step="3">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <div class="step-title">Pick POC slice (or stack)</div>
+        <div class="step-tagline">The 1-2 week scope that validates the riskiest pattern.</div>
+        <div class="step-detail">
+          <p><strong>Recommended primary:</strong> POC-C (Permit.io InvokerContext projection). Smallest blast radius, validates riskiest pattern.</p>
+          <p><strong>Recommended stack (if appetite is bigger):</strong> POC-A → POC-C → POC-E (~3.5 weeks). Validates the entire access-control + HITL surface.</p>
+          <p><strong>Run in parallel:</strong> POC-B (memory) is on a different code surface, no dependencies.</p>
+          <p><strong>Defer:</strong> POC-D (workflow YAML) until access-control surface lands.</p>
+          <p><strong>Action:</strong> pick. Tab 3 has full scope per option.</p>
+        </div>
+      </div>
+      <div class="step-status">decision needed</div>
+    </div>
+
+    <div class="decision-step" data-step="4">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <div class="step-title">Read open-agents lessons-learned (~30 min)</div>
+        <div class="step-tagline">Pre-POC homework. ~50 documented bugs they hit; we'll hit a subset.</div>
+        <div class="step-detail">
+          <p><strong>What:</strong> read <code>vercel-labs/open-agents/docs/agents/lessons-learned.md</code> — streaming-state corruption, abort handling, snapshot races, prompt-cache breakpoint placement, durable-workflow gotchas.</p>
+          <p><strong>Why:</strong> bug-taxonomy reuse. Their conclusions inform our test cases.</p>
+          <p><strong>Cost:</strong> 30 min. Not a sprint commitment.</p>
+        </div>
+      </div>
+      <div class="step-status">prep work</div>
+    </div>
+
+    <div class="decision-step" data-step="5">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <div class="step-title">Update design doc with clarifications</div>
+        <div class="step-tagline">Three concrete edits to <code>agi-architecture-overview.html</code>.</div>
+        <div class="step-detail">
+          <ol>
+            <li><strong>Tenancy tab:</strong> change "DB-per-org with routing middleware" to "deploy-per-org" + clarify what's per-instance.</li>
+            <li><strong>Access tab L0/L1 ordering:</strong> JWT validation precedes any trust of JWT claims. Subdomain routing is part of the deployment substrate, not application-layer access control.</li>
+            <li><strong>Lease + shared FS callouts:</strong> mark as "deferred until horizontal scaling within an instance."</li>
+          </ol>
+          <p><strong>Action:</strong> 3 inline edits. ~30 min.</p>
+        </div>
+      </div>
+      <div class="step-status">prep work</div>
+    </div>
+
+    <div class="decision-step" data-step="6">
+      <div class="step-num">6</div>
+      <div class="step-content">
+        <div class="step-title">Begin POC implementation</div>
+        <div class="step-tagline">Spawn an implementation agent with the picked POC's full brief.</div>
+        <div class="step-detail">
+          <p>Given POC-C as primary recommendation:</p>
+          <ul>
+            <li>Brief includes: scope (Tab 3), code touchpoints (Tab 3), test requirements, the 4 deferred Permit.io concerns from G9.</li>
+            <li>Self-contained — agent picks up cold from this doc.</li>
+            <li>Hermetic tests via existing <code>make_fake_spawn</code> patterns.</li>
+            <li>Deliverable: <code>permissions/</code> module + InvokerContext pinned + 6-8 hermetic tests + manual verification via dev session.</li>
+            <li>No commits without user approval (standing rule).</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step-status">implementation</div>
+    </div>
+  </div>
+
+  <h3>Three confirmations before we start</h3>
+  <ol>
+    <li><strong>Per-instance tenancy</strong> = each org gets their own CareLink deployment. Confirm? (Step 1)</li>
+    <li><strong>Memory substrate</strong> = Postgres rows (recommended) or filesystem. Decide? (Step 2)</li>
+    <li><strong>POC slice</strong> = POC-C alone, POC-A+C+E stack, POC-B in parallel? (Step 3)</li>
+  </ol>
+
+  <h3>Decisions deferred (acknowledged, not blocking POC)</h3>
+  <ul>
+    <li>Provisioning model (k8s / Cloud Run / Fly / Vercel project)</li>
+    <li>Subdomain routing topology (orgx.carelink.com vs central auth + redirect)</li>
+    <li>Workflow YAML vs Python dataclass (relevant only when POC-D starts)</li>
+    <li>Cross-org learning option B/C (phase 2/3)</li>
+    <li>Memory pinning UX (phase 2)</li>
+  </ul>
+</section>
+
+</main>
+
+<div class="footer-note">
+  <strong>Document state:</strong> design synthesis only, no code committed.<br>
+  <strong>Inputs:</strong> 12-axis architecture decisions (2026-04-28), Phase D spike (2026-04-27), Vercel open-agents research (2026-04-29), per-instance tenancy clarification (2026-04-29).<br>
+  <strong>Companion docs:</strong> <code>docs/agi-architecture-overview.html</code>, <code>docs/rx-flow-comparison-2026-04-27.md</code>, <code>docs/rx-flow-part-d-spike-2026-04-27.md</code>.
+</div>
+
+<script>
+  // Tab switching
+  const tabs = document.querySelectorAll('nav.tabs button');
+  const panels = document.querySelectorAll('section.panel');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      tabs.forEach(t => t.classList.toggle('active', t === tab));
+      panels.forEach(p => p.classList.toggle('active', p.dataset.panel === target));
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+
+  // Tab 1: comparison cell click → detail panel
+  const compareCells = document.querySelectorAll('#compare-grid > div[data-cell]');
+  const compareDetails = document.querySelectorAll('#compare-detail .detail-content');
+  compareCells.forEach(cell => {
+    cell.addEventListener('click', () => {
+      const id = cell.dataset.cell;
+      compareCells.forEach(c => c.classList.remove('active'));
+      cell.classList.add('active');
+      compareDetails.forEach(d => d.classList.toggle('active', d.dataset.cell === id));
+    });
+  });
+
+  // Tab 2: instance piece click → detail panel
+  const instancePieces = document.querySelectorAll('.instance-piece');
+  const pieceDetails = document.querySelectorAll('#piece-detail .detail-content');
+  instancePieces.forEach(piece => {
+    piece.addEventListener('click', () => {
+      const id = piece.dataset.piece;
+      instancePieces.forEach(p => p.classList.remove('active'));
+      piece.classList.add('active');
+      pieceDetails.forEach(d => {
+        d.classList.toggle('active', d.dataset.piece === id);
+        d.style.display = d.dataset.piece === id ? 'block' : 'none';
+      });
+    });
+  });
+
+  // Tab 3: POC card click → detail panel
+  const pocCards = document.querySelectorAll('.poc-card');
+  const pocDetails = document.querySelectorAll('#poc-detail .detail-content');
+  pocCards.forEach(card => {
+    card.addEventListener('click', () => {
+      const id = card.dataset.poc;
+      pocCards.forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      pocDetails.forEach(d => d.classList.toggle('active', d.dataset.poc === id));
+    });
+  });
+
+  // Tab 4: gap row expand
+  const gapRows = document.querySelectorAll('.gap-row');
+  gapRows.forEach(row => {
+    row.addEventListener('click', () => {
+      row.classList.toggle('active');
+    });
+  });
+
+  // Tab 4: gap filters
+  const severityButtons = document.querySelectorAll('#gap-filter-severity button');
+  const statusButtons = document.querySelectorAll('#gap-filter-status button');
+  let currentSeverity = 'all';
+  let currentStatus = 'all';
+
+  function applyGapFilters() {
+    gapRows.forEach(row => {
+      const matchSev = currentSeverity === 'all' || row.dataset.severity === currentSeverity;
+      const matchStatus = currentStatus === 'all' || row.dataset.status === currentStatus;
+      row.style.display = matchSev && matchStatus ? '' : 'none';
+    });
+  }
+
+  severityButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      severityButtons.forEach(b => b.classList.toggle('active', b === btn));
+      currentSeverity = btn.dataset.filter;
+      applyGapFilters();
+    });
+  });
+
+  statusButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      statusButtons.forEach(b => b.classList.toggle('active', b === btn));
+      currentStatus = btn.dataset.status;
+      applyGapFilters();
+    });
+  });
+
+  // Tab 5: decision step expand
+  const decisionSteps = document.querySelectorAll('.decision-step');
+  decisionSteps.forEach(step => {
+    step.addEventListener('click', () => {
+      const wasActive = step.classList.contains('active');
+      decisionSteps.forEach(s => s.classList.remove('active'));
+      if (!wasActive) step.classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>
