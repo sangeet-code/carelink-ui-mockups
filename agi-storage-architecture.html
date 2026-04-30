@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CareLink AGI — Storage Architecture & Session Lifecycle (2026-04-30)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --bg-code: #f6f8fa;
+    --border: #d0d7de;
+    --border-strong: #afb8c1;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --text-faint: #8c959f;
+    --hot: #0969da;          /* Filestore — hot session storage */
+    --persistent: #1a7f37;   /* GCS canonical — durable */
+    --cold: #57606a;         /* GCS Coldline — archive */
+    --compute: #8250df;      /* sandbox compute */
+    --frontend: #bf8700;     /* CareLink website */
+    --backend: #0550ae;      /* FastAPI backend */
+    --warn: #cf222e;
+    --info: #0969da;
+    --accept: #1a7f37;
+    --reject: #cf222e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.55;
+    font-size: 15px;
+  }
+  header {
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 32px 20px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
+  header .meta { color: var(--text-muted); font-size: 13px; }
+  header .intent { margin-top: 12px; max-width: 820px; }
+  nav.tabs {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  nav.tabs button {
+    background: transparent;
+    border: 0;
+    padding: 14px 18px;
+    font-size: 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active { color: var(--text); border-bottom-color: var(--compute); }
+  main {
+    padding: 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  section.panel { display: none; animation: fadein 0.2s ease; }
+  section.panel.active { display: block; }
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  h2 { font-size: 20px; margin: 0 0 16px; font-weight: 600; }
+  h3 { font-size: 16px; margin: 24px 0 10px; font-weight: 600; }
+  h4 { font-size: 13px; margin: 18px 0 6px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  p { margin: 0 0 12px; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--bg-code);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px; }
+  table th, table td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table th { background: var(--bg-alt); font-weight: 600; }
+  .callout {
+    border-left: 4px solid var(--info);
+    background: #ddf4ff;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 14px;
+  }
+  .callout.warn { border-left-color: var(--warn); background: #ffebe9; }
+  .callout.success { border-left-color: var(--accept); background: #dafbe1; }
+  .callout strong { font-weight: 600; }
+
+  .verdict-card {
+    background: var(--bg-alt);
+    border: 2px solid var(--compute);
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin: 16px 0 24px;
+  }
+  .verdict-card .verdict-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--compute);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 8px;
+  }
+  .verdict-card .verdict-headline {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .verdict-card ul { margin: 8px 0 0; padding-left: 20px; }
+  .verdict-card li { margin: 4px 0; font-size: 14px; }
+
+  .scope-pill {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: white;
+    margin: 0 2px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .scope-pill.hot { background: var(--hot); }
+  .scope-pill.persistent { background: var(--persistent); }
+  .scope-pill.cold { background: var(--cold); }
+  .scope-pill.compute { background: var(--compute); }
+  .scope-pill.frontend { background: var(--frontend); }
+  .scope-pill.backend { background: var(--backend); }
+
+  .topology-svg, .phase-svg {
+    width: 100%;
+    max-width: 1080px;
+    height: auto;
+    display: block;
+    margin: 16px auto;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .step-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 16px 0 8px;
+    align-items: center;
+  }
+  .step-pills .pills-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-right: 8px;
+  }
+  .step-pills button {
+    min-width: 36px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    background: white;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    transition: all 0.15s;
+    padding: 0 10px;
+  }
+  .step-pills button:hover { background: var(--bg-alt); }
+  .step-pills button.active {
+    background: var(--compute);
+    color: white;
+    border-color: var(--compute);
+  }
+  .step-pills .step-pills-nav {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: 12px;
+  }
+  .step-pills .step-pills-nav button { font-size: 12px; font-weight: 500; }
+
+  .phase-content { display: none; animation: fadein 0.2s; }
+  .phase-content.active { display: block; }
+
+  .phase-header {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 12px 0 16px;
+  }
+  .phase-header .phase-num {
+    display: inline-block;
+    background: var(--compute);
+    color: white;
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    text-align: center;
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 13px;
+    margin-right: 10px;
+  }
+  .phase-header .phase-name {
+    font-weight: 700;
+    font-size: 17px;
+  }
+  .phase-header .phase-tagline {
+    color: var(--text-muted);
+    font-size: 13.5px;
+    margin-left: 38px;
+    margin-top: 4px;
+  }
+
+  .storage-ops {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .storage-op {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    background: white;
+  }
+  .storage-op .op-tier {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    color: white;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 6px;
+  }
+  .storage-op .op-tier.hot { background: var(--hot); }
+  .storage-op .op-tier.persistent { background: var(--persistent); }
+  .storage-op .op-tier.cold { background: var(--cold); }
+  .storage-op .op-tier.skills { background: #6e5494; }
+  .storage-op .op-tier.idle { background: var(--text-faint); }
+  .storage-op .op-name {
+    font-weight: 600;
+    font-size: 13.5px;
+    margin-bottom: 4px;
+  }
+  .storage-op .op-desc {
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  .compare-table th { white-space: nowrap; }
+
+  .footer-note {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    margin-right: 4px;
+    color: var(--text-muted);
+  }
+  .pill.green { background: #dafbe1; color: #0a3622; border-color: #1a7f37; }
+  .pill.red { background: #ffebe9; color: #82071e; border-color: #cf222e; }
+  .pill.yellow { background: #fff8c5; color: #4d2d00; border-color: #bf8700; }
+  .pill.blue { background: #ddf4ff; color: #033780; border-color: #0969da; }
+
+  .arrow-down {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 18px;
+    margin: 4px 0;
+  }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>CareLink AGI — Storage Architecture & Session Lifecycle</h1>
+  <div class="meta">Generated 2026-04-30. Companion to <code>agi-architecture-overview.html</code> and <code>agi-sandbox-memory-architecture.html</code>.</div>
+  <div class="intent">Deep dive on GCS FUSE for memory storage, the two-tier storage architecture (Filestore for hot session workspace + GCS for persistent canonical memory), and the full end-to-end session lifecycle from frontend click through cold-revive to post-task cleanup. Each lifecycle phase has its own storage-layer interaction diagram.</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="tldr" class="active">TL;DR & Decision</button>
+  <button data-tab="topology">System Topology</button>
+  <button data-tab="storage">Storage Architecture</button>
+  <button data-tab="gcsfuse">GCS FUSE Deep Dive</button>
+  <button data-tab="lifecycle">Lifecycle Flow</button>
+  <button data-tab="cost">Cost & Migration</button>
+</nav>
+
+<main>
+
+<!-- ================================================ TLDR -->
+<section class="panel active" data-panel="tldr">
+  <h2>The architectural insight</h2>
+  <p>"GCS FUSE for memory" implicitly assumes one storage tier serves all our needs. But our workload has <strong>two distinct storage roles</strong> that want different primitives:</p>
+
+  <div class="verdict-card">
+    <div class="verdict-label">Two-tier storage with explicit role separation</div>
+    <div class="verdict-headline">Filestore (hot session workspace) + GCS (persistent canonical memory + cold archive). Optional GCS FUSE for the read-only skills bundle.</div>
+    <ul>
+      <li><strong>Filestore (NFS RWX, ~$0.45/GiB-mo)</strong> — hosts active and paused session workspaces. Sub-ms latency. Bounded volume (only active+paused sessions). Mounts on every backend replica so cold-revive on a different replica works natively.</li>
+      <li><strong>GCS (object storage, ~$0.020/GiB-mo)</strong> — hosts canonical memory (per-org bucket prefix), final transcripts, audit archives. Unbounded volume (years of accumulated memory entries). Accessed via native API at session start (read snapshot) and session end (merge writes).</li>
+      <li><strong>GCS FUSE</strong> — a useful tool for the <em>skills bundle</em> (read-only, large, rarely changes — caching wins). NOT the primary mechanism for canonical memory writes (POSIX gaps + write-amplification).</li>
+      <li><strong>GCS Coldline</strong> — automatic tier-down via Object Lifecycle Management for entries older than 30d. Compliance retention at $0.004/GiB-mo.</li>
+    </ul>
+  </div>
+
+  <h3>Why two tiers</h3>
+  <table>
+    <tr><th>Storage need</th><th>Volume profile</th><th>Latency need</th><th>Right primitive</th></tr>
+    <tr><td>Active session workspace (skills + memories projection + proposals + SDK transcript JSONL)</td><td>Bounded — peak active+paused sessions × ~100MB. ~500GB at 5K-session scale.</td><td>Sub-ms (SDK writes JSONL hundreds of times per turn)</td><td><span class="scope-pill hot">Filestore RWX NFS</span></td></tr>
+    <tr><td>Canonical memory store (cross-session learning, long-term)</td><td>Unbounded — grows over years as entries accumulate. Cleaned by 14d TTL but accumulation rate adds up.</td><td>50-300ms acceptable (only read at session start, written at session end — both infrequent)</td><td><span class="scope-pill persistent">GCS</span></td></tr>
+    <tr><td>Skills bundle (read-only, large, slowly-changing)</td><td>Bounded — ~150-200MB total, unchanged between platform deploys</td><td>Cached after first read, sub-ms thereafter</td><td><span class="scope-pill persistent">GCS FUSE</span> (read-only, aggressive cache)</td></tr>
+    <tr><td>Final transcripts + audit archives</td><td>Unbounded — every session leaves a transcript</td><td>Write at session end, read on demand for compliance</td><td><span class="scope-pill persistent">GCS</span> (auto-tier to <span class="scope-pill cold">Coldline</span>)</td></tr>
+  </table>
+
+  <h3>Key insight: storage and compute decouple cleanly</h3>
+  <p>The two storage tiers live in <strong>our</strong> GCP project, not inside any sandbox vendor's primitives. Cloud Run worker pools, GKE Autopilot, Daytona, or self-hosted Firecracker can all mount the same Filestore + read/write the same GCS bucket. <strong>Compute becomes vendor-replaceable; storage stays stable.</strong> This is the migration property the previous discussion landed on, made concrete.</p>
+
+  <h3>Where GCS FUSE specifically wins for us</h3>
+  <ul>
+    <li><strong>Skills bundle as read-only mount</strong>: 150MB tree, mounted once per replica, cached aggressively, symlinked into per-session workspace. Avoids the per-session skills copy that's currently the slowest part of provisioning.</li>
+    <li><strong>Per-org canonical memory as a "browseable" view</strong> (optional): admins can <code>ls /mnt/memory/orgX/pharmacy/P1/</code> on a maintenance pod for ad-hoc inspection without writing tooling.</li>
+  </ul>
+
+  <h3>Where GCS FUSE specifically loses for us</h3>
+  <ul>
+    <li><strong>SDK transcript writes</strong>: Claude CLI writes to <code>~/.claude/projects/&lt;cwd&gt;/&lt;sid&gt;.jsonl</code> hundreds of times per turn. GCS FUSE write-amplification (each write = full object rewrite under the hood) would be expensive and slow.</li>
+    <li><strong>POSIX flock / atomic append</strong>: our memory merger needs reliable concurrency control. GCS conditional generation (if-generation-match) via API is more reliable than FUSE's translation layer.</li>
+    <li><strong>Listing a busy directory</strong>: O(N) GCS list ops add up. Our merger walks the workspace memories dir at session-end — local FS list is microseconds, FUSE list is per-page-of-objects API calls.</li>
+  </ul>
+</section>
+
+<!-- ================================================ TOPOLOGY -->
+<section class="panel" data-panel="topology">
+  <h2>System topology</h2>
+  <p>End-to-end. From the operator's browser to the durable storage layer, with the sandbox compute fleet in between.</p>
+
+  <svg class="topology-svg" viewBox="0 0 1080 720" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="t-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+        <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+      </marker>
+      <marker id="t-arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+        <path d="M0,0 L0,10 L10,5 z" fill="#0969da"/>
+      </marker>
+      <marker id="t-arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+        <path d="M0,0 L0,10 L10,5 z" fill="#8250df"/>
+      </marker>
+    </defs>
+
+    <!-- USER / FRONTEND tier -->
+    <rect x="40" y="20" width="1000" height="80" rx="6" fill="#fff8e6" stroke="#bf8700" stroke-width="2"/>
+    <text x="60" y="44" font-size="11" font-weight="700" fill="#bf8700">USER (operator at carelink.com)</text>
+    <rect x="80" y="55" width="200" height="36" rx="4" fill="white" stroke="#bf8700"/>
+    <text x="180" y="78" text-anchor="middle" font-size="13" font-weight="600" fill="#bf8700">Browser (Next.js frontend)</text>
+    <rect x="320" y="55" width="220" height="36" rx="4" fill="white" stroke="#bf8700"/>
+    <text x="430" y="78" text-anchor="middle" font-size="12" fill="#bf8700">React Query + SSE + Zustand</text>
+    <rect x="580" y="55" width="200" height="36" rx="4" fill="white" stroke="#bf8700"/>
+    <text x="680" y="78" text-anchor="middle" font-size="12" fill="#bf8700">JWT in Authorization header</text>
+
+    <!-- arrow down to backend -->
+    <path d="M 540 105 L 540 135" stroke="#57606a" stroke-width="2" marker-end="url(#t-arrow)"/>
+    <text x="555" y="125" font-size="11" fill="#57606a">HTTPS / SSE</text>
+
+    <!-- BACKEND tier -->
+    <rect x="40" y="140" width="1000" height="100" rx="6" fill="#dde7f5" stroke="#0550ae" stroke-width="2"/>
+    <text x="60" y="164" font-size="11" font-weight="700" fill="#0550ae">BACKEND (Cloud Run service — request-driven)</text>
+    <rect x="80" y="178" width="200" height="48" rx="4" fill="white" stroke="#0550ae"/>
+    <text x="180" y="200" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0550ae">Org routing middleware</text>
+    <text x="180" y="215" text-anchor="middle" font-size="10.5" fill="#0550ae">JWT.org_id → conn string</text>
+    <rect x="300" y="178" width="200" height="48" rx="4" fill="white" stroke="#0550ae"/>
+    <text x="400" y="200" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0550ae">FastAPI app</text>
+    <text x="400" y="215" text-anchor="middle" font-size="10.5" fill="#0550ae">Permit.io + WorkOS</text>
+    <rect x="520" y="178" width="200" height="48" rx="4" fill="white" stroke="#0550ae"/>
+    <text x="620" y="200" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0550ae">AGI service</text>
+    <text x="620" y="215" text-anchor="middle" font-size="10.5" fill="#0550ae">Spawns sessions, manages lease</text>
+    <rect x="740" y="178" width="200" height="48" rx="4" fill="white" stroke="#0550ae"/>
+    <text x="840" y="200" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0550ae">Workflow registry</text>
+    <text x="840" y="215" text-anchor="middle" font-size="10.5" fill="#0550ae">YAML + selector + projector</text>
+
+    <!-- arrow down to sandbox -->
+    <path d="M 540 245 L 540 285" stroke="#8250df" stroke-width="2" marker-end="url(#t-arrow-purple)"/>
+    <text x="555" y="270" font-size="11" fill="#8250df">spawn / lease / drain</text>
+
+    <!-- SANDBOX FLEET tier -->
+    <rect x="40" y="290" width="630" height="180" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+    <text x="60" y="314" font-size="11" font-weight="700" fill="#8250df">SANDBOX FLEET (Cloud Run worker pools)</text>
+
+    <rect x="60" y="328" width="180" height="60" rx="4" fill="white" stroke="#8250df"/>
+    <text x="150" y="346" text-anchor="middle" font-size="12.5" font-weight="600" fill="#8250df">Active session</text>
+    <text x="150" y="361" text-anchor="middle" font-size="10" fill="#8250df">orchestrator + expert</text>
+    <text x="150" y="375" text-anchor="middle" font-size="10" fill="#8250df">workspace mounted</text>
+
+    <rect x="250" y="328" width="180" height="60" rx="4" fill="white" stroke="#8250df"/>
+    <text x="340" y="346" text-anchor="middle" font-size="12.5" font-weight="600" fill="#8250df">waiting_hot</text>
+    <text x="340" y="361" text-anchor="middle" font-size="10" fill="#8250df">subprocess parked</text>
+    <text x="340" y="375" text-anchor="middle" font-size="10" fill="#8250df">at HITL gate</text>
+
+    <rect x="440" y="328" width="220" height="60" rx="4" fill="#fafafa" stroke="#8c959f" stroke-dasharray="4,3"/>
+    <text x="550" y="346" text-anchor="middle" font-size="12.5" font-weight="600" fill="#57606a">waiting_cold (no compute)</text>
+    <text x="550" y="361" text-anchor="middle" font-size="10" fill="#57606a">subprocess EXITED</text>
+    <text x="550" y="375" text-anchor="middle" font-size="10" fill="#57606a">workspace persists on Filestore</text>
+
+    <rect x="60" y="398" width="600" height="58" rx="4" fill="white" stroke="#8250df"/>
+    <text x="80" y="418" font-size="12" font-weight="600" fill="#8250df">Container image (vendor-neutral):</text>
+    <text x="80" y="434" font-size="11" fill="#8250df">Node 20 + claude-agent-sdk · Python 3.12 · Go restish · workflow YAMLs · skills baked or FUSE-mounted</text>
+    <text x="80" y="448" font-size="10.5" font-style="italic" fill="#57606a">Same image runs on Cloud Run / GKE / Daytona / self-hosted — only mount layer changes</text>
+
+    <!-- INNGEST -->
+    <rect x="690" y="290" width="350" height="180" rx="6" fill="#fff8c5" stroke="#bf8700" stroke-width="2"/>
+    <text x="710" y="314" font-size="11" font-weight="700" fill="#bf8700">DURABLE FUNCTIONS</text>
+    <rect x="710" y="328" width="320" height="56" rx="4" fill="white" stroke="#bf8700"/>
+    <text x="870" y="350" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bf8700">Inngest cold-revive functions</text>
+    <text x="870" y="368" text-anchor="middle" font-size="10.5" fill="#bf8700">func_cold_revive_drain · func_cold_approval_drain</text>
+    <rect x="710" y="394" width="320" height="56" rx="4" fill="white" stroke="#bf8700"/>
+    <text x="870" y="416" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bf8700">Memory TTL sweeper (cron 6h)</text>
+    <text x="870" y="434" text-anchor="middle" font-size="10.5" fill="#bf8700">walks GCS canonical, prunes &gt;14d entries</text>
+
+    <!-- arrows from sandbox/inngest down to storage -->
+    <path d="M 200 470 L 200 510" stroke="#0969da" stroke-width="2" marker-end="url(#t-arrow-blue)"/>
+    <text x="210" y="495" font-size="10.5" fill="#0969da">RWX</text>
+    <path d="M 480 470 L 480 510" stroke="#1a7f37" stroke-width="2" marker-end="url(#t-arrow)"/>
+    <text x="490" y="495" font-size="10.5" fill="#1a7f37">read/write</text>
+    <path d="M 870 470 L 870 510" stroke="#1a7f37" stroke-width="2" marker-end="url(#t-arrow)"/>
+
+    <!-- STORAGE tier -->
+    <rect x="40" y="515" width="1000" height="180" rx="6" fill="#eef9f0" stroke="#1a7f37" stroke-width="2"/>
+    <text x="60" y="540" font-size="11" font-weight="700" fill="#1a7f37">STORAGE (our GCP project — vendor-neutral, stable)</text>
+
+    <!-- Filestore -->
+    <rect x="60" y="550" width="220" height="130" rx="4" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
+    <text x="170" y="570" text-anchor="middle" font-size="11" font-weight="700" fill="#0969da">FILESTORE (NFS RWX)</text>
+    <text x="170" y="586" text-anchor="middle" font-size="10.5" fill="#0969da">~$0.45/GiB-mo Enterprise</text>
+    <text x="80" y="608" font-size="11" fill="#0969da">/workspace/&lt;org&gt;/&lt;P&gt;/&lt;sid&gt;/</text>
+    <text x="80" y="624" font-size="10.5" fill="#0969da">├── memories/ (snapshot)</text>
+    <text x="80" y="638" font-size="10.5" fill="#0969da">├── proposals/</text>
+    <text x="80" y="652" font-size="10.5" fill="#0969da">├── .config/restish/apis.json</text>
+    <text x="80" y="666" font-size="10.5" fill="#0969da">└── .claude/projects/&lt;sid&gt;.jsonl</text>
+
+    <!-- GCS canonical -->
+    <rect x="295" y="550" width="240" height="130" rx="4" fill="#dafbe1" stroke="#1a7f37" stroke-width="1.5"/>
+    <text x="415" y="570" text-anchor="middle" font-size="11" font-weight="700" fill="#1a7f37">GCS CANONICAL MEMORY</text>
+    <text x="415" y="586" text-anchor="middle" font-size="10.5" fill="#1a7f37">~$0.020/GiB-mo Standard</text>
+    <text x="315" y="608" font-size="11" fill="#1a7f37">/memory/&lt;org_id&gt;/</text>
+    <text x="315" y="622" font-size="10.5" fill="#1a7f37">├── org/{tools,drugs}/&lt;k&gt;.md</text>
+    <text x="315" y="636" font-size="10.5" fill="#1a7f37">└── pharmacy/&lt;P&gt;/</text>
+    <text x="315" y="650" font-size="10.5" fill="#1a7f37">      ├── patients/&lt;pid&gt;.md</text>
+    <text x="315" y="664" font-size="10.5" fill="#1a7f37">      ├── prescribers/&lt;npi&gt;.md</text>
+    <text x="315" y="676" font-size="10.5" fill="#1a7f37">      └── insurance/&lt;bp&gt;.md</text>
+
+    <!-- GCS skills (FUSE) -->
+    <rect x="550" y="550" width="220" height="130" rx="4" fill="#f7e8ff" stroke="#6e5494" stroke-width="1.5"/>
+    <text x="660" y="570" text-anchor="middle" font-size="11" font-weight="700" fill="#6e5494">GCS SKILLS BUNDLE</text>
+    <text x="660" y="586" text-anchor="middle" font-size="10.5" fill="#6e5494">read-only via FUSE mount</text>
+    <text x="570" y="608" font-size="11" fill="#6e5494">/skills/&lt;version&gt;/</text>
+    <text x="570" y="622" font-size="10.5" fill="#6e5494">├── carrier-rules/</text>
+    <text x="570" y="636" font-size="10.5" fill="#6e5494">├── fdb-screen/</text>
+    <text x="570" y="650" font-size="10.5" fill="#6e5494">└── ... (~150MB total)</text>
+    <text x="570" y="668" font-size="10" fill="#6e5494" font-style="italic">cached on first read per replica</text>
+
+    <!-- GCS coldline -->
+    <rect x="785" y="550" width="240" height="130" rx="4" fill="#f1f3f5" stroke="#57606a" stroke-width="1.5"/>
+    <text x="905" y="570" text-anchor="middle" font-size="11" font-weight="700" fill="#57606a">GCS COLDLINE (archive)</text>
+    <text x="905" y="586" text-anchor="middle" font-size="10.5" fill="#57606a">~$0.004/GiB-mo</text>
+    <text x="805" y="608" font-size="11" fill="#57606a">Auto-tier via Object Lifecycle:</text>
+    <text x="805" y="624" font-size="10.5" fill="#57606a">• Memory entries &gt;30d → Coldline</text>
+    <text x="805" y="638" font-size="10.5" fill="#57606a">• Transcripts &gt;90d → Coldline</text>
+    <text x="805" y="652" font-size="10.5" fill="#57606a">• Compliance retention 7yr</text>
+    <text x="805" y="668" font-size="10.5" fill="#57606a">  (HIPAA-aligned)</text>
+
+    <!-- External APIs box -->
+    <rect x="40" y="710" width="1000" height="0" stroke-width="0"/>
+  </svg>
+
+  <h3>Notable properties of this topology</h3>
+  <ul>
+    <li><strong>Frontend</strong> only ever talks HTTPS to Backend. Never directly to sandbox or storage. The org_id claim in the JWT is the routing key.</li>
+    <li><strong>Backend</strong> is Cloud Run regular service (request-driven, scales to zero on idle). Different from the sandbox tier which is worker pools (always-on, pull-based).</li>
+    <li><strong>Sandbox fleet</strong> is workload-specific. Active sessions hold a lease. waiting_cold sessions consume zero compute — only their workspace persists on Filestore.</li>
+    <li><strong>Inngest functions</strong> handle durable cross-replica work: cold-revive (any replica) and TTL sweeper (cron). They write to GCS canonical and Filestore equally because both are shared resources.</li>
+    <li><strong>Storage layer</strong> is the durable backing. Compute is interchangeable; storage is stable.</li>
+  </ul>
+</section>
+
+<!-- ================================================ STORAGE ARCHITECTURE -->
+<section class="panel" data-panel="storage">
+  <h2>Storage architecture — two tiers with explicit roles</h2>
+  <p>The re-architecture puts each storage need on the primitive that best matches its access pattern.</p>
+
+  <h3>Tier 1: Filestore (hot)</h3>
+  <table>
+    <tr><th>Property</th><th>Value</th></tr>
+    <tr><td>Primitive</td><td>GCP Filestore Enterprise (NFSv3)</td></tr>
+    <tr><td>Access mode</td><td>ReadWriteMany — any number of Cloud Run replicas mount the same export</td></tr>
+    <tr><td>Latency</td><td>Sub-millisecond — true POSIX FS</td></tr>
+    <tr><td>Cost</td><td>$0.45/GiB-mo Enterprise tier (capacity-provisioned)</td></tr>
+    <tr><td>What lives here</td><td>Per-session workspace: <code>memories/</code> projection, <code>proposals/</code>, <code>.config/restish/apis.json</code>, <code>.claude/projects/&lt;sid&gt;.jsonl</code></td></tr>
+    <tr><td>Lifetime</td><td>Created at session provisioning, persists through waiting_cold + cold_reviving, deleted at finalize_session</td></tr>
+    <tr><td>Volume profile</td><td><strong>Bounded.</strong> Equals (active + waiting_hot + waiting_cold sessions) × ~100MB per session</td></tr>
+    <tr><td>Capacity at 5K-session scale</td><td>~500-700 GB working set</td></tr>
+    <tr><td>HIPAA</td><td>Covered under GCP BAA</td></tr>
+    <tr><td>Caveats</td><td>NFS no-locking is forced by Cloud Run mount (no fcntl.flock). Workspace is single-writer-by-convention (lease enforces this).</td></tr>
+  </table>
+
+  <h3>Tier 2: GCS (persistent)</h3>
+  <table>
+    <tr><th>Property</th><th>Value</th></tr>
+    <tr><td>Primitive</td><td>Google Cloud Storage Standard, per-org bucket prefix</td></tr>
+    <tr><td>Access mode</td><td>Multi-writer with optimistic concurrency via if-generation-match</td></tr>
+    <tr><td>Latency</td><td>50-300ms first read, sub-ms after FUSE cache (or always 50-300ms via API)</td></tr>
+    <tr><td>Cost</td><td>$0.020/GiB-mo Standard, $0.004/GiB-mo Coldline (after auto-tier)</td></tr>
+    <tr><td>What lives here</td><td>Canonical memory entries (signed, append-only, dated). Final SDK transcripts (post-finalize). Audit archives.</td></tr>
+    <tr><td>Lifetime</td><td>Permanent until TTL-swept (14d for live entries) or auto-tiered to Coldline (30d) or compliance-retained (7yr)</td></tr>
+    <tr><td>Volume profile</td><td><strong>Unbounded.</strong> Grows with accumulated learning; managed by TTL.</td></tr>
+    <tr><td>Capacity at 5K-session-scale fleet</td><td>~50-200 GB Standard + N TB Coldline (compliance retention)</td></tr>
+    <tr><td>HIPAA</td><td>Covered under GCP BAA. Standard server-side encryption.</td></tr>
+    <tr><td>Caveats</td><td>Object semantics, not POSIX — no flock, no in-place edit, no append. Use if-generation-match for atomicity. Each write is a full object replacement.</td></tr>
+  </table>
+
+  <h3>How the tiers interact</h3>
+  <pre>SESSION START (pre-task)
+  1. Create workspace dir on Filestore: /workspace/&lt;org&gt;/&lt;P&gt;/&lt;sid&gt;/
+  2. Memory selector reads canonical from GCS (per-org bucket)
+     → Filters by workflow.memory_scope.read + role + pharmacy
+     → Copies subset to Filestore: workspace/memories/...
+     → Writes manifest to workspace/.memory-manifest.json
+  3. Skills bundle: symlinked from GCS-FUSE-mount → workspace/.claude/skills/
+  4. Bearer minted → workspace/.config/restish/apis.json
+
+SESSION ACTIVE (during work)
+  - All reads/writes hit Filestore. GCS is NOT touched.
+  - SDK JSONL transcript writes to Filestore (sub-ms).
+  - Memory edits append to Filestore workspace/memories/...
+  - Skills reads cached from GCS FUSE (sub-ms after first hit).
+
+SESSION END (post-task)
+  1. Memory merger walks Filestore workspace/memories/
+  2. For each modified file: extract added bytes (vs manifest snapshot)
+  3. Wrap in &lt;!-- entry: --&gt; block with actor + role + ts
+  4. Atomic write to GCS canonical via if-generation-match
+  5. Final transcript uploaded to GCS transcripts bucket
+  6. Filestore workspace rmtree'd
+
+LATER (cron)
+  - TTL sweeper walks GCS canonical, prunes entries &gt; 14d
+  - Object Lifecycle auto-moves entries &gt; 30d → Coldline
+  - Object Lifecycle auto-deletes Coldline &gt; 7yr (compliance window)</pre>
+
+  <h3>Why not GCS for everything?</h3>
+  <p>If we put workspace state on GCS (whether via FUSE or API), three things break:</p>
+  <ol>
+    <li><strong>SDK transcript JSONL</strong> writes hundreds of times per turn. Each FUSE write = full object rewrite under the hood. Latency + cost both bad.</li>
+    <li><strong>Per-session lock semantics</strong> — fcntl.flock and atomic open/close that the SDK assumes don't translate cleanly to object storage.</li>
+    <li><strong>Latency budget on hot ops</strong> — every memory read during the session would be 50-300ms instead of sub-ms.</li>
+  </ol>
+  <p>By having Filestore as the hot tier and GCS as the cold tier, each storage primitive does what it's designed for. The boundary is exactly two events per session: snapshot read at start, merge write at end.</p>
+
+  <h3>Why not Filestore for everything?</h3>
+  <p>If we put canonical memory on Filestore too, two things bite:</p>
+  <ol>
+    <li><strong>Cost.</strong> Filestore Enterprise is 22x more expensive per GB than GCS Standard. Canonical memory grows unbounded over time. At a year of accumulation, you're paying for terabytes at $0.45/GiB instead of $0.020/GiB.</li>
+    <li><strong>Migration.</strong> If we ever leave GCP, GCS-to-S3 is a one-day rsync. Filestore-to-EFS is significantly more involved (need to spin up intermediate compute, copy via NFS+rsync).</li>
+  </ol>
+</section>
+
+<!-- ================================================ GCS FUSE DEEP DIVE -->
+<section class="panel" data-panel="gcsfuse">
+  <h2>GCS FUSE deep dive</h2>
+  <p>GCS FUSE (now branded "Cloud Storage FUSE") is a FUSE filesystem driver that mounts a GCS bucket as a directory. Originally a Google open-source project, now a supported GCP product with native Cloud Run + GKE integration.</p>
+
+  <h3>What it actually is</h3>
+  <ul>
+    <li>Mounts a GCS bucket at a local mount point (e.g., <code>/mnt/canonical-memory/</code>)</li>
+    <li>Translates POSIX FS operations to GCS API calls</li>
+    <li>Caches metadata, file content, and stat info locally for performance</li>
+    <li>Available as a Cloud Run volume mount (GA 2024) — no need to install the FUSE driver yourself</li>
+    <li>HIPAA-eligible (it's just GCS underneath)</li>
+  </ul>
+
+  <h3>Performance characteristics</h3>
+  <table class="compare-table">
+    <tr><th>Operation</th><th>Native FS (Filestore)</th><th>GCS FUSE (no cache)</th><th>GCS FUSE (cached)</th></tr>
+    <tr><td>Read 1KB file</td><td>&lt;1ms</td><td>50-300ms (one GET)</td><td>&lt;1ms</td></tr>
+    <tr><td>Read 1MB file</td><td>1-5ms</td><td>200ms-2s (one GET)</td><td>&lt;5ms</td></tr>
+    <tr><td>List directory (10 files)</td><td>&lt;1ms</td><td>100-300ms (one LIST)</td><td>&lt;1ms (LIST cached)</td></tr>
+    <tr><td>List directory (1000 files)</td><td>1-5ms</td><td>1-5s (paginated LIST)</td><td>&lt;10ms</td></tr>
+    <tr><td>Write 1KB file</td><td>&lt;1ms</td><td>50-300ms (one PUT)</td><td>50-300ms (no write cache)</td></tr>
+    <tr><td>Append 100B to 1MB file</td><td>&lt;1ms</td><td>200ms-2s (read + rewrite full object)</td><td>200ms-2s (read + rewrite full object)</td></tr>
+    <tr><td>fcntl.flock</td><td>Works (Filestore is no-lock; other NFS supports)</td><td>NOT SUPPORTED</td><td>NOT SUPPORTED</td></tr>
+    <tr><td>os.rename atomicity</td><td>Atomic</td><td>Effectively atomic at object level</td><td>Effectively atomic at object level</td></tr>
+  </table>
+
+  <h3>The caching layer matters a lot</h3>
+  <p>Two caches are configurable:</p>
+  <ul>
+    <li><strong>Metadata cache</strong>: stat info (file existence, size, mtime). TTL configurable. Default short (~1 minute) to avoid serving stale stats.</li>
+    <li><strong>File content cache</strong>: actual file bytes. Stored on local SSD or in memory. Configurable size (max-size + per-file size). LRU eviction.</li>
+  </ul>
+  <p>With aggressive caching, FUSE for read-heavy mostly-static content (like our skills bundle) is essentially free after the first read. With minimal caching or write-heavy patterns, every operation hits GCS API.</p>
+
+  <h3>POSIX gaps that matter for our use case</h3>
+  <table>
+    <tr><th>POSIX feature</th><th>FUSE behavior</th><th>Impact on us</th></tr>
+    <tr><td>fcntl.flock / fcntl.lockf</td><td>Not supported</td><td>Memory merger can't use flock for atomic append. Use GCS if-generation-match instead (better anyway — distributed-aware).</td></tr>
+    <tr><td>open(O_APPEND)</td><td>"Works" but semantically broken — each append is read-modify-write of full object</td><td>Append-heavy patterns (SDK JSONL) are slow + expensive. Avoid FUSE for transcript writes.</td></tr>
+    <tr><td>Hard links</td><td>Not supported</td><td>Doesn't matter for us (no hard link patterns)</td></tr>
+    <tr><td>Symlinks</td><td>Supported (as object metadata)</td><td>Fine for skills bundle symlinks</td></tr>
+    <tr><td>mmap (reads)</td><td>Supported</td><td>Fine</td></tr>
+    <tr><td>mmap (writes)</td><td>Limited / fragile</td><td>Avoid — but we don't use it</td></tr>
+    <tr><td>Atomic rename</td><td>Object-level atomic via copy-then-delete</td><td>Mostly fine; not transactional under contention</td></tr>
+    <tr><td>Concurrent multi-writer</td><td>Last-writer-wins on object granularity</td><td>Need if-generation-match for our merger</td></tr>
+  </table>
+
+  <h3>Costs (often-forgotten)</h3>
+  <p>FUSE adds GCS API call costs that wouldn't exist with Filestore:</p>
+  <ul>
+    <li><strong>Class A operations</strong> (writes, list, etc.): $0.05 per 10K ops</li>
+    <li><strong>Class B operations</strong> (reads): $0.004 per 10K ops</li>
+    <li>For a session that reads ~50 small files at start (50 GET ops) and writes ~5 at end (5 PUT ops): ~$0.0000025 per session in API costs. Negligible per session.</li>
+    <li>BUT — at 5K sessions/day × 50 reads + 5 writes = 275K ops/day = $0.001/day in API costs. Still negligible.</li>
+    <li>The real cost issue is if you mistakenly use FUSE for high-frequency operations (SDK transcript: hundreds of writes per turn × thousands of turns/day = millions of ops = nontrivial dollars). Don't.</li>
+  </ul>
+
+  <h3>HIPAA & security</h3>
+  <ul>
+    <li>FUSE driver itself is just a translation layer — no separate compliance scope</li>
+    <li>Underlying GCS is HIPAA-eligible</li>
+    <li>Encryption at rest (Google-managed or CMEK) handled at GCS layer, transparent to FUSE</li>
+    <li>Encryption in transit handled at GCS API layer, transparent to FUSE</li>
+    <li>IAM enforcement happens at GCS layer — FUSE inherits the GCS service account's permissions</li>
+  </ul>
+
+  <h3>Where GCS FUSE makes sense for us</h3>
+  <div class="callout success">
+    <strong>Skills bundle (read-only, large, slowly-changing).</strong> Mount the skills GCS bucket at <code>/mnt/skills/&lt;version&gt;/</code> on every Cloud Run replica. Read-only flag set. Aggressive metadata + file content caching. Symlinked into per-session workspace at provisioning time. <strong>Saves the 100-200ms per-session skills copy entirely.</strong>
+  </div>
+
+  <h3>Where it does NOT make sense</h3>
+  <div class="callout warn">
+    <strong>SDK transcript JSONL writes.</strong> The Claude CLI writes to <code>~/.claude/projects/&lt;cwd&gt;/&lt;sid&gt;.jsonl</code> hundreds of times per turn. Each write would trigger a full object rewrite via FUSE. Use Filestore (real append) for this.
+  </div>
+  <div class="callout warn">
+    <strong>Active workspace memory writes during session.</strong> Same write-amplification issue. Use Filestore.
+  </div>
+  <div class="callout warn">
+    <strong>Memory merger at session end.</strong> While technically possible via FUSE, the merger needs concurrency control (multiple sessions ending simultaneously, both touching the same canonical file). GCS native API + if-generation-match is more reliable than FUSE + workaround locks.
+  </div>
+
+  <h3>Verdict on GCS FUSE for our use case</h3>
+  <p><strong>Use it for one specific role: the read-only skills bundle mount.</strong> That role plays to all of FUSE's strengths (read-heavy, cacheable, large enough that copying-per-session is wasteful). Avoid it for everything else where the POSIX gaps or write-amplification would bite.</p>
+</section>
+
+<!-- ================================================ LIFECYCLE FLOW -->
+<section class="panel" data-panel="lifecycle">
+  <h2>End-to-end lifecycle flow</h2>
+  <p>Six phases, each with its own storage interaction profile. Click any phase pill below to step through, or use ← → keys.</p>
+
+  <div class="step-pills" id="phase-pills">
+    <span class="pills-label">Phase:</span>
+    <button data-phase="1" class="active">1 · Session created</button>
+    <button data-phase="2">2 · Pre-task injection</button>
+    <button data-phase="3">3 · Active work</button>
+    <button data-phase="4">4 · HITL pause</button>
+    <button data-phase="5">5 · Cold revive</button>
+    <button data-phase="6">6 · Post-task / finalize</button>
+    <span class="step-pills-nav">
+      <button id="phase-prev" disabled>← Prev</button>
+      <button id="phase-next">Next →</button>
+    </span>
+  </div>
+
+  <!-- PHASE 1 -->
+  <div class="phase-content active" data-phase="1">
+    <div class="phase-header">
+      <span class="phase-num">1</span>
+      <span class="phase-name">Session created</span>
+      <div class="phase-tagline">User clicks "start rx-flow" in the browser. Backend authenticates, picks an org DB, creates a session row, assigns a sandbox replica.</div>
+    </div>
+
+    <svg class="phase-svg" viewBox="0 0 1080 360" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="p1-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+        </marker>
+      </defs>
+
+      <!-- Browser -->
+      <rect x="20" y="20" width="180" height="50" rx="6" fill="#fff8e6" stroke="#bf8700" stroke-width="2"/>
+      <text x="110" y="42" text-anchor="middle" font-size="13" font-weight="600" fill="#bf8700">Browser</text>
+      <text x="110" y="58" text-anchor="middle" font-size="10.5" fill="#bf8700">click "Start rx-flow"</text>
+
+      <path d="M 205 45 L 245 45" stroke="#57606a" stroke-width="1.8" marker-end="url(#p1-arr)"/>
+      <text x="225" y="38" text-anchor="middle" font-size="10" fill="#57606a">POST /sessions</text>
+
+      <!-- Backend -->
+      <rect x="250" y="20" width="200" height="50" rx="6" fill="#dde7f5" stroke="#0550ae" stroke-width="2"/>
+      <text x="350" y="42" text-anchor="middle" font-size="13" font-weight="600" fill="#0550ae">Backend</text>
+      <text x="350" y="58" text-anchor="middle" font-size="10.5" fill="#0550ae">org routing → access checks</text>
+
+      <path d="M 455 45 L 495 45" stroke="#57606a" stroke-width="1.8" marker-end="url(#p1-arr)"/>
+
+      <!-- AGI service -->
+      <rect x="500" y="20" width="200" height="50" rx="6" fill="#dde7f5" stroke="#0550ae" stroke-width="2"/>
+      <text x="600" y="42" text-anchor="middle" font-size="13" font-weight="600" fill="#0550ae">AGI service</text>
+      <text x="600" y="58" text-anchor="middle" font-size="10.5" fill="#0550ae">create session row, assign replica</text>
+
+      <path d="M 705 45 L 745 45" stroke="#8250df" stroke-width="1.8" marker-end="url(#p1-arr)"/>
+      <text x="725" y="38" text-anchor="middle" font-size="10" fill="#8250df">spawn</text>
+
+      <!-- Sandbox replica -->
+      <rect x="750" y="20" width="220" height="50" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="860" y="42" text-anchor="middle" font-size="13" font-weight="600" fill="#8250df">Cloud Run sandbox replica</text>
+      <text x="860" y="58" text-anchor="middle" font-size="10.5" fill="#8250df">acquire lease, prepare workspace</text>
+
+      <!-- Storage actions -->
+      <text x="540" y="120" text-anchor="middle" font-size="13" font-weight="700" fill="#57606a">STORAGE ACTIONS THIS PHASE</text>
+
+      <rect x="20" y="140" width="320" height="80" rx="6" fill="#ddf4ff" stroke="#0969da"/>
+      <text x="180" y="162" text-anchor="middle" font-size="12" font-weight="700" fill="#0969da">FILESTORE</text>
+      <text x="40" y="180" font-size="11" fill="#0969da">• mkdir /workspace/&lt;org&gt;/&lt;P&gt;/&lt;sid&gt;/</text>
+      <text x="40" y="196" font-size="11" fill="#0969da">• mkdir memories/, proposals/, .config/</text>
+      <text x="40" y="212" font-size="11" fill="#0969da">• atomic — first write of session</text>
+
+      <rect x="380" y="140" width="320" height="80" rx="6" fill="#dafbe1" stroke="#1a7f37"/>
+      <text x="540" y="162" text-anchor="middle" font-size="12" font-weight="700" fill="#1a7f37">GCS CANONICAL</text>
+      <text x="400" y="180" font-size="11" fill="#1a7f37">• not touched yet (next phase)</text>
+      <text x="400" y="196" font-size="11" fill="#1a7f37">  this phase is purely DB + Filestore</text>
+
+      <rect x="740" y="140" width="320" height="80" rx="6" fill="#f7e8ff" stroke="#6e5494"/>
+      <text x="900" y="162" text-anchor="middle" font-size="12" font-weight="700" fill="#6e5494">GCS SKILLS (FUSE)</text>
+      <text x="760" y="180" font-size="11" fill="#6e5494">• already mounted on this replica</text>
+      <text x="760" y="196" font-size="11" fill="#6e5494">  (mount happened at replica start,</text>
+      <text x="760" y="212" font-size="11" fill="#6e5494">  not per-session)</text>
+
+      <!-- DB -->
+      <text x="540" y="260" text-anchor="middle" font-size="13" font-weight="700" fill="#57606a">DATABASE ACTIONS</text>
+      <rect x="100" y="280" width="880" height="60" rx="6" fill="#fafafa" stroke="#8c959f"/>
+      <text x="120" y="298" font-size="11.5" fill="#57606a">• INSERT into agi_sessions: (id, org_id, actor_id, pharmacy_id, workflow_id, status='provisioning', extra_data={workspace_path, context})</text>
+      <text x="120" y="314" font-size="11.5" fill="#57606a">• Acquire lease: UPDATE lease_holder_* WHERE expires_at &lt; now() (replica X holds it)</text>
+      <text x="120" y="330" font-size="11.5" fill="#57606a">• Audit event: session_created with manifest of workflow + role + pharmacy</text>
+    </svg>
+
+    <h4>What this means</h4>
+    <ul>
+      <li>The session now has a row in the org DB and a workspace path on Filestore.</li>
+      <li>Lease is held by replica X — only X can spawn the orchestrator subprocess for this session.</li>
+      <li>No GCS canonical interaction yet. That happens in Phase 2.</li>
+      <li>Skills mount is a replica-level concern (mounted once at replica boot, not per-session).</li>
+    </ul>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="phase-content" data-phase="2">
+    <div class="phase-header">
+      <span class="phase-num">2</span>
+      <span class="phase-name">Pre-task injection</span>
+      <div class="phase-tagline">Skills, agent definitions, memory snapshot, orchestrator system prompt — all assembled into the workspace before the SDK subprocess spawns. Prep is the expensive bit; execution is fast once it starts.</div>
+    </div>
+
+    <svg class="phase-svg" viewBox="0 0 1080 480" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="p2-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+        </marker>
+      </defs>
+
+      <!-- AGI service running pre-task -->
+      <rect x="320" y="20" width="440" height="50" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="540" y="42" text-anchor="middle" font-size="14" font-weight="700" fill="#8250df">AGI service: pre-task injection</text>
+      <text x="540" y="58" text-anchor="middle" font-size="10.5" fill="#8250df">orchestrating writes into workspace before subprocess spawn</text>
+
+      <!-- 4 inputs -->
+      <text x="540" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#57606a">FOUR PARALLEL INPUTS</text>
+
+      <!-- 1. Skills -->
+      <rect x="20" y="120" width="240" height="100" rx="6" fill="#f7e8ff" stroke="#6e5494" stroke-width="2"/>
+      <text x="140" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#6e5494">SKILLS</text>
+      <text x="40" y="162" font-size="11" fill="#6e5494">SOURCE: GCS bucket via FUSE</text>
+      <text x="40" y="178" font-size="11" fill="#6e5494">  /mnt/skills/&lt;version&gt;/</text>
+      <text x="40" y="196" font-size="11" fill="#6e5494">ACTION: ln -s /mnt/skills/...</text>
+      <text x="40" y="208" font-size="11" fill="#6e5494">    workspace/.claude/skills/</text>
+
+      <!-- 2. Agent MDs -->
+      <rect x="280" y="120" width="240" height="100" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="400" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#8250df">AGENT MDs</text>
+      <text x="300" y="162" font-size="11" fill="#8250df">SOURCE: workflow registry</text>
+      <text x="300" y="178" font-size="11" fill="#8250df">  (in container image)</text>
+      <text x="300" y="196" font-size="11" fill="#8250df">ACTION: copy .md files to</text>
+      <text x="300" y="208" font-size="11" fill="#8250df">    workspace/.claude/agents/</text>
+
+      <!-- 3. Memory snapshot -->
+      <rect x="540" y="120" width="240" height="100" rx="6" fill="#dafbe1" stroke="#1a7f37" stroke-width="2"/>
+      <text x="660" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#1a7f37">MEMORY SNAPSHOT</text>
+      <text x="560" y="162" font-size="11" fill="#1a7f37">SOURCE: GCS canonical (per-org)</text>
+      <text x="560" y="178" font-size="11" fill="#1a7f37">  /memory/&lt;org&gt;/...</text>
+      <text x="560" y="196" font-size="11" fill="#1a7f37">ACTION: gcs.get(keys) + write to</text>
+      <text x="560" y="208" font-size="11" fill="#1a7f37">    workspace/memories/</text>
+
+      <!-- 4. Bearer + apis.json -->
+      <rect x="800" y="120" width="240" height="100" rx="6" fill="#fff8e6" stroke="#bf8700" stroke-width="2"/>
+      <text x="920" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#bf8700">BEARER + APIS.JSON</text>
+      <text x="820" y="162" font-size="11" fill="#bf8700">SOURCE: WorkOS internal mint</text>
+      <text x="820" y="178" font-size="11" fill="#bf8700">  (1h TTL)</text>
+      <text x="820" y="196" font-size="11" fill="#bf8700">ACTION: write apis.json to</text>
+      <text x="820" y="208" font-size="11" fill="#bf8700">    workspace/.config/restish/</text>
+
+      <!-- Arrows down to workspace -->
+      <path d="M 140 225 L 540 280" stroke="#57606a" stroke-width="1.5" marker-end="url(#p2-arr)"/>
+      <path d="M 400 225 L 540 280" stroke="#57606a" stroke-width="1.5" marker-end="url(#p2-arr)"/>
+      <path d="M 660 225 L 540 280" stroke="#57606a" stroke-width="1.5" marker-end="url(#p2-arr)"/>
+      <path d="M 920 225 L 540 280" stroke="#57606a" stroke-width="1.5" marker-end="url(#p2-arr)"/>
+
+      <!-- Workspace -->
+      <rect x="280" y="285" width="520" height="80" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+      <text x="540" y="307" text-anchor="middle" font-size="13" font-weight="700" fill="#0969da">FILESTORE: /workspace/&lt;org&gt;/&lt;P&gt;/&lt;sid&gt;/</text>
+      <text x="540" y="324" text-anchor="middle" font-size="10.5" fill="#0969da">.claude/skills/ (symlinked) · .claude/agents/ · memories/ · proposals/ · .config/restish/apis.json</text>
+      <text x="540" y="340" text-anchor="middle" font-size="10.5" fill="#0969da">+ .memory-manifest.json (record of which keys were projected)</text>
+      <text x="540" y="356" text-anchor="middle" font-size="10.5" fill="#0969da" font-style="italic">all four inputs converge here; this is the sandbox's view of the world</text>
+
+      <!-- Bottom: orchestrator spawn -->
+      <path d="M 540 370 L 540 400" stroke="#8250df" stroke-width="2" marker-end="url(#p2-arr)"/>
+      <text x="555" y="392" font-size="11" fill="#8250df">spawn ClaudeSDKClient</text>
+
+      <rect x="320" y="405" width="440" height="50" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="540" y="427" text-anchor="middle" font-size="13" font-weight="700" fill="#8250df">Orchestrator subprocess</text>
+      <text x="540" y="443" text-anchor="middle" font-size="10.5" fill="#8250df">cwd=workspace · system_prompt rendered from workflow YAML · agents={...} from registry</text>
+    </svg>
+
+    <h4>The four inputs in detail</h4>
+    <div class="storage-ops">
+      <div class="storage-op">
+        <span class="op-tier skills">skills</span>
+        <div class="op-name">Skills bundle (~150MB)</div>
+        <div class="op-desc">GCS FUSE mount on the replica. Symlinked into workspace.claude/skills/. Cached after first read across the entire replica's lifetime — sub-ms per file thereafter.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier hot">hot</span>
+        <div class="op-name">Agent MDs (~50KB)</div>
+        <div class="op-desc">Bundled in the container image. Copied to workspace/.claude/agents/. Each MD is per-expert (intake, billing, etc.) — small, fast.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier persistent">persistent</span>
+        <div class="op-name">Memory snapshot</div>
+        <div class="op-desc">Memory selector reads canonical GCS bucket. Pulls subset per (workflow.memory_scope.read × role × pharmacy × context_keys). Copies to workspace/memories/. Writes manifest with byte ranges + SHA256.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier hot">hot</span>
+        <div class="op-name">Bearer token</div>
+        <div class="op-desc">Internal HS256 mint, 1h TTL. Written to workspace/.config/restish/apis.json. Cross-platform (Linux + macOS path).</div>
+      </div>
+    </div>
+
+    <h4>What's NOT happening this phase</h4>
+    <ul>
+      <li>No SDK subprocess running yet</li>
+      <li>No orchestrator turn yet</li>
+      <li>No restish API call yet</li>
+      <li>No expert spawn yet</li>
+    </ul>
+    <p>Pre-task is purely setup. Once the workspace is fully assembled, the orchestrator subprocess spawns with <code>cwd=workspace</code> and starts running.</p>
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="phase-content" data-phase="3">
+    <div class="phase-header">
+      <span class="phase-num">3</span>
+      <span class="phase-name">Active work</span>
+      <div class="phase-tagline">Orchestrator runs. Calls experts. Experts call restish. Memories get written. The hot loop where 90% of session wall-clock happens.</div>
+    </div>
+
+    <svg class="phase-svg" viewBox="0 0 1080 460" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="p3-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+        </marker>
+      </defs>
+
+      <!-- Top: orchestrator -->
+      <rect x="380" y="20" width="320" height="60" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="540" y="44" text-anchor="middle" font-size="14" font-weight="700" fill="#8250df">Orchestrator subprocess</text>
+      <text x="540" y="62" text-anchor="middle" font-size="10.5" fill="#8250df">drives the workflow, dispatches experts via invoke_expert MCP</text>
+
+      <!-- expert spawn -->
+      <path d="M 540 85 L 540 115" stroke="#8250df" stroke-width="2" marker-end="url(#p3-arr)"/>
+      <text x="555" y="105" font-size="10" fill="#8250df">invoke_expert</text>
+
+      <rect x="380" y="120" width="320" height="60" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="540" y="144" text-anchor="middle" font-size="14" font-weight="700" fill="#8250df">Expert subprocess (e.g. billing)</text>
+      <text x="540" y="162" text-anchor="middle" font-size="10.5" fill="#8250df">single-shot Claude SDK query() with expert MD as system_prompt</text>
+
+      <!-- expert tools -->
+      <path d="M 380 165 L 290 220" stroke="#57606a" stroke-width="1.5" marker-end="url(#p3-arr)"/>
+      <path d="M 540 185 L 540 220" stroke="#57606a" stroke-width="1.5" marker-end="url(#p3-arr)"/>
+      <path d="M 700 165 L 790 220" stroke="#57606a" stroke-width="1.5" marker-end="url(#p3-arr)"/>
+
+      <!-- Read memories -->
+      <rect x="180" y="225" width="220" height="80" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+      <text x="290" y="247" text-anchor="middle" font-size="12" font-weight="700" fill="#0969da">Read memories</text>
+      <text x="200" y="266" font-size="11" fill="#0969da">cat workspace/memories/</text>
+      <text x="200" y="280" font-size="11" fill="#0969da">  insurance/&lt;bin_pcn&gt;.md</text>
+      <text x="200" y="294" font-size="10.5" fill="#0969da" font-style="italic">sub-ms — local Filestore</text>
+
+      <!-- Restish call -->
+      <rect x="430" y="225" width="220" height="80" rx="6" fill="#fff8e6" stroke="#bf8700" stroke-width="2"/>
+      <text x="540" y="247" text-anchor="middle" font-size="12" font-weight="700" fill="#bf8700">Restish API call</text>
+      <text x="450" y="266" font-size="11" fill="#bf8700">restish carelink list-pt</text>
+      <text x="450" y="280" font-size="11" fill="#bf8700">  → bearer from apis.json</text>
+      <text x="450" y="294" font-size="10.5" fill="#bf8700" font-style="italic">→ CareLink API → Permit.io check</text>
+
+      <!-- Write memory -->
+      <rect x="680" y="225" width="220" height="80" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+      <text x="790" y="247" text-anchor="middle" font-size="12" font-weight="700" fill="#0969da">Append memory</text>
+      <text x="700" y="266" font-size="11" fill="#0969da">echo "..." &gt;&gt; workspace/</text>
+      <text x="700" y="280" font-size="11" fill="#0969da">  memories/drugs/&lt;ndc&gt;.md</text>
+      <text x="700" y="294" font-size="10.5" fill="#0969da" font-style="italic">sub-ms — local Filestore</text>
+
+      <!-- back to orchestrator -->
+      <path d="M 540 310 L 540 340" stroke="#57606a" stroke-width="1.5" marker-end="url(#p3-arr)"/>
+      <text x="555" y="332" font-size="10" fill="#57606a">tool_result</text>
+
+      <rect x="380" y="345" width="320" height="50" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="540" y="367" text-anchor="middle" font-size="13" font-weight="700" fill="#8250df">Orchestrator next turn</text>
+      <text x="540" y="383" text-anchor="middle" font-size="10.5" fill="#8250df">SDK writes to .claude/projects/&lt;sid&gt;.jsonl on Filestore</text>
+
+      <!-- loop arrow -->
+      <path d="M 380 370 Q 280 200 380 50" stroke="#57606a" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#p3-arr)"/>
+      <text x="280" y="220" font-size="10" fill="#57606a">loop until done or HITL</text>
+
+      <!-- Bottom note -->
+      <text x="540" y="430" text-anchor="middle" font-size="12" font-weight="600" fill="#57606a">During Phase 3: GCS canonical is NEVER touched. All R/W is to Filestore (workspace) + Skills FUSE (cached) + Restish API + Anthropic API.</text>
+    </svg>
+
+    <h4>Per-turn storage operations</h4>
+    <div class="storage-ops">
+      <div class="storage-op">
+        <span class="op-tier hot">hot</span>
+        <div class="op-name">SDK transcript writes</div>
+        <div class="op-desc">SDK writes to <code>workspace/.claude/projects/&lt;cwd&gt;/&lt;sid&gt;.jsonl</code> on every assistant message, every tool_use, every tool_result. Hundreds of writes per turn. <strong>Why we need Filestore — GCS FUSE would cripple this.</strong></div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier hot">hot</span>
+        <div class="op-name">Memory file reads</div>
+        <div class="op-desc">Experts read <code>workspace/memories/&lt;bucket&gt;/&lt;key&gt;.md</code>. All from local Filestore copy. Sub-ms.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier hot">hot</span>
+        <div class="op-name">Memory file appends</div>
+        <div class="op-desc">Experts append notes to memory files in workspace. Local Filestore. The merger reconciles to canonical only at session end.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier skills">skills</span>
+        <div class="op-name">Skills file reads</div>
+        <div class="op-desc">Cached on first read via FUSE. Sub-ms thereafter.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier idle">idle</span>
+        <div class="op-name">GCS canonical</div>
+        <div class="op-desc">Untouched. The session is operating against a frozen snapshot.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier idle">idle</span>
+        <div class="op-name">GCS Coldline</div>
+        <div class="op-desc">Untouched.</div>
+      </div>
+    </div>
+
+    <h4>Why this phase is on Filestore-only</h4>
+    <ul>
+      <li>Frequent writes (transcript JSONL, memory appends, restish output captures) need real POSIX append semantics</li>
+      <li>Latency matters at the per-turn level — 50-300ms GCS round-trip per write would slow turn-time noticeably</li>
+      <li>The session is "operating against a frozen snapshot" of canonical memory — no need to revalidate against GCS during work</li>
+      <li>Append-only invariant is enforced at the merge boundary (Phase 6), not during this phase</li>
+    </ul>
+  </div>
+
+  <!-- PHASE 4 -->
+  <div class="phase-content" data-phase="4">
+    <div class="phase-header">
+      <span class="phase-num">4</span>
+      <span class="phase-name">HITL pause (waiting_hot → waiting_cold)</span>
+      <div class="phase-tagline">An operator question or mutating-Bash approval blocks the session. Hot wait for ~60s; if no answer, cold-park (subprocess exits, workspace persists).</div>
+    </div>
+
+    <svg class="phase-svg" viewBox="0 0 1080 480" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="p4-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+        </marker>
+        <marker id="p4-arr-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#cf222e"/>
+        </marker>
+      </defs>
+
+      <!-- Top: HITL trigger -->
+      <rect x="320" y="20" width="440" height="50" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="540" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#8250df">Expert wants AskUserQuestion OR mutating Bash</text>
+      <text x="540" y="58" text-anchor="middle" font-size="10.5" fill="#8250df">PreToolUse hook intercepts; gate set; hot timer starts (60s)</text>
+
+      <!-- Hot wait -->
+      <path d="M 540 75 L 540 105" stroke="#57606a" stroke-width="2" marker-end="url(#p4-arr)"/>
+      <text x="555" y="95" font-size="11" fill="#57606a">await</text>
+
+      <rect x="320" y="110" width="440" height="60" rx="6" fill="#fff8c5" stroke="#bf8700" stroke-width="2"/>
+      <text x="540" y="132" text-anchor="middle" font-size="13" font-weight="700" fill="#bf8700">waiting_hot (subprocess parked, lease held)</text>
+      <text x="540" y="148" text-anchor="middle" font-size="10.5" fill="#bf8700">Frontend SSE shows the question. Operator may answer in window.</text>
+      <text x="540" y="164" text-anchor="middle" font-size="10.5" fill="#bf8700">If decided: continue session (back to Phase 3). If timeout: cold-park.</text>
+
+      <!-- Two paths -->
+      <path d="M 380 175 L 200 240" stroke="#1a7f37" stroke-width="1.8" marker-end="url(#p4-arr)"/>
+      <text x="240" y="220" font-size="11" font-weight="600" fill="#1a7f37">decided in window</text>
+
+      <path d="M 700 175 L 880 240" stroke="#cf222e" stroke-width="1.8" marker-end="url(#p4-arr-red)"/>
+      <text x="850" y="220" font-size="11" font-weight="600" fill="#cf222e">timeout → cold-park</text>
+
+      <!-- Path A: continue -->
+      <rect x="40" y="245" width="320" height="80" rx="6" fill="#dafbe1" stroke="#1a7f37" stroke-width="2"/>
+      <text x="200" y="267" text-anchor="middle" font-size="12" font-weight="700" fill="#1a7f37">Continue (back to Phase 3)</text>
+      <text x="60" y="286" font-size="11" fill="#1a7f37">• subprocess unparked</text>
+      <text x="60" y="302" font-size="11" fill="#1a7f37">• tool_result returned</text>
+      <text x="60" y="318" font-size="11" fill="#1a7f37">• workspace + lease unchanged</text>
+
+      <!-- Path B: cold park -->
+      <rect x="720" y="245" width="320" height="160" rx="6" fill="#ffebe9" stroke="#cf222e" stroke-width="2"/>
+      <text x="880" y="267" text-anchor="middle" font-size="12" font-weight="700" fill="#cf222e">Cold-park</text>
+      <text x="740" y="286" font-size="11" fill="#cf222e">• subprocess EXITS cleanly</text>
+      <text x="740" y="302" font-size="11" fill="#cf222e">• status='waiting_cold'</text>
+      <text x="740" y="318" font-size="11" fill="#cf222e">• pending_question/pending_approval</text>
+      <text x="740" y="332" font-size="11" fill="#cf222e">  persisted to extra_data</text>
+      <text x="740" y="348" font-size="11" fill="#cf222e">• lease released (no active replica)</text>
+      <text x="740" y="364" font-size="11" fill="#cf222e">• Filestore workspace stays intact</text>
+      <text x="740" y="380" font-size="11" fill="#cf222e">• GCS untouched (memory still uncommitted)</text>
+      <text x="740" y="394" font-size="10" font-style="italic" fill="#cf222e">sandbox compute = $0 from this point</text>
+
+      <!-- Storage state at cold-park -->
+      <text x="540" y="430" text-anchor="middle" font-size="13" font-weight="700" fill="#57606a">STORAGE STATE AT COLD-PARK</text>
+      <rect x="100" y="440" width="280" height="30" rx="4" fill="#ddf4ff" stroke="#0969da"/>
+      <text x="240" y="460" text-anchor="middle" font-size="11" fill="#0969da">Filestore workspace: persists, intact</text>
+      <rect x="400" y="440" width="280" height="30" rx="4" fill="#dafbe1" stroke="#1a7f37"/>
+      <text x="540" y="460" text-anchor="middle" font-size="11" fill="#1a7f37">GCS canonical: untouched</text>
+      <rect x="700" y="440" width="280" height="30" rx="4" fill="#fafafa" stroke="#8c959f"/>
+      <text x="840" y="460" text-anchor="middle" font-size="11" fill="#57606a">DB: pending_question persisted</text>
+    </svg>
+
+    <h4>Why workspace persists during cold-park</h4>
+    <ul>
+      <li>The Filestore export is shared across all backend replicas. Whether the original replica X is still alive doesn't matter.</li>
+      <li>The session row points at the workspace path: <code>extra_data["workspace"] = "/workspace/&lt;org&gt;/&lt;P&gt;/&lt;sid&gt;/"</code></li>
+      <li>The SDK CLI's own session state (.jsonl transcript) is in the workspace. Any future SDK client with <code>resume=session_id</code> AND <code>cwd=workspace</code> picks up where it left off.</li>
+      <li>Memory writes from this session HAVE NOT YET been committed to canonical. They're staged in workspace/memories/. The merger doesn't run until Phase 6.</li>
+    </ul>
+
+    <h4>What gets lost if we abandoned cold-park (TTL hits 7 days)</h4>
+    <ul>
+      <li>The workspace's in-progress memory writes never reach canonical (the merger doesn't run for abandoned sessions)</li>
+      <li>The Filestore directory is rmtree'd</li>
+      <li>The session row is marked abandoned; audit event logged with timestamp</li>
+      <li>Any side-effects already executed (restish writes that happened earlier in the session) are NOT rolled back — they're already persisted in CareLink's domain DB</li>
+    </ul>
+  </div>
+
+  <!-- PHASE 5 -->
+  <div class="phase-content" data-phase="5">
+    <div class="phase-header">
+      <span class="phase-num">5</span>
+      <span class="phase-name">Cold revive</span>
+      <div class="phase-tagline">Operator answers. Inngest event fires. Any backend replica picks up the workspace from shared Filestore and spawns a fresh subprocess via SDK resume.</div>
+    </div>
+
+    <svg class="phase-svg" viewBox="0 0 1080 460" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="p5-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+        </marker>
+      </defs>
+
+      <!-- Operator -->
+      <rect x="20" y="20" width="200" height="50" rx="6" fill="#fff8e6" stroke="#bf8700" stroke-width="2"/>
+      <text x="120" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#bf8700">Operator answers</text>
+      <text x="120" y="58" text-anchor="middle" font-size="10.5" fill="#bf8700">click "Approve" / submit answer</text>
+
+      <path d="M 225 45 L 265 45" stroke="#57606a" stroke-width="1.8" marker-end="url(#p5-arr)"/>
+
+      <!-- Backend -->
+      <rect x="270" y="20" width="200" height="50" rx="6" fill="#dde7f5" stroke="#0550ae" stroke-width="2"/>
+      <text x="370" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#0550ae">Backend</text>
+      <text x="370" y="58" text-anchor="middle" font-size="10.5" fill="#0550ae">role check + DB write</text>
+
+      <path d="M 475 45 L 515 45" stroke="#57606a" stroke-width="1.8" marker-end="url(#p5-arr)"/>
+      <text x="495" y="38" text-anchor="middle" font-size="10" fill="#57606a">dispatch</text>
+
+      <!-- Inngest -->
+      <rect x="520" y="20" width="220" height="50" rx="6" fill="#fff8c5" stroke="#bf8700" stroke-width="2"/>
+      <text x="630" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#bf8700">Inngest fires cold-revive</text>
+      <text x="630" y="58" text-anchor="middle" font-size="10.5" fill="#bf8700">any worker picks it up</text>
+
+      <path d="M 745 45 L 785 45" stroke="#57606a" stroke-width="1.8" marker-end="url(#p5-arr)"/>
+
+      <!-- Replica Y -->
+      <rect x="790" y="20" width="240" height="50" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="910" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#8250df">Replica Y (different from X)</text>
+      <text x="910" y="58" text-anchor="middle" font-size="10.5" fill="#8250df">acquires lease (force=true)</text>
+
+      <!-- Cold revive steps -->
+      <text x="540" y="110" text-anchor="middle" font-size="13" font-weight="700" fill="#57606a">REPLICA Y EXECUTES:</text>
+
+      <rect x="40" y="120" width="240" height="100" rx="6" fill="#dde7f5" stroke="#0550ae"/>
+      <text x="160" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#0550ae">1. Read DB</text>
+      <text x="60" y="162" font-size="11" fill="#0550ae">SELECT FROM agi_sessions</text>
+      <text x="60" y="178" font-size="11" fill="#0550ae">  WHERE id = sid</text>
+      <text x="60" y="196" font-size="11" fill="#0550ae">→ workspace path, sdk_session_id</text>
+      <text x="60" y="212" font-size="11" fill="#0550ae">→ pending_answer / approval</text>
+
+      <rect x="300" y="120" width="240" height="100" rx="6" fill="#ddf4ff" stroke="#0969da"/>
+      <text x="420" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#0969da">2. Mount Filestore</text>
+      <text x="320" y="162" font-size="11" fill="#0969da">workspace path = same export</text>
+      <text x="320" y="178" font-size="11" fill="#0969da">  Y already mounts it</text>
+      <text x="320" y="196" font-size="11" fill="#0969da">  (every replica does)</text>
+      <text x="320" y="212" font-size="11" fill="#0969da">→ workspace contents available</text>
+
+      <rect x="560" y="120" width="240" height="100" rx="6" fill="#fff8e6" stroke="#bf8700"/>
+      <text x="680" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#bf8700">3. Re-mint bearer</text>
+      <text x="580" y="162" font-size="11" fill="#bf8700">old token expired (1h TTL)</text>
+      <text x="580" y="178" font-size="11" fill="#bf8700">mint fresh token</text>
+      <text x="580" y="196" font-size="11" fill="#bf8700">overwrite apis.json</text>
+      <text x="580" y="212" font-size="11" fill="#bf8700">  → Filestore write</text>
+
+      <rect x="820" y="120" width="240" height="100" rx="6" fill="#f7e8ff" stroke="#8250df"/>
+      <text x="940" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#8250df">4. SDK resume</text>
+      <text x="840" y="162" font-size="11" fill="#8250df">spawn ClaudeSDKClient(</text>
+      <text x="840" y="178" font-size="11" fill="#8250df">  resume=sdk_session_id,</text>
+      <text x="840" y="196" font-size="11" fill="#8250df">  cwd=workspace</text>
+      <text x="840" y="212" font-size="11" fill="#8250df">)</text>
+
+      <!-- step 5 -->
+      <path d="M 540 230 L 540 260" stroke="#57606a" stroke-width="1.8" marker-end="url(#p5-arr)"/>
+
+      <rect x="280" y="265" width="520" height="60" rx="6" fill="#dafbe1" stroke="#1a7f37" stroke-width="2"/>
+      <text x="540" y="287" text-anchor="middle" font-size="13" font-weight="700" fill="#1a7f37">5. Inject synthetic user-turn carrying the answer/tool_result</text>
+      <text x="540" y="305" text-anchor="middle" font-size="10.5" fill="#1a7f37">SDK's resume mode reads the prior JSONL transcript; orchestrator continues</text>
+
+      <!-- back to active -->
+      <path d="M 540 330 L 540 360" stroke="#1a7f37" stroke-width="2" marker-end="url(#p5-arr)"/>
+      <text x="555" y="352" font-size="11" fill="#1a7f37">back to Phase 3</text>
+
+      <rect x="320" y="365" width="440" height="50" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="540" y="387" text-anchor="middle" font-size="13" font-weight="700" fill="#8250df">Active again — orchestrator picks up where it left off</text>
+      <text x="540" y="403" text-anchor="middle" font-size="10.5" fill="#8250df">running on replica Y now; subprocess identity is new but session continuity preserved</text>
+    </svg>
+
+    <h4>Storage operations during cold revive</h4>
+    <div class="storage-ops">
+      <div class="storage-op">
+        <span class="op-tier hot">hot</span>
+        <div class="op-name">Filestore: workspace path access</div>
+        <div class="op-desc">Replica Y mounts the same Filestore export as replica X did. Reads workspace contents (skills, agents, memories, manifest, JSONL transcript, apis.json). Sub-ms.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier hot">hot</span>
+        <div class="op-name">Filestore: bearer rewrite</div>
+        <div class="op-desc">Re-mint internal HS256 token; overwrite apis.json. Single small write.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier idle">idle</span>
+        <div class="op-name">GCS canonical</div>
+        <div class="op-desc">Untouched. Memory state lives in workspace; merge happens only at finalize.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier skills">skills</span>
+        <div class="op-name">GCS skills (FUSE)</div>
+        <div class="op-desc">Cached on replica Y from prior sessions. No re-fetch.</div>
+      </div>
+    </div>
+
+    <h4>What makes this work — the load-bearing properties</h4>
+    <ul>
+      <li><strong>Filestore is RWX-NFS shared across all replicas.</strong> X and Y mount the same export at the same path.</li>
+      <li><strong>Workspace path is recorded on the session row.</strong> Y reads it from DB; doesn't need to know what X did.</li>
+      <li><strong>SDK resume reads its own JSONL transcript from the workspace.</strong> Continuity is the SDK's responsibility, not ours.</li>
+      <li><strong>Lease forces single-writer.</strong> Y took the lease force=true; if X was alive and writing, X gets a stop signal.</li>
+    </ul>
+  </div>
+
+  <!-- PHASE 6 -->
+  <div class="phase-content" data-phase="6">
+    <div class="phase-header">
+      <span class="phase-num">6</span>
+      <span class="phase-name">Post-task / finalize</span>
+      <div class="phase-tagline">Orchestrator emits final result OR session ends. Memory merger runs. Audit flushed. Final transcript uploaded. Workspace destroyed.</div>
+    </div>
+
+    <svg class="phase-svg" viewBox="0 0 1080 520" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="p6-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+        </marker>
+      </defs>
+
+      <!-- Top: trigger -->
+      <rect x="320" y="20" width="440" height="50" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+      <text x="540" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#8250df">Orchestrator emits final result OR /sessions/{id}/end</text>
+      <text x="540" y="58" text-anchor="middle" font-size="10.5" fill="#8250df">finalize_session() is invoked</text>
+
+      <path d="M 540 75 L 540 100" stroke="#57606a" stroke-width="2" marker-end="url(#p6-arr)"/>
+
+      <!-- 4 finalize steps -->
+      <text x="540" y="125" text-anchor="middle" font-size="13" font-weight="700" fill="#57606a">FINALIZE STEPS (sequential)</text>
+
+      <rect x="20" y="140" width="240" height="100" rx="6" fill="#fff8c5" stroke="#bf8700" stroke-width="2"/>
+      <text x="140" y="162" text-anchor="middle" font-size="12" font-weight="700" fill="#bf8700">1. Audit flush</text>
+      <text x="40" y="182" font-size="11" fill="#bf8700">collect AuditCollector.events</text>
+      <text x="40" y="198" font-size="11" fill="#bf8700">write to extra_data.events_log</text>
+      <text x="40" y="214" font-size="11" fill="#bf8700">includes tool_uses, lease ops,</text>
+      <text x="40" y="228" font-size="11" fill="#bf8700">approvals, snapshot, merge_log</text>
+
+      <rect x="280" y="140" width="240" height="100" rx="6" fill="#dafbe1" stroke="#1a7f37" stroke-width="2"/>
+      <text x="400" y="162" text-anchor="middle" font-size="12" font-weight="700" fill="#1a7f37">2. Memory merger</text>
+      <text x="300" y="182" font-size="11" fill="#1a7f37">walk workspace/memories/</text>
+      <text x="300" y="198" font-size="11" fill="#1a7f37">diff against manifest snapshot</text>
+      <text x="300" y="214" font-size="11" fill="#1a7f37">extract added bytes per file</text>
+      <text x="300" y="228" font-size="11" fill="#1a7f37">→ append to GCS canonical</text>
+
+      <rect x="540" y="140" width="240" height="100" rx="6" fill="#dafbe1" stroke="#1a7f37" stroke-width="2"/>
+      <text x="660" y="162" text-anchor="middle" font-size="12" font-weight="700" fill="#1a7f37">3. Transcript archive</text>
+      <text x="560" y="182" font-size="11" fill="#1a7f37">read workspace/.claude/</text>
+      <text x="560" y="198" font-size="11" fill="#1a7f37">  projects/&lt;sid&gt;.jsonl</text>
+      <text x="560" y="214" font-size="11" fill="#1a7f37">→ upload to GCS transcripts/</text>
+      <text x="560" y="228" font-size="11" fill="#1a7f37">stamp transcript_gcs_path on row</text>
+
+      <rect x="800" y="140" width="240" height="100" rx="6" fill="#ffebe9" stroke="#cf222e" stroke-width="2"/>
+      <text x="920" y="162" text-anchor="middle" font-size="12" font-weight="700" fill="#cf222e">4. Workspace teardown</text>
+      <text x="820" y="182" font-size="11" fill="#cf222e">shutil.rmtree(workspace)</text>
+      <text x="820" y="198" font-size="11" fill="#cf222e">release Filestore directory</text>
+      <text x="820" y="214" font-size="11" fill="#cf222e">release lease</text>
+      <text x="820" y="228" font-size="11" fill="#cf222e">UPDATE status='terminated'</text>
+
+      <!-- merger detail -->
+      <text x="540" y="280" text-anchor="middle" font-size="13" font-weight="700" fill="#1a7f37">MEMORY MERGER DETAIL (step 2)</text>
+
+      <rect x="100" y="295" width="880" height="100" rx="6" fill="white" stroke="#1a7f37" stroke-width="1.5"/>
+      <text x="120" y="316" font-size="11.5" fill="#1a7f37" font-family="ui-monospace, monospace">for each modified &lt;bucket&gt;/&lt;key&gt;.md in workspace/memories/:</text>
+      <text x="120" y="332" font-size="11.5" fill="#1a7f37" font-family="ui-monospace, monospace">  added_bytes = workspace_file[manifest.snapshot_bytes:]</text>
+      <text x="120" y="348" font-size="11.5" fill="#1a7f37" font-family="ui-monospace, monospace">  entry = "&lt;!-- entry: actor=alice role=technician session=8f3a... ts=2026-04-30T14:14Z --&gt;\n" + added_bytes + "\n&lt;!-- /entry --&gt;\n"</text>
+      <text x="120" y="364" font-size="11.5" fill="#1a7f37" font-family="ui-monospace, monospace">  current = gcs.get(/memory/&lt;org&gt;/.../&lt;key&gt;.md)  # full read</text>
+      <text x="120" y="380" font-size="11.5" fill="#1a7f37" font-family="ui-monospace, monospace">  gcs.put(path, current + entry, if-generation-match=current.generation)  # atomic CAS</text>
+
+      <!-- Final state -->
+      <text x="540" y="430" text-anchor="middle" font-size="13" font-weight="700" fill="#57606a">FINAL STATE</text>
+
+      <rect x="100" y="445" width="280" height="60" rx="6" fill="#fafafa" stroke="#8c959f"/>
+      <text x="240" y="465" text-anchor="middle" font-size="11" fill="#57606a">DB: status='terminated'</text>
+      <text x="240" y="481" text-anchor="middle" font-size="11" fill="#57606a">extra_data.events_log full</text>
+      <text x="240" y="497" text-anchor="middle" font-size="11" fill="#57606a">transcript_gcs_path stamped</text>
+
+      <rect x="400" y="445" width="280" height="60" rx="6" fill="#dafbe1" stroke="#1a7f37"/>
+      <text x="540" y="465" text-anchor="middle" font-size="11" fill="#1a7f37">GCS canonical:</text>
+      <text x="540" y="481" text-anchor="middle" font-size="11" fill="#1a7f37">N new entries appended</text>
+      <text x="540" y="497" text-anchor="middle" font-size="11" fill="#1a7f37">future sessions will see them</text>
+
+      <rect x="700" y="445" width="280" height="60" rx="6" fill="#ffebe9" stroke="#cf222e"/>
+      <text x="840" y="465" text-anchor="middle" font-size="11" fill="#cf222e">Filestore workspace:</text>
+      <text x="840" y="481" text-anchor="middle" font-size="11" fill="#cf222e">DELETED (rmtree)</text>
+      <text x="840" y="497" text-anchor="middle" font-size="11" fill="#cf222e">disk reclaimed</text>
+    </svg>
+
+    <h4>Storage operations this phase</h4>
+    <div class="storage-ops">
+      <div class="storage-op">
+        <span class="op-tier hot">hot</span>
+        <div class="op-name">Filestore: workspace reads</div>
+        <div class="op-desc">Walk memories dir, read each modified file, compare to manifest. Sub-ms per file. ~5-50 files typical.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier persistent">persistent</span>
+        <div class="op-name">GCS canonical: writes</div>
+        <div class="op-desc">For each merged file: GET current canonical → compute new content → PUT with if-generation-match. Atomic CAS. Retry on 412.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier persistent">persistent</span>
+        <div class="op-name">GCS transcripts: write</div>
+        <div class="op-desc">Single PUT of the full SDK JSONL. Typically 100KB-2MB.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier hot">hot</span>
+        <div class="op-name">Filestore: rmtree</div>
+        <div class="op-desc">shutil.rmtree(workspace). Disk reclaimed.</div>
+      </div>
+      <div class="storage-op">
+        <span class="op-tier cold">cold</span>
+        <div class="op-name">GCS Coldline (later)</div>
+        <div class="op-desc">Object Lifecycle Management auto-tiers entries past 30d to Coldline. Transparent to the application.</div>
+      </div>
+    </div>
+
+    <h4>The append-only invariant in code</h4>
+    <p>The merger enforces "append-only" at the GCS write boundary, not at the OS level. If an expert tried to delete or modify pre-existing canonical content (via Edit tool), the merger silently drops the change. Only the post-snapshot additions get propagated:</p>
+
+    <pre>snapshot_sha = manifest[key].snapshot_sha256
+current_sha = sha256(workspace_file[:snapshot_bytes])
+
+if current_sha != snapshot_sha:
+    log_warning("Append-only violated; ignoring modified pre-snapshot content")
+    # Fall through to extract additions only
+
+if workspace_file.size &gt; snapshot_bytes:
+    added = workspace_file[snapshot_bytes:]
+    new_entry = wrap(added, actor, role, session_id, ts)
+    gcs_atomic_append(canonical_path, new_entry)</pre>
+
+    <h4>Concurrency safety</h4>
+    <p>Two sessions finalizing simultaneously, both writing to the same canonical file:</p>
+    <ul>
+      <li>Session 1 reads canonical at generation N, computes N+1, writes with if-generation-match=N → succeeds</li>
+      <li>Session 2 reads canonical at generation N (before Session 1 wrote), computes N+1, writes with if-generation-match=N → 412 Precondition Failed</li>
+      <li>Session 2 retries: reads canonical at generation N+1, computes N+2, writes with if-generation-match=N+1 → succeeds</li>
+    </ul>
+    <p>Optimistic concurrency control via GCS generations. No flock needed. Distributed-aware.</p>
+  </div>
+</section>
+
+<!-- ================================================ COST -->
+<section class="panel" data-panel="cost">
+  <h2>Cost & migration</h2>
+
+  <h3>Storage cost at production scale (5K-session fleet)</h3>
+  <table>
+    <tr><th>Tier</th><th>Working set</th><th>Rate</th><th>Monthly cost</th></tr>
+    <tr><td><span class="scope-pill hot">Filestore Enterprise</span></td><td>~500-700 GB (active+paused workspaces)</td><td>$0.45/GiB-mo</td><td>~$225-315/mo</td></tr>
+    <tr><td><span class="scope-pill persistent">GCS Standard (canonical)</span></td><td>~50-200 GB (live entries within 14d TTL)</td><td>$0.020/GiB-mo</td><td>~$1-4/mo</td></tr>
+    <tr><td><span class="scope-pill persistent">GCS Standard (skills, FUSE)</span></td><td>~150-200 MB</td><td>$0.020/GiB-mo</td><td>~$0.004/mo (negligible)</td></tr>
+    <tr><td><span class="scope-pill cold">GCS Coldline (archive)</span></td><td>~5 TB at 7yr retention</td><td>$0.004/GiB-mo</td><td>~$20/mo</td></tr>
+    <tr><td>GCS API operations</td><td>~10K ops/day</td><td>$0.05/10K Class A, $0.004/10K Class B</td><td>~$1-3/mo</td></tr>
+    <tr><td><strong>Storage subtotal</strong></td><td></td><td></td><td><strong>~$250-345/mo</strong></td></tr>
+  </table>
+
+  <p>Compute (Cloud Run worker pools) ~$2.5-3K/mo at this scale, dominating the storage cost by ~10x. Storage is in the noise.</p>
+
+  <h3>Why this is much cheaper than "GCS for everything" or "Filestore for everything"</h3>
+  <ul>
+    <li><strong>Filestore for everything</strong>: canonical memory grows unbounded; even at 10TB you'd be paying $4.5K/mo just for storage. With our two-tier design, GCS soaks up the unbounded growth at 22x lower per-GB cost.</li>
+    <li><strong>GCS for everything</strong>: would mean putting workspace state on FUSE. Hot-path latency tanks (50-300ms per workspace read instead of sub-ms). API costs explode (every JSONL transcript write = a GCS PUT). Workable but slow + more expensive at hot scale.</li>
+  </ul>
+
+  <h3>Migration scenarios</h3>
+  <table>
+    <tr><th>Scenario</th><th>What moves</th><th>Effort</th></tr>
+    <tr><td>Switch sandbox vendor (Cloud Run → Daytona)</td><td>Compute only. Storage stays in our GCP project.</td><td>~1 week — point new compute at same Filestore mount + same GCS bucket</td></tr>
+    <tr><td>Switch to GKE Autopilot</td><td>Compute only.</td><td>~3-5 days — same image, different orchestration</td></tr>
+    <tr><td>Switch cloud entirely (GCP → AWS)</td><td>Both compute AND storage</td><td>~2-3 weeks — Filestore→EFS via rsync, GCS→S3 via gsutil/aws s3 sync</td></tr>
+    <tr><td>Self-host (bare metal / on-prem)</td><td>Compute + storage primitives</td><td>~6-10 weeks — bigger lift; reuse object format if NFS+S3-compat is available</td></tr>
+  </table>
+
+  <h3>Why GCS-as-canonical helps migration</h3>
+  <p>GCS objects are S3-compatible at the protocol level. <code>gsutil rsync</code> to S3 is a single command. The memory format itself (signed entry blocks in MD files) is text — fully portable. If we ever need to leave GCP, the canonical memory store is the easiest piece to move.</p>
+  <p>Filestore-to-EFS is harder (network mount + rsync, not single-command), but Filestore content is bounded (~500GB) so it's still tractable.</p>
+
+  <h3>Open verifications before committing</h3>
+  <ol>
+    <li><strong>GCS conditional generation match throughput</strong> at 5K-session fleet — at session-end peaks, how many CAS retries do we expect? Typically &lt;1% but worth a load test.</li>
+    <li><strong>Cloud Run NFS no-locking impact on Claude SDK</strong> — verify the SDK doesn't internally rely on flock for transcript JSONL writes. Smoke test required.</li>
+    <li><strong>GCS Object Lifecycle delete semantics with active references</strong> — does the lifecycle rule fire on objects currently being read by FUSE? (Should be no impact since FUSE caches; but verify.)</li>
+    <li><strong>Per-org GCS bucket isolation cost</strong> — is one bucket-per-org cleaner than path-prefix-per-org? Bucket-per-org gives natural IAM boundaries but adds management overhead. Path-prefix is simpler.</li>
+    <li><strong>Filestore Enterprise IOPs at peak</strong> — 5K sessions × 50 ops/sec average = 250K IOPs/sec total. Filestore Enterprise tier is rated for higher; verify our specific share size aligns.</li>
+  </ol>
+</section>
+
+<div class="footer-note">
+  <strong>Document state</strong>: design synthesis, no code committed.<br>
+  <strong>Companion docs</strong>: <code>agi-architecture-overview.html</code> (full multi-tenancy architecture), <code>agi-sandbox-memory-architecture.html</code> (sandbox + memory cardinality decisions).<br>
+  <strong>Decisions captured</strong>: two-tier storage (Filestore + GCS), GCS FUSE for skills only, lifecycle phases 1-6 with per-phase storage operations, append-only canonical via if-generation-match, post-task merge boundary.
+</div>
+
+</main>
+
+<script>
+  // Tab switching
+  const tabs = document.querySelectorAll('nav.tabs button');
+  const panels = document.querySelectorAll('section.panel');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      tabs.forEach(t => t.classList.toggle('active', t === tab));
+      panels.forEach(p => p.classList.toggle('active', p.dataset.panel === target));
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+
+  // Phase stepper
+  const phasePills = document.querySelectorAll('#phase-pills button[data-phase]');
+  const phaseContents = document.querySelectorAll('.phase-content');
+  const phasePrev = document.getElementById('phase-prev');
+  const phaseNext = document.getElementById('phase-next');
+  let currentPhase = 1;
+  const phaseTotal = 6;
+
+  function showPhase(n) {
+    currentPhase = n;
+    phasePills.forEach(p => p.classList.toggle('active', parseInt(p.dataset.phase) === n));
+    phaseContents.forEach(c => c.classList.toggle('active', parseInt(c.dataset.phase) === n));
+    phasePrev.disabled = n === 1;
+    phaseNext.disabled = n === phaseTotal;
+  }
+  phasePills.forEach(p => p.addEventListener('click', () => showPhase(parseInt(p.dataset.phase))));
+  phasePrev.addEventListener('click', () => showPhase(Math.max(1, currentPhase - 1)));
+  phaseNext.addEventListener('click', () => showPhase(Math.min(phaseTotal, currentPhase + 1)));
+
+  // Keyboard nav
+  document.addEventListener('keydown', (e) => {
+    const lifecyclePanel = document.querySelector('section.panel[data-panel="lifecycle"]');
+    if (!lifecyclePanel.classList.contains('active')) return;
+    if (e.key === 'ArrowLeft' && !phasePrev.disabled) showPhase(currentPhase - 1);
+    if (e.key === 'ArrowRight' && !phaseNext.disabled) showPhase(currentPhase + 1);
+  });
+</script>
+
+</body>
+</html>
