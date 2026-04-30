@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CareLink AGI — Sandbox & Memory Architecture (2026-04-28)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --bg-code: #f6f8fa;
+    --border: #d0d7de;
+    --border-strong: #afb8c1;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --text-faint: #8c959f;
+    --platform: #57606a;
+    --org: #0969da;
+    --pharmacy: #1a7f37;
+    --user: #bf8700;
+    --session: #8250df;
+    --warn: #cf222e;
+    --info: #0969da;
+    --code-text: #24292f;
+    --accept: #1a7f37;
+    --reject: #cf222e;
+    --pending: #bf8700;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.55;
+    font-size: 15px;
+  }
+  header {
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 32px 20px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
+  header .meta { color: var(--text-muted); font-size: 13px; }
+  header .intent { margin-top: 12px; max-width: 820px; }
+  nav.tabs {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  nav.tabs button {
+    background: transparent;
+    border: 0;
+    padding: 14px 18px;
+    font-size: 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active { color: var(--text); border-bottom-color: var(--session); }
+  main {
+    padding: 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  section.panel { display: none; animation: fadein 0.2s ease; }
+  section.panel.active { display: block; }
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  h2 { font-size: 20px; margin: 0 0 16px; font-weight: 600; }
+  h3 { font-size: 16px; margin: 24px 0 10px; font-weight: 600; }
+  h4 { font-size: 13px; margin: 18px 0 6px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  p { margin: 0 0 12px; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--bg-code);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--code-text);
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--code-text);
+  }
+  pre code { background: transparent; padding: 0; font-size: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px; }
+  table th, table td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table th { background: var(--bg-alt); font-weight: 600; }
+  .callout {
+    border-left: 4px solid var(--info);
+    background: #ddf4ff;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 14px;
+  }
+  .callout.warn { border-left-color: var(--warn); background: #ffebe9; }
+  .callout.success { border-left-color: var(--accept); background: #dafbe1; }
+  .callout strong { font-weight: 600; }
+
+  .verdict-card {
+    background: var(--bg-alt);
+    border: 2px solid var(--session);
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin: 16px 0 24px;
+  }
+  .verdict-card .verdict-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--session);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 8px;
+  }
+  .verdict-card .verdict-headline {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+  .verdict-card ul { margin: 8px 0 0; padding-left: 20px; }
+  .verdict-card li { margin: 4px 0; font-size: 14px; }
+
+  .option-stack {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 12px 0 24px;
+  }
+  .option-row {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    background: white;
+    transition: background 0.15s;
+  }
+  .option-row:last-child { border-bottom: 0; }
+  .option-row:hover { background: var(--bg-alt); }
+  .option-row.active { background: var(--bg-alt); }
+  .option-row .opt-label {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: white;
+    margin-right: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .option-row .opt-label.chosen { background: var(--accept); }
+  .option-row .opt-label.rejected { background: var(--reject); }
+  .option-row .opt-label.deferred { background: var(--pending); }
+  .option-row .opt-headline { font-weight: 600; margin-right: 8px; }
+  .option-row .opt-tagline { color: var(--text-muted); font-size: 14px; }
+  .option-row .opt-detail {
+    display: none;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    font-size: 13.5px;
+  }
+  .option-row.active .opt-detail { display: block; }
+
+  .state-stack {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 12px 0 20px;
+  }
+  .state-row {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    background: white;
+    transition: background 0.15s;
+  }
+  .state-row:last-child { border-bottom: 0; }
+  .state-row:hover { background: var(--bg-alt); }
+  .state-row.active { background: var(--bg-alt); }
+  .state-row .state-num {
+    display: inline-block;
+    width: 24px; height: 24px;
+    background: var(--session);
+    color: white;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 24px;
+    font-weight: 600;
+    font-size: 12px;
+    margin-right: 10px;
+  }
+  .state-row .state-name { font-weight: 600; font-family: ui-monospace, monospace; font-size: 13px; }
+  .state-row .state-tagline { color: var(--text-muted); font-size: 13px; margin-left: 8px; }
+  .state-row .state-detail {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    font-size: 13.5px;
+  }
+  .state-row.active .state-detail { display: block; }
+  .state-row .state-detail ul { margin: 6px 0; padding-left: 22px; }
+
+  .scope-pill {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    color: white;
+    margin: 0 2px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .scope-pill.platform { background: var(--platform); }
+  .scope-pill.org { background: var(--org); }
+  .scope-pill.pharmacy { background: var(--pharmacy); }
+  .scope-pill.session { background: var(--session); }
+  .scope-pill.user { background: var(--user); }
+
+  .fs-tree {
+    font-family: ui-monospace, monospace;
+    font-size: 12.5px;
+    background: var(--bg-code);
+    padding: 14px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    line-height: 1.7;
+  }
+  .fs-tree .fs-canonical { color: var(--accept); font-weight: 600; }
+  .fs-tree .fs-projection { color: var(--session); font-weight: 600; }
+  .fs-tree .fs-comment { color: var(--text-muted); font-style: italic; }
+
+  .timeline-svg {
+    width: 100%;
+    max-width: 900px;
+    height: auto;
+    display: block;
+    margin: 20px auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    padding: 16px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    margin-right: 4px;
+    color: var(--text-muted);
+  }
+  .pill.green { background: #dafbe1; color: #0a3622; border-color: #1a7f37; }
+  .pill.red { background: #ffebe9; color: #82071e; border-color: #cf222e; }
+  .pill.yellow { background: #fff8c5; color: #4d2d00; border-color: #bf8700; }
+  .pill.blue { background: #ddf4ff; color: #033780; border-color: #0969da; }
+
+  .footer-note {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .lifecycle-svg {
+    width: 100%;
+    max-width: 920px;
+    height: auto;
+    display: block;
+    margin: 16px auto;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .state-node { cursor: pointer; transition: all 0.15s; }
+  .state-node:hover .state-rect { filter: brightness(1.05); }
+  .state-node.active .state-rect { stroke-width: 3; }
+  .state-rect.transient { fill: #ddf4ff; stroke: var(--org); }
+  .state-rect.persistent { fill: #fff8c5; stroke: var(--pending); }
+  .state-rect.terminal { fill: #f6f8fa; stroke: var(--platform); }
+  .state-rect.recovery { fill: #dafbe1; stroke: var(--accept); }
+
+  .arrow-down {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 18px;
+    margin: 4px 0;
+  }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>CareLink AGI — Sandbox & Memory Architecture</h1>
+  <div class="meta">Generated 2026-04-28. Companion to <code>docs/agi-architecture-overview.html</code>. This doc focuses on the sandbox-and-memory layer specifically.</div>
+  <div class="intent">Captures the design discussion that led to <strong>1 sandbox = 1 session = N agents</strong>, the ephemeral session memory + long-term canonical memory model, and the pre-task fetch / post-task update sync semantics. Includes options considered, trade-offs evaluated, and what we eventually landed on.</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="overview" class="active">Decision Summary</button>
+  <button data-tab="options">Options Explored</button>
+  <button data-tab="lifecycle">Sandbox Lifecycle</button>
+  <button data-tab="memory-model">Memory Model</button>
+  <button data-tab="sync">Memory Sync Flow</button>
+  <button data-tab="cardinality">Production Cardinality</button>
+  <button data-tab="guardrails">Operational Guardrails</button>
+  <button data-tab="reconsider">When We'd Reconsider</button>
+</nav>
+
+<main>
+
+<!-- ============================================================ OVERVIEW -->
+<section class="panel active" data-panel="overview">
+  <h2>The question we set out to answer</h2>
+  <p>Where does <em>state</em> live in the AGI runtime, and how does it persist across sessions when many concurrent sessions across many pharmacies need to share learned context?</p>
+  <p>This collapses into two cardinality questions and one architectural question:</p>
+  <ol>
+    <li><strong>Session ↔ Sandbox</strong> — does each session get its own sandbox, or do sandboxes get pooled and reused across sessions?</li>
+    <li><strong>Agent ↔ Sandbox</strong> — does each agent (orchestrator, each expert) get its own sandbox, or do they share?</li>
+    <li><strong>Memory persistence</strong> — given the cardinality answers, how does memory survive past a session's lifetime and become available to future sessions?</li>
+  </ol>
+
+  <div class="verdict-card">
+    <div class="verdict-label">What we landed on</div>
+    <div class="verdict-headline">1 sandbox = 1 session = N agents, with ephemeral session memory + long-term canonical memory fetched pre-task and updated post-task.</div>
+    <ul>
+      <li><strong>Session ↔ Sandbox is 1:1</strong> — each session has its own ephemeral sandbox, created at session start and destroyed at session end</li>
+      <li><strong>Agent ↔ Sandbox is N:1</strong> — orchestrator and all experts (intake, billing, dur, etc.) share the same sandbox within a session</li>
+      <li><strong>Memory is two-tier</strong>: canonical (durable, pharmacy-scoped) lives at <code>/memory/&lt;org&gt;/...</code>; per-session projection lives inside the sandbox at <code>workspace/memories/</code></li>
+      <li><strong>Pre-task fetch</strong>: at session start, a memory selector copies a scoped subset of canonical into the sandbox + writes a manifest</li>
+      <li><strong>Post-task update</strong>: at session end, a merger diffs sandbox vs manifest and atomic-appends additions to canonical with signed entry blocks</li>
+      <li><strong>14-day TTL</strong> on canonical entries via Inngest cron sweep</li>
+    </ul>
+  </div>
+
+  <h3>Why this model holds up</h3>
+  <table>
+    <tr>
+      <th>Property we wanted</th>
+      <th>How 1:1:N + two-tier memory delivers it</th>
+    </tr>
+    <tr>
+      <td>Cross-session learning available pharmacy-wide</td>
+      <td>Canonical is pharmacy-scoped and persistent; every session at that pharmacy projects from it at start</td>
+    </tr>
+    <tr>
+      <td>Within-session consistency across experts</td>
+      <td>Many agents share one sandbox → intake's note is readable by billing later in the same session</td>
+    </tr>
+    <tr>
+      <td>No cross-org leakage</td>
+      <td>Canonical store is partitioned by <code>org_id</code>; sandbox path includes <code>org_id</code>; org-routing middleware locks every request to one DB</td>
+    </tr>
+    <tr>
+      <td>Pharmacy PHI stays at pharmacy</td>
+      <td>Patient/prescriber/insurance buckets live at <code>/memory/&lt;org&gt;/pharmacy/&lt;P&gt;/...</code>; selector won't project across pharmacy boundaries</td>
+    </tr>
+    <tr>
+      <td>Cold-revive across machine reboots</td>
+      <td>Sandbox lives on shared FS; any backend replica can revive it; lease columns route subsequent ops to whichever replica owns it now</td>
+    </tr>
+    <tr>
+      <td>Deterministic merge boundary</td>
+      <td>Exactly one snapshot per session, exactly one merge per session — no coordination across sandboxes needed</td>
+    </tr>
+    <tr>
+      <td>Cleanup is well-defined</td>
+      <td>Sandbox lifetime = session lifetime; <code>finalize_session</code>'s <code>shutil.rmtree</code> already handles this</td>
+    </tr>
+  </table>
+
+  <h3>How to read this doc</h3>
+  <p>The next tabs walk through the discussion in roughly the order we had it:</p>
+  <ul>
+    <li><strong>Options Explored</strong> — the cardinality options for both axes, what we considered, what we rejected and why</li>
+    <li><strong>Sandbox Lifecycle</strong> — the 8-state lifecycle of a single sandbox, click any state to expand</li>
+    <li><strong>Memory Model</strong> — the two-tier (canonical + projection) architecture in detail</li>
+    <li><strong>Memory Sync Flow</strong> — the three-phase fetch/work/update flow, plus what concurrent sessions look like</li>
+    <li><strong>Production Cardinality</strong> — what 1:1:N actually costs at scale (per session, per pharmacy, per fleet)</li>
+    <li><strong>Operational Guardrails</strong> — the watchdogs, sweeps, and quotas you can't ship without</li>
+    <li><strong>When We'd Reconsider</strong> — concrete thresholds where the decision should be re-evaluated</li>
+  </ul>
+</section>
+
+<!-- ============================================================ OPTIONS EXPLORED -->
+<section class="panel" data-panel="options">
+  <h2>Options explored — the cardinality decision tree</h2>
+  <p>Two independent axes. Click any option to expand its trade-offs.</p>
+
+  <h3>Axis A — Session ↔ Sandbox</h3>
+  <p style="color: var(--text-muted); font-size: 13.5px;">How many sessions can share a sandbox?</p>
+
+  <div class="option-stack">
+    <div class="option-row" data-option="A1">
+      <span class="opt-label chosen">Chosen</span>
+      <span class="opt-headline">A1 — One session = one sandbox</span>
+      <span class="opt-tagline">Today's behavior, kept</span>
+      <div class="opt-detail">
+        <h4>Pros</h4>
+        <ul>
+          <li>Clean lifecycle — sandbox dies when session ends; cold-revive reuses by path stored on <code>extra_data["workspace"]</code></li>
+          <li>Per-session bearer rotation works trivially (token written into apis.json at sandbox creation)</li>
+          <li>Memory snapshot tied to a session start is unambiguous (manifest at <code>workspace/.memory-manifest.json</code>)</li>
+          <li>Lease has a 1:1 thing to point at</li>
+          <li>Take-over semantics are obvious (lease moves; sandbox stays)</li>
+        </ul>
+        <h4>Cons</h4>
+        <ul>
+          <li>~150-500ms setup cost per session (skills copy is the slowest piece)</li>
+          <li>Disk churn on high-volume deployments</li>
+          <li>No warm cache of pre-built sandboxes</li>
+        </ul>
+        <h4>Verdict</h4>
+        <p>The bearer-token rotation, cold-revive, and snapshot semantics arguments are decisive. Setup cost is real but small — sessions are minute-scale, not millisecond-scale. <strong>Reserve pooling for the day skills copy becomes a measurable bottleneck.</strong></p>
+      </div>
+    </div>
+
+    <div class="option-row" data-option="A2">
+      <span class="opt-label rejected">Rejected</span>
+      <span class="opt-headline">A2 — One sandbox = many sessions (sandbox pool)</span>
+      <span class="opt-tagline">Pre-warmed pool, sessions check out a sandbox</span>
+      <div class="opt-detail">
+        <h4>Pros</h4>
+        <ul>
+          <li>Amortize setup cost — pre-warm a pool of workspaces ready for instant session start</li>
+          <li>Less FS churn, friendlier on shared-FS substrates (Filestore IOPs)</li>
+        </ul>
+        <h4>Cons (significant)</h4>
+        <ul>
+          <li>Bearer rotation becomes ugly — can't bake into apis.json since multiple sessions share. Either every restish call needs an env-var override of bearer, or some token-injection layer rewrites apis.json mid-flight (race conditions)</li>
+          <li>Memory snapshot can't be a per-sandbox manifest; would need per-call snapshot files. Manifest semantics fragment</li>
+          <li>Cold-revive gets weird — which sandbox in the pool was this session bound to? Have to invent a session→sandbox lookup</li>
+          <li>Take-over and lease semantics need an extra layer (lease points to session, session points to sandbox slot, sandbox slot points to FS path)</li>
+          <li>One session's transient files (proposals/, in-progress memories/) visible to a sibling sharing the sandbox — <strong>cross-session contamination risk</strong> even within the same pharmacy</li>
+        </ul>
+        <h4>Verdict</h4>
+        <p>Performance wins are real but small (skills copy is 100-200ms). The semantic regressions are large and load-bearing. <strong>Rejected.</strong></p>
+      </div>
+    </div>
+
+    <div class="option-row" data-option="A3">
+      <span class="opt-label deferred">Deferred</span>
+      <span class="opt-headline">A3 — Hybrid: shared sandbox root with per-session subdirs</span>
+      <span class="opt-tagline">Shared skills tree via symlinks; per-session writable dirs</span>
+      <div class="opt-detail">
+        <h4>Shape</h4>
+        <p><code>/sandbox-pool/&lt;pool_id&gt;/</code> for shared skills/agents; <code>/sandbox-pool/&lt;pool_id&gt;/sessions/&lt;sid&gt;/</code> for per-session memories, proposals, and apis.json. Skills/agents read-only via symlinks.</p>
+        <h4>Pros</h4>
+        <ul>
+          <li>Amortizes the heavy copies (skills are ~3,200 LoC of bundled Python + MDs)</li>
+          <li>Preserves session isolation for writable content</li>
+        </ul>
+        <h4>Cons</h4>
+        <ul>
+          <li>Complexity for marginal gain — the skills copy is the slow part today; the rest is microseconds</li>
+        </ul>
+        <h4>Verdict</h4>
+        <p>Worth holding in our pocket as a future optimization. <strong>Deferred</strong>: revisit if skills copy time crosses 2-3% of total session latency.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Axis B — Agent ↔ Sandbox</h3>
+  <p style="color: var(--text-muted); font-size: 13.5px;">How many agent processes can share a sandbox within one session?</p>
+
+  <div class="option-stack">
+    <div class="option-row" data-option="B1">
+      <span class="opt-label rejected">Rejected</span>
+      <span class="opt-headline">B1 — One agent = one sandbox (per-spawn isolation)</span>
+      <span class="opt-tagline">Every orchestrator and every expert spawn gets its own workspace</span>
+      <div class="opt-detail">
+        <h4>Pros</h4>
+        <ul>
+          <li>Hard isolation — experts can't read each other's mid-session writes, can't see other experts' MDs they aren't authorized for, can't see proposals from sibling experts</li>
+          <li>Crash isolation — a runaway expert can't pollute the orchestrator's workspace</li>
+          <li>Cleaner answer if we ever do <strong>parallel expert dispatch</strong> (no race on memory file writes)</li>
+        </ul>
+        <h4>Cons (significant)</h4>
+        <ul>
+          <li>Heavy: skills copy + agent MD copy + apis.json write times <strong>N agents</strong> per session. For an 8-step rx-flow run, that's 9 workspace builds (orchestrator + 8 experts)</li>
+          <li>Memory snapshot semantics fragment — does each agent get its own snapshot? Or does the orchestrator's snapshot get re-projected into each expert? Both are awkward</li>
+          <li>Within-session learning across experts (intake's note → billing's read) becomes impossible without an explicit cross-agent shared store, which is basically re-inventing the shared sandbox</li>
+          <li>Bearer rotation per agent? Probably not needed (same session = same actor) but the per-agent envelope makes it possible, which can quietly become a thing someone implements when they shouldn't</li>
+        </ul>
+        <h4>Verdict</h4>
+        <p>The within-session memory propagation is a real feature, not a bug. Hard isolation buys us very little for sequential dispatch. <strong>Rejected for v1.</strong></p>
+      </div>
+    </div>
+
+    <div class="option-row" data-option="B2">
+      <span class="opt-label chosen">Chosen</span>
+      <span class="opt-headline">B2 — One sandbox = many agents (orchestrator + experts share)</span>
+      <span class="opt-tagline">Today's behavior, kept</span>
+      <div class="opt-detail">
+        <h4>Pros</h4>
+        <ul>
+          <li>Lightweight — sandbox built once per session, all agents share</li>
+          <li>Within-session memory propagation works naturally (intake writes <code>memories/drugs/&lt;ndc&gt;.md</code>; billing reads it)</li>
+          <li>Workspace IS the unit of isolation — clean mental model</li>
+          <li>Matches Claude Agent SDK's default subagent semantics (Task tool inherits cwd)</li>
+        </ul>
+        <h4>Cons</h4>
+        <ul>
+          <li>Experts can read sibling experts' working files. Today this is mostly cosmetic since they share the same memory scope by design. Would matter under parallel dispatch (race condition)</li>
+          <li>An expert could in principle Read another expert's MD file (since <code>.claude/agents/</code> contains all of them). Mostly informational disclosure, not a privilege escalation</li>
+        </ul>
+        <h4>Verdict</h4>
+        <p>The right answer for sequential dispatch (which is what we do today). <strong>Chosen.</strong></p>
+      </div>
+    </div>
+
+    <div class="option-row" data-option="B3">
+      <span class="opt-label deferred">Deferred</span>
+      <span class="opt-headline">B3 — Hybrid: orchestrator workspace + per-expert subdir</span>
+      <span class="opt-tagline">Orchestrator gets the full workspace; each expert gets <code>workspace/agents/&lt;expert_id&gt;/</code></span>
+      <div class="opt-detail">
+        <h4>Shape</h4>
+        <p>Skills + memories + apis.json shared via symlinks at the parent. Per-expert proposals + transient files isolated.</p>
+        <h4>Pros</h4>
+        <ul>
+          <li>Per-expert proposals + transient files isolated</li>
+          <li>Memory file writes go to per-expert dirs that the merger reconciles at session end</li>
+          <li>Parallel dispatch becomes safe (each expert writes to its own subtree)</li>
+        </ul>
+        <h4>Cons</h4>
+        <ul>
+          <li>Memory merge gets two-stage: per-expert merge into session-level workspace at expert-end, then session-level merge into canonical at session-end</li>
+          <li><code>_spawn_expert_agent</code> complexity grows (per-expert cwd + symlink farm)</li>
+        </ul>
+        <h4>Verdict</h4>
+        <p>The natural escape hatch the day we want parallel expert dispatch. <strong>Design the v1 memory merger and <code>_spawn_expert_agent</code> so B3 is a future drop-in</strong>, not a redesign. Deferred.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>How memory persistence intersects with the cardinality choices</h3>
+  <p>The memory model wasn't a separate axis — it falls out of the cardinality decisions:</p>
+  <ul>
+    <li><strong>Sandbox is the unit of memory consistency.</strong> 1:1 with session means snapshot-then-merge has exactly one well-defined boundary.</li>
+    <li><strong>Many agents share one snapshot.</strong> Intra-session writes are visible to later experts in the same session.</li>
+    <li><strong>Cross-session learning</strong> requires a separate persistent layer above sandboxes — that's the <em>canonical store</em>.</li>
+    <li><strong>Pre-task fetch / post-task update</strong> is the natural sync model for "ephemeral session sandbox + persistent canonical store."</li>
+  </ul>
+  <p>If we'd chosen A2 (sandbox pool), this would have to be re-thought; if we'd chosen B1 (per-agent sandbox), the merge step would need cross-agent coordination. The 1:1:N cardinality is what makes the memory model simple.</p>
+</section>
+
+<!-- ============================================================ LIFECYCLE -->
+<section class="panel" data-panel="lifecycle">
+  <h2>Sandbox lifecycle — the 8 states</h2>
+  <p>A sandbox passes through up to 8 distinct states from creation to destruction. The sandbox <em>persists across multiple subprocess restarts</em> — it's the durable backing store; subprocesses come and go.</p>
+
+  <p style="color: var(--text-muted); font-size: 13.5px;">Click any state below for details.</p>
+
+  <div class="state-stack" id="state-stack">
+    <div class="state-row" data-state="provisioning">
+      <span class="state-num">1</span>
+      <span class="state-name">provisioning</span>
+      <span class="state-tagline">~150-500ms — workspace built; memory snapshot taken</span>
+      <div class="state-detail">
+        <p>Triggered by <code>POST /sessions</code> after access checks pass. <code>_prepare_workspace</code> at <code>service.py:1531-1560</code> creates the directory tree:</p>
+        <ol>
+          <li><code>mkdtemp</code> (or <code>mkdir</code> of session-id-named subdir on shared FS) — atomic</li>
+          <li>Skills copy → <code>.claude/skills/</code> (slowest step today; ~100-200ms)</li>
+          <li>Agent MDs copy → <code>.claude/agents/</code></li>
+          <li>apis.json write → <code>.config/restish/</code> and <code>Library/Application Support/restish/</code></li>
+          <li>Memory snapshot — selector reads canonical, copies subset to <code>memories/</code>, writes manifest at <code>.memory-manifest.json</code></li>
+          <li><strong>Workspace path stamped on session row</strong> — <code>extra_data["workspace"] = str(workspace)</code></li>
+          <li>Lease acquired</li>
+        </ol>
+        <p>If any step fails: partial workspace exists, session row may not have <code>extra_data["workspace"]</code> populated. <strong>Sweeper cleans these up</strong>: orphan workspace dir whose corresponding session row doesn't have it on extra_data → rmtree.</p>
+      </div>
+    </div>
+
+    <div class="state-row" data-state="active">
+      <span class="state-num">2</span>
+      <span class="state-name">active</span>
+      <span class="state-tagline">Lease held by replica X; orchestrator subprocess running</span>
+      <div class="state-detail">
+        <ul>
+          <li>One subprocess (orchestrator) is alive</li>
+          <li>Workspace is being read/written: experts read <code>memories/</code>, write to <code>proposals/</code> and <code>memories/</code></li>
+          <li>apis.json bearer is the actor's bearer (1h TTL by default)</li>
+          <li>Workspace is NOT being moved or duplicated — every spawn (<code>_spawn_expert_agent</code>) reuses the same path via <code>kwargs["cwd"] = str(workspace)</code></li>
+          <li>Heartbeat extends <code>lease_expires_at</code> every ~15s</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="state-row" data-state="waiting_hot">
+      <span class="state-num">3</span>
+      <span class="state-name">waiting_hot</span>
+      <span class="state-tagline">Subprocess parked at HITL gate; lease still held</span>
+      <div class="state-detail">
+        <ul>
+          <li>Subprocess is alive but in <code>await wait_for_decision_or_timeout</code></li>
+          <li>No state writes (the gate just blocks)</li>
+          <li>Workspace untouched</li>
+          <li>Lease still held by the original replica</li>
+          <li>Heartbeat continues — if it stops, lease expires after 60s</li>
+        </ul>
+        <p>The sandbox doesn't change shape across the active ↔ waiting_hot transition. The orchestrator is just paused.</p>
+      </div>
+    </div>
+
+    <div class="state-row" data-state="waiting_cold">
+      <span class="state-num">4</span>
+      <span class="state-name">waiting_cold</span>
+      <span class="state-tagline">Subprocess EXITED; lease released; workspace persists on shared FS</span>
+      <div class="state-detail">
+        <p>The critical state. The cold-park decision means:</p>
+        <ul>
+          <li>SDK subprocess exits cleanly via <code>continue_=False, stopReason=...</code></li>
+          <li>Lease released (heartbeat stopped or explicit release)</li>
+          <li><strong>Workspace stays on disk</strong> — this is non-negotiable</li>
+          <li>DB row's <code>extra_data["workspace"]</code> still points at it</li>
+          <li>Session row status flips to <code>waiting_cold</code></li>
+          <li>No replica "owns" the session anymore</li>
+        </ul>
+        <p>Cost: zero CPU/RAM. Just disk (~50-200MB). This state can persist for minutes (operator stepped away to take a phone call) to days (operator went on vacation). Without a hard TTL, sessions accumulate here.</p>
+      </div>
+    </div>
+
+    <div class="state-row" data-state="cold_reviving">
+      <span class="state-num">5</span>
+      <span class="state-name">cold_reviving</span>
+      <span class="state-tagline">Any replica picks up the parked session; spawns fresh SDK client</span>
+      <div class="state-detail">
+        <p>Trigger: HITL answer arrives, OR cold approval decided, OR explicit re-acquire.</p>
+        <ol>
+          <li>Inngest event fires (with <code>org_id</code> and <code>session_id</code>)</li>
+          <li>Any backend replica handles the event — read OrgX DB → session row → <code>extra_data["workspace"]</code></li>
+          <li><strong>Workspace must be readable from this replica</strong> — this is why shared FS is mandatory</li>
+          <li>Mint a fresh bearer (the original 1h token has expired) → rewrite apis.json</li>
+          <li>Acquire lease (<code>force=true</code> since prior released)</li>
+          <li>Spawn fresh <code>ClaudeSDKClient</code> with <code>resume=session_id</code> and <code>cwd=&lt;the same workspace&gt;</code></li>
+          <li>Drain via <code>drive_client</code></li>
+        </ol>
+        <p>The SDK CLI's own session state lives at <code>&lt;workspace&gt;/.claude/projects/&lt;sanitized-cwd&gt;/&lt;session_id&gt;.jsonl</code> (see comment at <code>service.py:496-499</code>). That's why the workspace path can't change — the SDK reads its own JSONL from there to continue.</p>
+      </div>
+    </div>
+
+    <div class="state-row" data-state="take_over">
+      <span class="state-num">6</span>
+      <span class="state-name">take_over</span>
+      <span class="state-tagline">Lease changes hands; sandbox stays</span>
+      <div class="state-detail">
+        <ol>
+          <li>Bob's frontend <code>POST /sessions/{sid}/lease</code> with <code>force=true</code></li>
+          <li>Backend marks lease revocation pending</li>
+          <li>SSE event sent to Alice's frontend → her tab cleans up</li>
+          <li>Replica holding active SDK client drains gracefully (finishes current turn or hits quiescent boundary)</li>
+          <li>Lease updated (new holder = Bob's machine)</li>
+          <li><strong>Same workspace path</strong> — replica now driving the session reads from shared FS</li>
+          <li>New <code>ClaudeSDKClient</code> spawned with <code>resume=session_id</code></li>
+        </ol>
+        <p>The sandbox doesn't move. The lease moves.</p>
+      </div>
+    </div>
+
+    <div class="state-row" data-state="finalizing">
+      <span class="state-num">7</span>
+      <span class="state-name">finalizing → terminated</span>
+      <span class="state-tagline">Memory merge runs; audit flushed; sandbox rmtree'd</span>
+      <div class="state-detail">
+        <p><code>finalize_session</code> runs (<code>service.py:1480-1524</code>):</p>
+        <ol>
+          <li>Cancel any background drain task</li>
+          <li>Stop events tee, flush audit</li>
+          <li><code>store.complete(session_id, audit=audit)</code> — DB row updated with terminal status</li>
+          <li><strong>Memory merger runs</strong> — diff workspace vs manifest, append entries to canonical</li>
+          <li><code>proposals.upload_workspace_proposals(workspace)</code> — to GCS</li>
+          <li><code>shutil.rmtree(workspace, ignore_errors=True)</code> — sandbox is gone</li>
+          <li>Lease released</li>
+        </ol>
+        <p>After this, the session is terminated. The DB row stays (with audit events on extra_data + transcript path on GCS). The workspace is gone forever.</p>
+      </div>
+    </div>
+
+    <div class="state-row" data-state="abandoned">
+      <span class="state-num">8</span>
+      <span class="state-name">abandoned</span>
+      <span class="state-tagline">TTL sweep on long-parked cold sessions; memory merge skipped</span>
+      <div class="state-detail">
+        <p>If a session sits in <code>waiting_cold</code> past 7 days:</p>
+        <ol>
+          <li>Cron sweep finds it</li>
+          <li>Audit event <code>session_abandoned</code></li>
+          <li>Workspace <code>rmtree</code></li>
+          <li>Session row → <code>abandoned</code></li>
+        </ol>
+        <p>This is the only state transition that doesn't go through <code>finalize_session</code>. <strong>Memory merge does NOT run for abandoned sessions</strong> — anything the operator wrote during the session is lost. By design: 7-day-old in-flight notes are stale anyway, and avoiding the merge prevents a "ghost author" entry from appearing in canonical memory.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Why the sandbox outlives its subprocesses</h3>
+  <p>The most important property of the lifecycle: <strong>the sandbox persists across the active ↔ waiting_cold transition</strong>. The subprocess dies. The Python <code>ClaudeSDKClient</code> object is gone. But the workspace dir on shared FS, with all its skills/agents/memories/proposals, stays.</p>
+  <p>That's why cold-revive on a different replica works. That's why take-over to a different machine works. That's why the 1:1 session-to-sandbox cardinality — combined with shared FS — gives us multi-replica deployments and machine-portable sessions for free.</p>
+</section>
+
+<!-- ============================================================ MEMORY MODEL -->
+<section class="panel" data-panel="memory-model">
+  <h2>Memory model — two-tier with pre-task fetch / post-task update</h2>
+  <p>Two distinct physical paths, both on the same shared FS mount:</p>
+
+  <div class="fs-tree">
+/var/lib/carelink/agi/<br>
+├── <span class="fs-canonical">memory/&lt;org_id&gt;/</span>                           <span class="fs-comment"># CANONICAL (durable, pharmacy-scoped)</span><br>
+│&nbsp;&nbsp; ├── org/<br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── tools/&lt;verb&gt;.md                       <span class="fs-comment"># org-shared, append-only entries</span><br>
+│&nbsp;&nbsp; │&nbsp;&nbsp; └── drugs/&lt;ndc&gt;.md<br>
+│&nbsp;&nbsp; └── pharmacy/&lt;P&gt;/<br>
+│&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ├── patients/&lt;pid&gt;.md                    <span class="fs-comment"># pharmacy PHI scope</span><br>
+│&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ├── prescribers/&lt;npi&gt;.md<br>
+│&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; └── insurance/&lt;bin_pcn&gt;.md<br>
+│<br>
+└── <span class="fs-projection">workspace/&lt;org_id&gt;/&lt;P&gt;/&lt;sid&gt;/</span>            <span class="fs-comment"># SANDBOX (per-session, ephemeral)</span><br>
+&nbsp;&nbsp;&nbsp; ├── .memory-manifest.json                  <span class="fs-comment"># what was projected + when</span><br>
+&nbsp;&nbsp;&nbsp; ├── memories/<br>
+&nbsp;&nbsp;&nbsp; │&nbsp;&nbsp; ├── tools/&lt;verb&gt;.md                    <span class="fs-comment"># copies of selected canonical keys</span><br>
+&nbsp;&nbsp;&nbsp; │&nbsp;&nbsp; ├── drugs/&lt;ndc&gt;.md<br>
+&nbsp;&nbsp;&nbsp; │&nbsp;&nbsp; ├── patients/&lt;pid&gt;.md<br>
+&nbsp;&nbsp;&nbsp; │&nbsp;&nbsp; ├── prescribers/&lt;npi&gt;.md<br>
+&nbsp;&nbsp;&nbsp; │&nbsp;&nbsp; └── insurance/&lt;bin_pcn&gt;.md<br>
+&nbsp;&nbsp;&nbsp; └── ...rest of sandbox (skills, agents, proposals, etc.)
+  </div>
+
+  <h3>Canonical = the durable, pharmacy-scoped truth</h3>
+  <ul>
+    <li>Lives across sessions. Survives restarts, deploys, machine failures.</li>
+    <li>Append-only — entries dated and signed</li>
+    <li>Swept by TTL (14 days)</li>
+    <li>The thing that "carries learning" between sessions</li>
+    <li>Per-org partition is structural (different DB-per-org tenants have different FS roots); per-pharmacy partition is policy (within an org)</li>
+  </ul>
+
+  <h3>Projection = the per-session view inside the sandbox</h3>
+  <ul>
+    <li>Created at session start (pre-task fetch)</li>
+    <li>Merged back at session end (post-task update)</li>
+    <li>Destroyed with the sandbox</li>
+    <li>The session never reads canonical directly during execution — only the projection</li>
+  </ul>
+
+  <div class="callout">
+    <strong>Key insight</strong>: the session is operating against a <em>frozen snapshot</em>, not a live view. This is what makes concurrent sessions safe — they don't see each other's mid-flight writes. Cross-session learning happens at the merge boundary, not during execution.
+  </div>
+
+  <h3>What gets projected, by bucket</h3>
+  <p>A mature pharmacy might accumulate 10,000 patient memory files. Copying all of them into every sandbox would mean 100MB+ snapshots and minutes of FS work. So projection is <strong>scoped by relevance</strong>, not "copy everything in pharmacy scope."</p>
+
+  <table>
+    <tr>
+      <th>Bucket</th>
+      <th>Volume</th>
+      <th>Projection strategy</th>
+      <th>Why</th>
+    </tr>
+    <tr>
+      <td><code>tools/&lt;verb&gt;</code></td>
+      <td>Bounded (~30-50 verbs)</td>
+      <td><strong>All eager</strong></td>
+      <td>Small total volume; every expert may need any verb's quirks</td>
+    </tr>
+    <tr>
+      <td><code>drugs/&lt;ndc&gt;</code></td>
+      <td>Unbounded over time</td>
+      <td><strong>By context manifest</strong> — only NDCs the session declares it'll touch</td>
+      <td>Can't project all; orchestrator knows the relevant NDC at session-creation time</td>
+    </tr>
+    <tr>
+      <td><code>patients/&lt;pid&gt;</code></td>
+      <td>Unbounded</td>
+      <td><strong>By context manifest</strong> — usually exactly 1 patient per session</td>
+      <td>Same reason; orchestrator knows the patient</td>
+    </tr>
+    <tr>
+      <td><code>prescribers/&lt;npi&gt;</code></td>
+      <td>Unbounded</td>
+      <td><strong>By context manifest</strong> — 1-2 prescribers per session</td>
+      <td>Same</td>
+    </tr>
+    <tr>
+      <td><code>insurance/&lt;bin_pcn&gt;</code></td>
+      <td>Bounded by payers ever seen (~100s)</td>
+      <td><strong>By context manifest</strong></td>
+      <td>Could project all but most are irrelevant; manifest is cleaner</td>
+    </tr>
+  </table>
+
+  <h3>How the session creation request supplies the manifest</h3>
+  <pre>POST /sessions {
+  workflow: "rx-flow",
+  pharmacy_id: "P1",
+  context: {
+    rx_id: "rx-7f3a...",
+    patient_id: "pt-9c...",
+    drug_ndc: "00378-0123-45",
+    prescriber_npi: "1234567890",
+    payer_bin_pcn: "610279_RX2222"
+  }
+}</pre>
+
+  <p>The selector reads the context, the workflow's <code>memory_scope.read</code>, and the role's redactions, then computes the projection set. For rx-flow with this context:</p>
+
+  <pre>projection_keys = {
+  "tools": "*",                       # all bounded
+  "drugs": ["00378-0123-45"],
+  "patients": ["pt-9c..."],
+  "prescribers": ["1234567890"],
+  "insurance": ["610279_RX2222"]
+}</pre>
+
+  <h3>What the manifest captures</h3>
+  <pre>{
+  "snapshot_at": "2026-04-28T14:00:00Z",
+  "pharmacy_id": "P1",
+  "actor_id": "alice@orgX.io",
+  "actor_role": "technician",
+  "workflow": "rx-flow",
+  "session_id": "8f3a...",
+
+  "keys_included": [
+    {
+      "path": "memories/tools/list-patients.md",
+      "scope": "org",
+      "bucket": "tools",
+      "key": "list-patients",
+      "src_path": "/var/lib/carelink/agi/memory/orgX/org/tools/list-patients.md",
+      "src_mtime": "2026-04-25T11:30:00Z",
+      "snapshot_bytes": 1247,
+      "snapshot_sha256": "a3f8..."
+    },
+    {
+      "path": "memories/patients/pt-9c.md",
+      "scope": "pharmacy",
+      "bucket": "patients",
+      "key": "pt-9c",
+      "src_path": "/var/lib/carelink/agi/memory/orgX/pharmacy/P1/patients/pt-9c.md",
+      "src_mtime": "2026-04-27T09:11:00Z",
+      "snapshot_bytes": 882,
+      "snapshot_sha256": "b1d4..."
+    }
+  ],
+
+  "keys_excluded_by_role": [
+    {"path": "memories/insurance/_admin_only.md", "reason": "role_redaction"}
+  ],
+
+  "policy": {
+    "lazy_fetch_enabled": false
+  }
+}</pre>
+
+  <p>The <code>snapshot_bytes</code> field is critical for the merger — it knows where "session-added content" begins.</p>
+
+  <h3>Why we copy, not symlink or hardlink</h3>
+  <table>
+    <tr><th>Strategy</th><th>Read works?</th><th>Write isolation?</th><th>Verdict</th></tr>
+    <tr><td>Plain copy</td><td>Yes</td><td>Yes (workspace bytes are independent)</td><td><strong>Use this</strong></td></tr>
+    <tr><td>Hardlink</td><td>Yes</td><td>NO — write to workspace mutates canonical too. Catastrophic.</td><td>Don't</td></tr>
+    <tr><td>Symlink</td><td>Yes</td><td>Write replaces symlink with file (some FS / mounts) — fragile and inconsistent</td><td>Don't</td></tr>
+    <tr><td>Overlay FS / CoW</td><td>Yes</td><td>Yes, kernel-managed</td><td>Possibly v2 if disk pressure becomes real; complex deploy</td></tr>
+  </table>
+  <p>Plain copy. ~1-50 KB per memory file × ~5-50 files = a few MB at most per session. Negligible.</p>
+
+  <h3>What about workflows without context?</h3>
+  <p>Chat workflow doesn't know upfront which NDC or patient the user will ask about. Two options:</p>
+  <ul>
+    <li><strong>Project only <code>tools/</code></strong> (bounded) and let the LLM operate without persistent drug/patient context. Acceptable for ad-hoc chat. <strong>v1 default.</strong></li>
+    <li><strong>Lazy-fetch on miss</strong> (v2 feature): a Read hook intercepts attempts to read a non-projected memory file, fetches from canonical, copies into workspace. Adds first-read latency but unlocks chat-style sessions.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ SYNC FLOW -->
+<section class="panel" data-panel="sync">
+  <h2>Memory sync flow — three phases</h2>
+  <p>The full lifecycle of memory state across a session, plus what concurrent sessions look like.</p>
+
+  <h3>Phase 1 — Pre-task fetch (session start)</h3>
+  <ol>
+    <li>Session creation handler invokes the memory selector with <code>(workflow, pharmacy_id, role, context_dict)</code></li>
+    <li>Selector walks canonical, reads matching keys</li>
+    <li>Files copied to <code>&lt;workspace&gt;/memories/&lt;bucket&gt;/&lt;key&gt;.md</code></li>
+    <li>Manifest written to <code>&lt;workspace&gt;/.memory-manifest.json</code> with byte ranges + source mtimes + SHA256</li>
+    <li>Audit event <code>memory_snapshot</code> with manifest summary</li>
+  </ol>
+
+  <h3>Phase 2 — During the session (read/write)</h3>
+  <p>Once projection is done, <strong>everything happens locally in the sandbox</strong>.</p>
+
+  <h4>Reads</h4>
+  <p>Experts open <code>memories/&lt;bucket&gt;/&lt;key&gt;.md</code> like any other file. The SDK CLI's Bash + Read tool see whatever's in the workspace. There is no fetch-on-read, no canonical lookup, no special hook (in v1).</p>
+  <p>If a key wasn't projected, the file simply doesn't exist. The expert gets <code>FileNotFoundError</code> and proceeds without that prior context. Most expert MDs already handle this gracefully ("if you have prior notes... otherwise...").</p>
+
+  <h4>Writes (within session)</h4>
+  <p>Experts append notes to memory files. Writes go <strong>to the workspace, not canonical</strong>.</p>
+
+  <pre>Session 1, Expert intake (T+0:30): writes to workspace_1/memories/patients/pt-9c.md:
+  "Patient confirmed DOB transposed (1948 vs 1984). Verified twice."
+
+Session 1, Expert billing (T+2:15): reads workspace_1/memories/patients/pt-9c.md
+  → SEES intake's note (intra-session propagation works)</pre>
+
+  <p>This is the <strong>intra-session memory propagation</strong> that makes the model useful. Earlier experts in a session set context that later experts in the same session benefit from.</p>
+
+  <h4>Concurrent sessions don't see each other's writes</h4>
+  <p>This is the <strong>session-as-unit-of-consistency</strong> property. Within a session = strongly consistent. Across sessions = eventually consistent at session-end merge time.</p>
+
+  <h3>Phase 3 — Post-task update (merger at session end)</h3>
+  <p>The merger reconciles workspace memories back to canonical.</p>
+
+  <h4>What the merger does, file by file</h4>
+  <pre>for each &lt;bucket&gt;/&lt;key&gt;.md in workspace/memories/:
+    if not in manifest:
+        # Net-new key created during session
+        new_entry = wrap_in_entry(file_content, actor, role, session_id, ts)
+        atomic_append(canonical_path, new_entry)
+        continue
+
+    snapshot_bytes = manifest[key].snapshot_bytes
+    snapshot_sha = manifest[key].snapshot_sha256
+    current_bytes = workspace_file.size
+    current_sha = sha256(workspace_file[:snapshot_bytes])
+
+    if current_sha != snapshot_sha:
+        # Pre-snapshot bytes were modified — VIOLATION of append-only
+        log_warning("Append-only violated; ignoring modified pre-snapshot content")
+        # Don't propagate — fall through to extract additions only
+
+    if current_bytes &gt; snapshot_bytes:
+        added_content = workspace_file[snapshot_bytes:]
+        new_entry = wrap_in_entry(added_content, actor, role, session_id, ts)
+        atomic_append(canonical_path, new_entry)
+
+    # If current_bytes == snapshot_bytes: no additions, skip</pre>
+
+  <p>The append-only invariant is enforced <strong>at the merger</strong>, not at the OS level. If an expert tried to delete or modify pre-existing canonical content (via Edit tool), the merger silently drops the change. Only the post-snapshot additions get propagated.</p>
+
+  <h4>The wrapping</h4>
+  <p>Every appended block is wrapped with in-band metadata:</p>
+  <pre>&lt;!-- entry: actor=alice@orgX.io role=technician session=8f3a... ts=2026-04-28T14:14:30Z --&gt;
+Patient confirmed DOB transposed (1948 vs 1984). Verified twice.
+&lt;!-- /entry --&gt;</pre>
+
+  <h4>Atomic append (the production-critical part)</h4>
+  <p>Plain <code>open(path, 'a')</code> is not safe under concurrent writers — partial content can be visible to readers mid-append.</p>
+  <pre>def atomic_append(canonical_path, new_entry):
+    # Use a per-file fcntl lock
+    with open(canonical_path, 'r+b') as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0, os.SEEK_END)
+        f.write(new_entry.encode())
+        f.flush()
+        os.fsync(f.fileno())
+        fcntl.flock(f, fcntl.LOCK_UN)</pre>
+  <p>This serializes concurrent merges to the same file. Sub-millisecond contention.</p>
+
+  <p>For files that don't exist (net-new keys created during session), use atomic create:</p>
+  <pre>def atomic_create(canonical_path, content):
+    tmp_path = canonical_path + ".tmp." + uuid()
+    with open(tmp_path, 'w') as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+    os.rename(tmp_path, canonical_path)  # atomic on POSIX</pre>
+
+  <h3>Concurrent sessions — the model in one picture</h3>
+
+  <svg class="timeline-svg" viewBox="0 0 880 540" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="t-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+      </marker>
+    </defs>
+
+    <!-- Headers -->
+    <text x="20" y="30" font-size="11" font-weight="700" fill="#8c959f">TIME</text>
+    <text x="120" y="30" font-size="13" font-weight="700" fill="#1a7f37">CANONICAL</text>
+    <text x="320" y="30" font-size="13" font-weight="700" fill="#8250df">SESSION 1</text>
+    <text x="500" y="30" font-size="13" font-weight="700" fill="#8250df">SESSION 2</text>
+    <text x="680" y="30" font-size="13" font-weight="700" fill="#8250df">SESSION 3</text>
+
+    <!-- Vertical lifelines -->
+    <line x1="160" y1="50" x2="160" y2="510" stroke="#1a7f37" stroke-width="2"/>
+    <line x1="360" y1="50" x2="360" y2="510" stroke="#8250df" stroke-width="1" stroke-dasharray="4,3"/>
+    <line x1="540" y1="50" x2="540" y2="510" stroke="#8250df" stroke-width="1" stroke-dasharray="4,3"/>
+    <line x1="720" y1="50" x2="720" y2="510" stroke="#8250df" stroke-width="1" stroke-dasharray="4,3"/>
+
+    <!-- T+0:00 - Session 1 starts -->
+    <text x="20" y="80" font-size="11" fill="#57606a">T+0:00</text>
+    <line x1="160" y1="76" x2="356" y2="76" stroke="#57606a" stroke-width="1.5" marker-end="url(#t-arrow)"/>
+    <text x="180" y="68" font-size="10.5" fill="#57606a">snapshot (state A)</text>
+    <circle cx="160" cy="76" r="6" fill="#1a7f37" stroke="white" stroke-width="2"/>
+    <circle cx="360" cy="76" r="6" fill="#8250df" stroke="white" stroke-width="2"/>
+
+    <!-- T+0:30 - Session 2 starts -->
+    <text x="20" y="120" font-size="11" fill="#57606a">T+0:30</text>
+    <line x1="160" y1="116" x2="536" y2="116" stroke="#57606a" stroke-width="1.5" marker-end="url(#t-arrow)"/>
+    <text x="280" y="108" font-size="10.5" fill="#57606a">snapshot (state A — same as Session 1)</text>
+    <circle cx="160" cy="116" r="6" fill="#1a7f37" stroke="white" stroke-width="2"/>
+    <circle cx="540" cy="116" r="6" fill="#8250df" stroke="white" stroke-width="2"/>
+
+    <!-- T+1:00 Session 1 writes -->
+    <text x="20" y="170" font-size="11" fill="#57606a">T+1:00</text>
+    <text x="370" y="166" font-size="10.5" fill="#8250df">writes "DAW=1 quirk"</text>
+    <text x="370" y="180" font-size="10.5" fill="#8250df">to workspace_1</text>
+    <circle cx="360" cy="170" r="6" fill="#cf222e" stroke="white" stroke-width="2"/>
+
+    <!-- T+1:30 Session 2 reads -->
+    <text x="20" y="220" font-size="11" fill="#57606a">T+1:30</text>
+    <text x="550" y="216" font-size="10.5" fill="#8250df">reads workspace_2</text>
+    <text x="550" y="230" font-size="10.5" fill="#8250df">→ sees state A only</text>
+    <text x="550" y="244" font-size="10.5" fill="#cf222e" font-weight="600">(NOT Session 1's note)</text>
+    <circle cx="540" cy="220" r="6" fill="#0969da" stroke="white" stroke-width="2"/>
+
+    <!-- T+2:00 Session 1 finalizes -->
+    <text x="20" y="290" font-size="11" fill="#57606a">T+2:00</text>
+    <line x1="356" y1="286" x2="164" y2="286" stroke="#1a7f37" stroke-width="2" marker-end="url(#t-arrow)"/>
+    <text x="200" y="278" font-size="10.5" fill="#1a7f37" font-weight="600">finalize → merge: append DAW note</text>
+    <circle cx="360" cy="286" r="6" fill="#8250df" stroke="white" stroke-width="2"/>
+    <circle cx="160" cy="286" r="7" fill="#1a7f37" stroke="white" stroke-width="2"/>
+    <text x="120" y="306" font-size="10" fill="#1a7f37" font-weight="600">A + DAW</text>
+
+    <!-- T+3:00 Session 2 finalizes -->
+    <text x="20" y="340" font-size="11" fill="#57606a">T+3:00</text>
+    <line x1="536" y1="336" x2="166" y2="336" stroke="#57606a" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#t-arrow)"/>
+    <text x="220" y="328" font-size="10.5" fill="#57606a">finalize: no additions, skip</text>
+    <circle cx="540" cy="336" r="6" fill="#8250df" stroke="white" stroke-width="2"/>
+    <circle cx="160" cy="336" r="6" fill="#1a7f37" stroke="white" stroke-width="2"/>
+
+    <!-- T+4:00 Session 3 starts -->
+    <text x="20" y="400" font-size="11" fill="#57606a">T+4:00</text>
+    <line x1="160" y1="396" x2="716" y2="396" stroke="#57606a" stroke-width="1.5" marker-end="url(#t-arrow)"/>
+    <text x="380" y="388" font-size="10.5" fill="#1a7f37" font-weight="600">snapshot (state A + DAW note)</text>
+    <text x="380" y="410" font-size="10.5" fill="#1a7f37" font-weight="600">→ sees Session 1's contribution</text>
+    <circle cx="160" cy="396" r="7" fill="#1a7f37" stroke="white" stroke-width="2"/>
+    <circle cx="720" cy="396" r="6" fill="#8250df" stroke="white" stroke-width="2"/>
+
+    <!-- Bottom note -->
+    <text x="20" y="475" font-size="12" fill="#57606a" font-weight="600">Three properties:</text>
+    <text x="20" y="492" font-size="11" fill="#57606a">1. Snapshot consistency within a session — what an expert reads is what was canonical at session start + intra-session writes</text>
+    <text x="20" y="506" font-size="11" fill="#57606a">2. No write-conflict between concurrent sessions — disjoint workspaces; flock serializes merges</text>
+    <text x="20" y="520" font-size="11" fill="#57606a">3. Eventually consistent across sessions — what one session learns becomes visible to the next session that starts after the merge</text>
+  </svg>
+
+  <h3>Crash during merge — recovery</h3>
+  <p>If the merger crashes mid-process:</p>
+  <ul>
+    <li>Some files have been merged to canonical (those entries are committed)</li>
+    <li>Some files have not</li>
+    <li>The session's <code>extra_data["merge_completed"]</code> is False</li>
+  </ul>
+  <p>Recovery: cron sweeper finds <code>(status=finalizing, merge_completed=false, finalized_at &lt; now - 5min)</code>. Marks session as <code>merge_failed</code>. Workspace stays for forensic review (don't rmtree). Operations team or a re-run script can inspect and complete the merge if desired.</p>
+  <p>In the worst case, some session writes are lost. Better than corrupting canonical.</p>
+</section>
+
+<!-- ============================================================ CARDINALITY -->
+<section class="panel" data-panel="cardinality">
+  <h2>Production cardinality — what 1:1:N actually costs</h2>
+  <p>Mapping the cardinality decisions to real numbers at scale.</p>
+
+  <h3>Per-session resource footprint (steady state)</h3>
+  <table>
+    <tr><th>Resource</th><th>Cost</th><th>Notes</th></tr>
+    <tr><td>Disk (sandbox)</td><td><strong>~50-200MB</strong></td><td>skills copy is the bulk; memory snapshot adds a few MB</td></tr>
+    <tr><td>Disk write IOPs at session start</td><td><strong>bursty ~500-2000 IOPs</strong></td><td>mostly skills copy + apis.json + agent MDs</td></tr>
+    <tr><td>RAM (orchestrator subprocess)</td><td><strong>~50-150MB resident</strong></td><td>SDK CLI is a Node binary; varies with conversation history</td></tr>
+    <tr><td>RAM (backend Python state)</td><td><strong>~5-20MB</strong></td><td>ClaudeSDKClient + AuditCollector events list + lease state</td></tr>
+    <tr><td>Subprocess count when active</td><td><strong>1-2</strong></td><td>orchestrator + maybe one expert at a time</td></tr>
+    <tr><td>File descriptors</td><td><strong>~30-50 per subprocess</strong></td><td></td></tr>
+    <tr><td>Setup wall clock</td><td><strong>~150-500ms</strong></td><td>skills copy dominates</td></tr>
+    <tr><td>Teardown wall clock</td><td><strong>~50-200ms</strong></td><td>rmtree</td></tr>
+  </table>
+
+  <h3>Per pharmacy</h3>
+  <table>
+    <tr><th>Pharmacy size</th><th>Active sessions peak</th><th>Cold-parked accumulation</th></tr>
+    <tr><td>Small (5 employees)</td><td>5-10</td><td>5-30</td></tr>
+    <tr><td>Mid-size specialty (12 employees)</td><td>12-24</td><td>20-100</td></tr>
+  </table>
+
+  <h3>Per org</h3>
+  <table>
+    <tr><th>Org size</th><th>Pharmacies</th><th>Active peak</th><th>Cold-parked</th></tr>
+    <tr><td>Single-pharmacy</td><td>1</td><td>5-10</td><td>5-30</td></tr>
+    <tr><td>Mid (3-5 pharmacies)</td><td>3-5</td><td>30-75</td><td>50-200</td></tr>
+    <tr><td>Large (10-25 pharmacies)</td><td>10-25</td><td>100-400</td><td>200-1000</td></tr>
+    <tr><td>Enterprise (50+)</td><td>50+</td><td>500-1500</td><td>1000-5000</td></tr>
+  </table>
+
+  <h3>Per backend replica (realistic)</h3>
+  <p>Realistic peak utilization across a fleet: 10-20% of users active at any moment. For a 4-replica deployment serving ~100 mid-sized orgs:</p>
+  <ul>
+    <li><strong>~150-300 active sessions per replica</strong></li>
+    <li>~7-30GB RAM for orchestrator subprocesses alone</li>
+    <li>~7-30GB disk for sandboxes</li>
+    <li>~300-600 concurrent subprocesses (orchestrator + transient experts)</li>
+  </ul>
+
+  <h3>Bottlenecks at scale</h3>
+
+  <h4>1. Skills copy on session start (first to hurt)</h4>
+  <p>At ~150-300ms per session for the skills tree, if creation rate hits ~5-10 sessions/sec sustained, you'll burn close to a full CPU just on <code>shutil.copytree</code>. This is the single biggest perf cliff before everything else.</p>
+  <ul>
+    <li><strong>Mitigation</strong>: shared symlink tree (the A3 hybrid we deferred). Skills live once at <code>&lt;workspace_base&gt;/&lt;org&gt;/_skills/</code>; each session symlinks <code>.claude/skills/</code> to it.</li>
+  </ul>
+
+  <h4>2. Resident RAM per replica</h4>
+  <p>At ~150MB per orchestrator × 300 active = ~45GB RAM per replica.</p>
+  <ul>
+    <li><strong>Mitigation</strong>: cap <code>max_turns</code> per workflow; cold-park aggressively (subprocess dies, state survives in DB + workspace); horizontal scale; replica sizing 32-64GB.</li>
+  </ul>
+
+  <h4>3. Subprocess count + fd limits</h4>
+  <p>OS-level limits on processes per user and open fds. A replica running 300 concurrent active sessions ≈ 600 subprocesses + ~30K fds.</p>
+  <ul>
+    <li><strong>Mitigation</strong>: <code>ulimit -n 65536</code> at deploy time; cgroup limits per backend container; cold-park turns "many concurrent active" into "many concurrent waiting DB rows."</li>
+  </ul>
+
+  <h4>4. Cold-parked sandbox accumulation on shared FS</h4>
+  <p>At ~100MB each × 5,000 cold sessions across the fleet = <strong>500GB just for parked workspaces</strong>.</p>
+  <ul>
+    <li><strong>Mitigation</strong>: hard TTL on cold-park (7 days); per-pharmacy quota; monitor + alert.</li>
+  </ul>
+
+  <h4>5. Cold-revive storm</h4>
+  <p>End of pharmacist's lunch — 30 pending approvals processed in 60 seconds → 30 cold-revive Inngest events.</p>
+  <ul>
+    <li><strong>Mitigation</strong>: Inngest <code>concurrency=[Concurrency(scope="fn", limit=3)]</code> already in place; per-pharmacy concurrency throttle; backpressure visible in UI.</li>
+  </ul>
+
+  <h4>6. Filestore IOPs (shared FS)</h4>
+  <p>GCP Filestore standard tier: ~10K IOPs sustained per TB. 500 sessions/min × 200 IOPs/sandbox-create = 1.6K IOPs/sec sustained.</p>
+  <ul>
+    <li><strong>Mitigation</strong>: symlink skills tree; per-org Filestore mounts; premium tier for bursty orgs.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ GUARDRAILS -->
+<section class="panel" data-panel="guardrails">
+  <h2>Operational guardrails</h2>
+  <p>Things you must build alongside the sandbox model — without these, the cardinality assumptions degrade silently in production.</p>
+
+  <table>
+    <tr><th>Guardrail</th><th>What it catches</th><th>Where it lives</th></tr>
+    <tr><td><strong>Sandbox watchdog</strong></td><td>Subprocess hung or crashed without flipping session status</td><td>Backend replica heartbeat + cron sweep on <code>(status='active', last_event_at &lt; now - 5min)</code></td></tr>
+    <tr><td><strong>Orphan sandbox sweep</strong></td><td>Workspace dirs whose session row no longer exists (or vice versa)</td><td>Cron job, runs nightly, surfaces deltas as ops alerts</td></tr>
+    <tr><td><strong>Cold-park hard TTL</strong></td><td>Sandboxes parked too long</td><td>Cron, 7 days waiting_cold → abandoned + rmtree</td></tr>
+    <tr><td><strong>Per-pharmacy active quota</strong></td><td>One pharmacy can't starve others</td><td>Soft limit at session-create; hard limit configurable</td></tr>
+    <tr><td><strong>Per-replica active quota</strong></td><td>Replica can't oversubscribe RAM</td><td>Refuse session creation when over threshold; route to less-loaded replica</td></tr>
+    <tr><td><strong>Lease expiration sweep</strong></td><td>Lease holder died without releasing</td><td>Cron, expires <code>lease_expires_at &lt; now</code> rows</td></tr>
+    <tr><td><strong>Subprocess RSS monitor</strong></td><td>Detect runaway-context orchestrators</td><td>Per-process monitoring; force-finalize at threshold</td></tr>
+    <tr><td><strong>Memory file size cap per key</strong></td><td>One verbose expert can't bloat shared memory file</td><td>Cap at 50KB per <code>&lt;key&gt;.md</code>; force-truncate oldest entries on overflow</td></tr>
+    <tr><td><strong>Skills tree refresh</strong></td><td>Platform deploys new skills; sessions need to pick them up</td><td>Skills are read-only after symlink; new sessions get fresh; old sessions keep their copy</td></tr>
+    <tr><td><strong>Manifest schema versioning</strong></td><td>Forward compatibility for memory layer evolution</td><td>Embed <code>schema_version: 1</code> in <code>.memory-manifest.json</code></td></tr>
+    <tr><td><strong>Merge idempotency</strong></td><td>Crash recovery; running merger twice produces identical canonical</td><td>Each entry's wrapping is deterministic (session_id + ts is unique)</td></tr>
+  </table>
+
+  <h3>Edge cases to plan for</h3>
+  <ol>
+    <li><strong>Pharmacy with synchronized lunch break</strong> — at 12:30 PM all 12 employees finish their morning Rx work, click "submit for approval" simultaneously. 12 sessions all flip to <code>waiting_cold</code> within 5 minutes. Cold-revive storm at 1:00 PM.</li>
+    <li><strong>Single user with multiple browser tabs</strong> — Alice opens 3 tabs each starting an rx-flow session. 3 sandboxes, 3 leases, all on Laptop 1's <code>machine_id</code>. Lease design handles this fine but the user might expect "continue my last session" — surface a session picker in the UI rather than auto-resuming.</li>
+    <li><strong>The session that never ends</strong> — orchestrator hits some edge case where it loops between two experts indefinitely. <code>max_turns</code> cap saves you, but worth surfacing as an audit event for review.</li>
+    <li><strong>Workspace mid-state during take-over</strong> — Bob takes over Alice's session while an expert is in the middle of a Bash call. Process is killed; tool_result was never returned to orchestrator. Resume needs to roll back to the last committed orchestrator turn (the SDK's <code>resume=session_id</code> does this naturally, but verify under test).</li>
+    <li><strong>Memory write race within a session under future parallel dispatch</strong> — if two experts dispatched in parallel both write to <code>memories/drugs/&lt;ndc&gt;.md</code>, the file gets interleaved bytes. fcntl flock at merge time is fine; in-session mid-flight is a real race. Today sequential, no problem. Future = B3 hybrid.</li>
+    <li><strong>Cold-revive on a different replica than original</strong> — works because shared FS, but the new replica's <code>cl._agi_clients[sid]</code> dict starts empty. Sandbox is on disk; the live <code>ClaudeSDKClient</code> Python object has to be re-created on whichever replica picks up the Inngest event. That's the whole point of the lease design.</li>
+    <li><strong>Pharmacy onboarding races</strong> — admin creates pharmacy → user created → user starts session before the bootstrap step has provisioned the pharmacy memory directory. Bootstrap must be idempotent and synchronous with pharmacy creation, not async-eventual.</li>
+    <li><strong>Org migration / DB cutover</strong> — moving from shared-DB to DB-per-org. Existing sessions have to either be drained (let them finish) or migrated (move row + workspace to new DB / FS partition). Drain is cleaner. Plan for a freeze window.</li>
+  </ol>
+
+  <h3>Failure modes specific to 1:1 session-to-sandbox</h3>
+  <table>
+    <tr><th>Failure</th><th>Detection</th><th>Recovery</th></tr>
+    <tr><td>Workspace dir vanishes (FS corruption, manual delete) but session row active</td><td>Next access → <code>FileNotFoundError</code></td><td>Manual: investigate FS issue. Mark session as <code>failed</code>. No automatic recovery — workspace contents (incl. SDK transcript) are unrecoverable. Mitigate via FS snapshots / Filestore PITR.</td></tr>
+    <tr><td>Session row deleted/lost but workspace dir persists</td><td>Cron sweep finds workspace whose session row doesn't exist</td><td>Cron rmtree's orphan workspace. Audit event records.</td></tr>
+    <tr><td>Workspace partially written (race during provisioning)</td><td>Sanity check at session creation</td><td>Fail provisioning, rmtree partial workspace, return 500.</td></tr>
+    <tr><td>Two replicas race to acquire lease for same session</td><td>DB-level <code>UPDATE WHERE lease_expires_at &lt; now() OR lease_holder_id = self</code></td><td>Loser sees rowcount=0; treats as 409 Conflict; redirects to current holder.</td></tr>
+    <tr><td><code>extra_data["workspace"]</code> points at a path the current replica can't reach</td><td>Replica fails <code>os.path.exists</code></td><td>Ensure all replicas mount the same FS root; deploy-time check at startup. Per-org FS root recorded on control plane DB.</td></tr>
+    <tr><td>Skills copy hung mid-flight at provisioning</td><td><code>_prepare_workspace</code> watchdog timeout (e.g., 30s)</td><td>Fail session creation; rmtree partial workspace; return 500.</td></tr>
+  </table>
+
+  <h3>Multi-replica failure scenarios</h3>
+
+  <h4>Replica holding the lease crashes (deploy, OOM, segfault)</h4>
+  <ol>
+    <li>Replica X is hosting session_id <code>S</code> with active lease</li>
+    <li>Replica X dies. No graceful drain.</li>
+    <li>Heartbeat stops. After 60s, <code>lease_expires_at &lt; now()</code></li>
+    <li>Lease sweeper (cron, every 30s) reclaims by setting <code>lease_holder_*</code> to NULL</li>
+    <li>Session row remains valid; workspace remains on shared FS</li>
+    <li>Next user-facing event acquires lease cleanly</li>
+    <li>Possibly: in-flight assistant turn was lost. SDK's <code>resume=session_id</code> recovers up to the last committed turn in the JSONL transcript.</li>
+  </ol>
+
+  <h4>Backend deploys mid-session (rolling restart)</h4>
+  <p>Same as above, but graceful — replica drains active sessions before exiting:</p>
+  <ol>
+    <li>Replica X gets SIGTERM</li>
+    <li>Each active session: cancel drain task, finalize cleanly OR cold-park if mid-turn</li>
+    <li>If cold-parked: state preserved on disk + DB; new replica picks up on next request</li>
+    <li>If finalized: session terminates cleanly; sandbox rmtree'd</li>
+  </ol>
+
+  <h4>Inngest worker picks up cold-revive on a replica that's never seen this session</h4>
+  <ol>
+    <li>Inngest event <code>agi/cold_approval_requested {org_id, session_id, approval_id}</code> fires</li>
+    <li>Any backend replica handles it (Inngest distributes via concurrency=3 limit)</li>
+    <li>Replica resolves the org's DB connection → reads session row → reads workspace path</li>
+    <li><strong>Workspace is on shared FS, so replica can read it</strong></li>
+    <li>Acquires lease, spawns SDK client with resume, drains</li>
+  </ol>
+  <p>The sandbox is the source of truth. The replica is interchangeable.</p>
+</section>
+
+<!-- ============================================================ RECONSIDER -->
+<section class="panel" data-panel="reconsider">
+  <h2>When we'd reconsider</h2>
+  <p>The decisions are not eternal. Here's where they should be re-evaluated, with concrete thresholds.</p>
+
+  <table>
+    <tr><th>Trigger</th><th>What to reconsider</th><th>Where it goes</th></tr>
+    <tr><td>Skills-copy time becomes >2-3% of total session latency</td><td>A3 — shared skills root with per-session symlinks</td><td>Memory + workspace selector keeps current shape; skills tree becomes shared</td></tr>
+    <tr><td>Parallel expert dispatch becomes a real feature</td><td>B3 — per-expert subdirs</td><td><code>_spawn_expert_agent</code> grows per-expert cwd; merger becomes two-stage</td></tr>
+    <tr><td>Sandbox count per machine becomes a disk-space issue (10K+ concurrent sessions)</td><td>A2 with explicit pooling</td><td>Paired with token-injection layer + per-session subdir partitioning</td></tr>
+    <tr><td>A specific expert needs different skill scoping than its siblings</td><td>Workflow-level expert-specific skill subset</td><td>Projected into a per-expert subdir (B3 hybrid)</td></tr>
+    <tr><td>Audit/compliance demand per-agent file isolation</td><td>B3 mandatory</td><td>Forensic per-agent file trail at session level</td></tr>
+    <tr><td>Lazy-fetch-on-miss demand for ad-hoc workflows</td><td>v2 memory feature: hook on Read tool</td><td>Hook intercepts non-projected file reads, fetches from canonical, copies into workspace</td></tr>
+    <tr><td>Memory pinning / promotion to evergreen entries</td><td>v2 memory feature: <code>pinned</code> flag on entries</td><td>TTL sweeper exempts pinned entries</td></tr>
+    <tr><td>Cross-org learning option B (CareLink-curated platform priors)</td><td>v2 platform layer above all orgs</td><td>Read-only platform layer at <code>/memory/platform/</code>; manifested into every org's projection</td></tr>
+    <tr><td>Cross-org learning option C (anonymized cross-org write-back)</td><td>v3 — redactor + cross-org pipeline</td><td>Sessions write to platform layer (PII-stripped); other orgs read from it</td></tr>
+  </table>
+
+  <h3>Future enhancements that don't change the core model</h3>
+  <ul>
+    <li><strong>Memory size cap per key</strong> — refuse appends past 50KB; oldest entries auto-pruned</li>
+    <li><strong>Per-pharmacy memory quota</strong> — total memory bytes per pharmacy capped; alert at 80%</li>
+    <li><strong>Manifest entry-level redaction</strong> — selector includes file but redacts certain entries by role</li>
+    <li><strong>Per-bucket TTL overrides</strong> — different buckets might have different retention (drugs longer than insurance, e.g.)</li>
+    <li><strong>Audit-only read mode</strong> — for compliance reviews; reads canonical without spawning a session</li>
+  </ul>
+
+  <h3>What we explicitly chose NOT to ship in v1</h3>
+  <ul>
+    <li>Lazy fetch on miss — chat workflow projects only <code>tools/</code> for now</li>
+    <li>Memory pinning — all entries TTL at 14 days uniformly</li>
+    <li>Cross-org platform priors — each org learns independently (option A)</li>
+    <li>Per-expert sandbox subdirs (B3) — sequential dispatch only; design v1 to make B3 a drop-in</li>
+    <li>Sandbox pool / pre-warmed cache (A2/A3) — reserved for skills-copy bottleneck</li>
+    <li>Per-bucket TTL overrides — uniform 14d</li>
+    <li>Memory entry promotion — no escape hatch from TTL today</li>
+  </ul>
+
+  <h3>The sandbox model in one sentence</h3>
+  <div class="callout success">
+    <strong>The sandbox is the unit of memory consistency, the durable backing for cold-revive, and the perimeter for in-session agent collaboration. 1:1 with session, N:1 with agents, ephemeral by design — with canonical memory above as the long-term cross-session learning layer.</strong>
+  </div>
+</section>
+
+<div class="footer-note">
+  <strong>Document state</strong>: design synthesis, no code written yet.<br>
+  <strong>Inputs</strong>: 12-axis architecture decision (2026-04-28), Phase D spike (2026-04-27), branch comparison (2026-04-27), this conversation's sandbox + memory deep-dive.<br>
+  <strong>Companion docs</strong>: <code>docs/agi-architecture-overview.html</code> (full multi-tenancy architecture), <code>docs/rx-flow-handoff-2026-04-28-multitenancy-architecture.md</code> (handoff for next agent).<br>
+  <strong>Memory</strong>: <code>~/.claude/projects/-Users-sangeet-src-carelink-monorepo/memory/project_agi_multitenancy_architecture.md</code>
+</div>
+
+</main>
+
+<script>
+  // Tab switching
+  const tabs = document.querySelectorAll('nav.tabs button');
+  const panels = document.querySelectorAll('section.panel');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      tabs.forEach(t => t.classList.toggle('active', t === tab));
+      panels.forEach(p => p.classList.toggle('active', p.dataset.panel === target));
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+
+  // Option-row expand
+  const optionRows = document.querySelectorAll('.option-row');
+  optionRows.forEach(row => {
+    row.addEventListener('click', () => {
+      const wasActive = row.classList.contains('active');
+      // Allow multiple open simultaneously — don't auto-collapse siblings
+      row.classList.toggle('active', !wasActive);
+    });
+  });
+
+  // State-row expand
+  const stateRows = document.querySelectorAll('.state-row');
+  stateRows.forEach(row => {
+    row.addEventListener('click', () => {
+      const wasActive = row.classList.contains('active');
+      stateRows.forEach(r => r.classList.remove('active'));
+      if (!wasActive) row.classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>
