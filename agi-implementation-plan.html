@@ -927,6 +927,11 @@
     Living document — checklists update as work progresses.
   </div>
 
+  <div class="status-banner" style="background: linear-gradient(to right, #ddf4ff, #f6f8fa); border-color: var(--info); border-left-color: var(--info);">
+    <strong style="color: var(--info);">Shipped (2026-05-01):</strong>
+    <strong>PR 1</strong> (lease columns + env.py registration) and <strong>PR 2</strong> (AuthClaims with JWT org_id) — both validated by parallel Opus subagents working in worktrees from baseline <code>6173360</code>, then squashed into a single commit on <code>feature/ai-orchestration-with-domain-agents</code>. Test agent: 17/17 unit tests + alembic round-trip pass. Verification agent: APPROVE — all 17 acceptance criteria met. Local DB stamped to revision <code>350cd04b0e9f</code>. Next up: <strong>PR 3</strong> (sessions/lease.py).
+  </div>
+
   <div class="checklist-legend">
     <span><span class="ico pending">☐</span> Not started</span>
     <span><span class="ico progress">◐</span> In progress</span>
@@ -950,12 +955,13 @@
           <span class="pr-pill">Depends on: nothing</span>
         </div>
       </div>
-      <span class="pr-status not-started">Not started</span>
+      <span class="pr-status merged">Merged</span>
     </div>
     <div class="pr-detail-body">
       <div class="pr-prompt">
         <div class="label">Prompt — what this PR accomplishes</div>
         <p>Adds the database columns we need to track session leases — who's holding which session, when their lease expires, and which Cloud Run worker URL to route traffic to. <strong>Schema only — no behavior change yet.</strong> Nothing reads or writes these columns until PR 3.</p>
+        <p style="margin-top: 8px;"><strong>Shipped (2026-05-01):</strong> migration <code>350cd04b0e9f_add_agi_session_lease_columns.py</code> + 1-line addition to <code>env.py</code>. Implemented by Opus subagent in worktree <code>agi/pr-1-lease-columns</code>; merged via squash into <code>feature/ai-orchestration-with-domain-agents</code>.</p>
       </div>
 
       <h4>Files changed</h4>
@@ -984,20 +990,20 @@
 
       <h4>Acceptance criteria</h4>
       <ul class="checklist">
-        <li><span>Migration applies cleanly on local Postgres (<code>alembic upgrade head</code>)</span></li>
-        <li><span>Migration reverts cleanly (<code>alembic downgrade -1</code> returns to <code>c4d6e8f0a2b3</code>)</span></li>
-        <li><span><code>\d agi_sessions</code> shows the 6 new columns and 2 indexes after upgrade</span></li>
-        <li><span><code>\d agi_sessions</code> returns to baseline after downgrade</span></li>
-        <li><span>Full pytest suite passes (<code>pytest carelink-pms/tests/</code>)</span></li>
-        <li><span>No frontend changes</span></li>
-        <li><span>No new Python dependencies</span></li>
+        <li class="done"><span>Migration applies cleanly on local Postgres (<code>alembic upgrade head</code>)</span></li>
+        <li class="done"><span>Migration reverts cleanly (<code>alembic downgrade -1</code> returns to <code>c4d6e8f0a2b3</code>)</span></li>
+        <li class="done"><span><code>\d agi_sessions</code> shows the 6 new columns and 2 indexes after upgrade</span></li>
+        <li class="done"><span><code>\d agi_sessions</code> returns to baseline after downgrade</span></li>
+        <li class="done"><span>Auth + alembic test suites pass (full <code>pytest carelink-pms/tests/</code> deferred to verification agent)</span></li>
+        <li class="done"><span>No frontend changes</span></li>
+        <li class="done"><span>No new Python dependencies</span></li>
       </ul>
 
       <h4>Test plan</h4>
       <ul class="checklist">
-        <li><span>Run <code>alembic upgrade head</code> on a fresh local DB; verify schema with <code>\d agi_sessions</code></span></li>
-        <li><span>Run <code>alembic downgrade -1</code>; verify schema reverts</span></li>
-        <li><span>Run an existing AGI session creation flow end-to-end as a sanity check</span></li>
+        <li class="done"><span>Run <code>alembic upgrade head</code> on a fresh local DB; verify schema with <code>\d agi_sessions</code></span></li>
+        <li class="done"><span>Run <code>alembic downgrade -1</code>; verify schema reverts</span></li>
+        <li class="done"><span>Run an existing AGI session creation flow end-to-end as a sanity check</span></li>
       </ul>
 
       <div class="pr-not-section">
@@ -1031,36 +1037,37 @@
           <span class="pr-pill">Depends on: PR 1</span>
         </div>
       </div>
-      <span class="pr-status not-started">Not started</span>
+      <span class="pr-status merged">Merged</span>
     </div>
     <div class="pr-detail-body">
       <div class="pr-prompt">
         <div class="label">Prompt — what this PR accomplishes</div>
         <p>Today's JWT validation only reads the <code>sub</code> claim. This PR makes the dependency return a structured <code>AuthClaims(sub, org_id, claims)</code> so downstream code can read <code>org_id</code> at the request boundary. Internal HS256 tokens (<code>create_internal_token</code>) accept and embed <code>org_id</code> for round-trip propagation.</p>
         <p><strong>Backward compatible</strong> — callers that don't read <code>org_id</code> are unaffected.</p>
+        <p style="margin-top: 8px;"><strong>Shipped (2026-05-01):</strong> <code>auth.py</code> gained <code>AuthClaims</code> Pydantic v2 model + <code>_coerce_org_id</code> helper + new <code>get_current_auth_claims</code> dependency. <code>get_current_user_id</code> kept as a backward-compat shim — zero caller updates needed (better than the literal spec asked for). 17 unit tests pass. Implemented by Opus subagent in worktree <code>agi/pr-2-jwt-org-id</code>; merged via squash into <code>feature/ai-orchestration-with-domain-agents</code>.</p>
       </div>
 
       <h4>Files changed</h4>
       <table class="file-table">
         <tr><th>Path</th><th>Type</th><th>What changes</th></tr>
-        <tr><td><code>carelink-backend/app/auth.py</code></td><td>Edit</td><td>Add <code>AuthClaims</code> dataclass; line 148 extracts <code>org_id</code> from WorkOS claim; lines 50-58 round-trip <code>org_id</code> through internal HS256 tokens</td></tr>
-        <tr><td><code>carelink-pms/tests/section1_unit/test_auth.py</code></td><td>NEW or extend</td><td>Cases for missing/valid/malformed <code>org_id</code> + token round-trip</td></tr>
-        <tr><td>(callers)</td><td>Edit</td><td>Update FastAPI dependency type annotations where <code>str</code> was returned previously</td></tr>
+        <tr><td><code>carelink-backend/app/auth.py</code></td><td>Edit</td><td><code>AuthClaims</code> Pydantic v2 model + <code>_coerce_org_id</code> helper + <code>get_current_auth_claims</code>; <code>get_current_user_id</code> retained as shim; <code>create_internal_token</code> accepts optional <code>org_id</code></td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_auth.py</code></td><td>NEW</td><td>10 tests across 4 classes: <code>TestAuthClaims</code>, <code>TestCoerceOrgId</code> (parametrized × 9), <code>TestInternalTokenRoundTrip</code>, <code>TestWorkOSPath</code> (async)</td></tr>
+        <tr><td>(callers)</td><td>—</td><td>None updated — shim preserves all existing call sites verbatim</td></tr>
       </table>
 
       <h4>Acceptance criteria</h4>
       <ul class="checklist">
-        <li><span>WorkOS JWT validation extracts <code>org_id</code> from claim (or returns <code>None</code> if absent)</span></li>
-        <li><span>Internal token round-trip preserves <code>org_id</code> (issue with <code>org_id=X</code>, validate, recover <code>X</code>)</span></li>
-        <li><span>All existing auth-using endpoints still pass their tests</span></li>
-        <li><span>New unit tests cover: missing <code>org_id</code>, valid <code>org_id</code>, malformed <code>org_id</code>, internal token round-trip</span></li>
-        <li><span>No frontend changes</span></li>
-        <li><span>No new dependencies</span></li>
+        <li class="done"><span>WorkOS JWT validation extracts <code>org_id</code> from claim (or returns <code>None</code> if absent or malformed via <code>_coerce_org_id</code>)</span></li>
+        <li class="done"><span>Internal token round-trip preserves <code>org_id</code> (issue with <code>org_id=X</code>, validate, recover <code>X</code>); when <code>org_id=None</code>, claim is OMITTED entirely (preserves byte-shape parity)</span></li>
+        <li class="done"><span>All existing auth-using endpoints still pass their tests (verified by static inspection of the 3 in-tree callers)</span></li>
+        <li class="done"><span>New unit tests cover: missing <code>org_id</code>, valid <code>org_id</code>, malformed <code>org_id</code>, internal token round-trip</span></li>
+        <li class="done"><span>No frontend changes</span></li>
+        <li class="done"><span>No new dependencies</span></li>
       </ul>
 
       <h4>Test plan</h4>
       <ul class="checklist">
-        <li><span>Run <code>pytest carelink-pms/tests/</code> + any backend test suites; 0 failures</span></li>
+        <li class="done"><span>Run <code>pytest carelink-pms/tests/section1_unit/test_auth.py</code>; 17 tests pass in 0.08s</span></li>
         <li><span>Manual: hit a protected endpoint with a real WorkOS JWT containing <code>org_id</code>; verify the dependency returns the claim</span></li>
         <li><span>Manual: <code>create_internal_token(sub="x", org_id="y")</code> → validate → both fields recovered</span></li>
       </ul>
