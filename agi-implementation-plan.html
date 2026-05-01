@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CareLink AGI — Implementation Plan & Open Decisions (2026-05-01)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --bg-code: #f6f8fa;
+    --border: #d0d7de;
+    --border-strong: #afb8c1;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --text-faint: #8c959f;
+    --primary: #8250df;
+    --info: #0969da;
+    --success: #1a7f37;
+    --warn: #bf8700;
+    --danger: #cf222e;
+    --neutral: #57606a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  header {
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 32px 20px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
+  header .meta { color: var(--text-muted); font-size: 13px; }
+  header .intent { margin-top: 12px; max-width: 820px; }
+  nav.tabs {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  nav.tabs button {
+    background: transparent;
+    border: 0;
+    padding: 14px 18px;
+    font-size: 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active { color: var(--text); border-bottom-color: var(--primary); }
+  main {
+    padding: 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  section.panel { display: none; animation: fadein 0.2s ease; }
+  section.panel.active { display: block; }
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  h2 { font-size: 22px; margin: 0 0 16px; font-weight: 600; }
+  h3 { font-size: 17px; margin: 24px 0 10px; font-weight: 600; }
+  h4 { font-size: 13px; margin: 18px 0 6px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  p { margin: 0 0 12px; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--bg-code);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  table th, table td {
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table th { background: var(--bg-alt); font-weight: 600; }
+
+  /* Plain-language frame */
+  .plain-frame {
+    background: #f7f3ff;
+    border-left: 4px solid var(--primary);
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .plain-frame .plain-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .tech-frame {
+    background: var(--bg-alt);
+    border-left: 4px solid var(--neutral);
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .tech-frame .tech-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--neutral);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  /* Decision card */
+  .decision-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0;
+    margin: 16px 0;
+    overflow: hidden;
+    background: white;
+  }
+  .decision-header {
+    background: var(--bg-alt);
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .decision-header .decision-num {
+    background: var(--primary);
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .decision-header .decision-title { font-weight: 600; font-size: 15px; flex: 1; }
+  .status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .status-badge.pending { background: #fff8c5; color: #4d2d00; border: 1px solid var(--warn); }
+  .status-badge.recommended { background: #ddf4ff; color: #033780; border: 1px solid var(--info); }
+  .status-badge.decided { background: #dafbe1; color: #0a3622; border: 1px solid var(--success); }
+  .status-badge.blocked { background: #ffebe9; color: #82071e; border: 1px solid var(--danger); }
+  .status-badge.followup { background: #f7f3ff; color: #3e1f7f; border: 1px solid var(--primary); }
+  .decision-body { padding: 16px 18px; }
+  .decision-body .why { color: var(--text-muted); margin-bottom: 12px; font-size: 14px; }
+  .decision-options {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0;
+  }
+  .decision-options li {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 6px 0;
+    background: var(--bg-alt);
+    font-size: 13.5px;
+  }
+  .decision-options li.recommended {
+    background: #ddf4ff;
+    border-color: var(--info);
+    border-left: 4px solid var(--info);
+  }
+  .decision-options .opt-label { font-weight: 600; margin-right: 6px; }
+  .recommendation-box {
+    background: #ddf4ff;
+    border-left: 4px solid var(--info);
+    padding: 10px 14px;
+    margin: 10px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 14px;
+  }
+  .recommendation-box strong { color: var(--info); }
+
+  /* Layer / PR card */
+  .layer-card, .pr-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 12px 0;
+    background: white;
+  }
+  .layer-card .layer-num, .pr-card .pr-num {
+    display: inline-block;
+    background: var(--neutral);
+    color: white;
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    text-align: center;
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 13px;
+    margin-right: 12px;
+  }
+  .layer-card .layer-title, .pr-card .pr-title { font-weight: 600; font-size: 15px; }
+  .layer-card .layer-tagline, .pr-card .pr-tagline {
+    color: var(--text-muted);
+    font-size: 13.5px;
+    margin-left: 40px;
+    margin-top: 4px;
+  }
+  .layer-card .layer-body, .pr-card .pr-body {
+    margin-left: 40px;
+    margin-top: 12px;
+  }
+  .arrow-down {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 22px;
+    margin: 4px 0;
+  }
+  .pr-pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .pr-pill {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+  }
+  .pr-pill.size-s { background: #dafbe1; color: #0a3622; border-color: var(--success); }
+  .pr-pill.size-m { background: #ddf4ff; color: #033780; border-color: var(--info); }
+  .pr-pill.size-l { background: #fff8c5; color: #4d2d00; border-color: var(--warn); }
+  .pr-pill.size-xl { background: #ffebe9; color: #82071e; border-color: var(--danger); }
+  .pr-pill.risk-low { color: var(--success); border-color: var(--success); }
+  .pr-pill.risk-med { color: var(--warn); border-color: var(--warn); }
+  .pr-pill.risk-high { color: var(--danger); border-color: var(--danger); }
+
+  /* Topology */
+  .topology-svg {
+    width: 100%;
+    max-width: 1080px;
+    height: auto;
+    display: block;
+    margin: 16px auto;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .glossary-tip {
+    border-bottom: 1px dashed var(--text-muted);
+    cursor: help;
+    position: relative;
+  }
+  .glossary-tip:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    background: var(--text);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: normal;
+    width: 320px;
+    z-index: 100;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+
+  /* Findings */
+  .finding-card {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin: 16px 0;
+    background: white;
+  }
+  .finding-card .finding-num {
+    display: inline-block;
+    background: var(--warn);
+    color: white;
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    text-align: center;
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 12px;
+    margin-right: 8px;
+  }
+  .finding-card .finding-title { font-weight: 700; font-size: 15px; display: inline; }
+  .finding-card .finding-body { margin-top: 10px; padding-left: 32px; font-size: 14px; }
+
+  .footer-note {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  details { margin: 12px 0; }
+  details summary {
+    cursor: pointer;
+    padding: 8px 12px;
+    background: var(--bg-alt);
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 13.5px;
+  }
+  details[open] summary { border-radius: 6px 6px 0 0; }
+  details > div {
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+  }
+
+  .scope-pill {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    color: white;
+    margin: 0 2px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .scope-pill.green { background: var(--success); }
+  .scope-pill.blue { background: var(--info); }
+  .scope-pill.yellow { background: var(--warn); }
+  .scope-pill.red { background: var(--danger); }
+  .scope-pill.purple { background: var(--primary); }
+  .scope-pill.gray { background: var(--neutral); }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>CareLink AGI — Implementation Plan & Open Decisions</h1>
+  <div class="meta">Generated 2026-05-01. Synthesis of two parallel deep-code-review agents (worker-pool migration + per-org tenancy gaps).</div>
+  <div class="intent">This document translates the architectural decisions we've already locked into a concrete shipping plan. Each section has a plain-English summary first, with engineering details below. Open decisions are tracked as cards — anyone reading this can see what's still pending and weigh in.</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="overview" class="active">Plain English Overview</button>
+  <button data-tab="diagram">Now vs Target</button>
+  <button data-tab="layers">The 9 Layers</button>
+  <button data-tab="prplan">8-PR Shipping Plan</button>
+  <button data-tab="surprises">What Surprised Us</button>
+  <button data-tab="decisions">Open Decisions (7)</button>
+  <button data-tab="questions">Follow-Up Questions</button>
+  <button data-tab="reference">Engineering Reference</button>
+</nav>
+
+<main>
+
+<!-- =========================================================== OVERVIEW -->
+<section class="panel active" data-panel="overview">
+  <h2>What this document is for</h2>
+  <p>We've spent several weeks designing the CareLink AGI runtime architecture. We've decided <em>what</em> to build. This document is about <em>how to actually ship it</em> — turning architectural decisions into pull requests, scheduling them, and surfacing the questions that still need answers.</p>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph (no jargon)</div>
+    <p>Right now, when a pharmacist starts using the AI assistant, everything runs inside one server process. That works for one customer, but doesn't scale to many customers, and doesn't survive server restarts gracefully. We're moving to a setup where the AI runs in a separate dedicated compute pool, paused sessions can be picked up by any server, and each customer's data lives in its own database. This document is the plan for getting from here to there.</p>
+  </div>
+
+  <h3>The headlines</h3>
+
+  <ol style="line-height: 1.9;">
+    <li><strong>Today is already one-database-per-deployment, just without the orchestration to manage many of them.</strong> Each running CareLink instance serves one customer. The migration is "build the routing layer that turns N independent deployments into one routed deployment," not "split a shared database."</li>
+
+    <li><strong>The compute side has a clean rollout strategy.</strong> A configuration flag (<code>compute_mode</code>) lets us keep the current code working while the new code goes in alongside it. Switch the flag, the new path activates. Nothing big-bang.</li>
+
+    <li><strong>The biggest single change is in <code>routers/agi.py</code> — about 10 endpoints need to change from "look up the AI in process memory" to "look up which server is hosting it and forward the request there."</strong> This is the dispatch boundary. It's the most consequential code change, but it's well-bounded.</li>
+
+    <li><strong>The second-biggest change is the workflow engine globals.</strong> A bunch of workflow code uses module-level variables ("set this once at process startup and forget it"). For multi-customer, those need to become per-customer factories.</li>
+
+    <li><strong>Two tracks can ship in parallel</strong>: the worker-pool track (move AI runtime to dedicated compute) and the multi-tenant track (per-customer database routing). They share early foundations but diverge after.</li>
+  </ol>
+
+  <h3>What's in this document</h3>
+  <table>
+    <tr><th>Tab</th><th>For who</th><th>What's in it</th></tr>
+    <tr><td>Now vs Target</td><td>Everyone</td><td>Visual diagram of where things are vs where they're going</td></tr>
+    <tr><td>The 9 Layers</td><td>Engineers + planners</td><td>Build order — what depends on what</td></tr>
+    <tr><td>8-PR Shipping Plan</td><td>Engineers + sprint planners</td><td>Concrete pull-request sequence with size + risk + dependencies</td></tr>
+    <tr><td>What Surprised Us</td><td>Everyone</td><td>5 findings worth flagging — risks we hadn't budgeted for</td></tr>
+    <tr><td>Open Decisions</td><td>Stakeholders</td><td>7 questions where we have options — pick one to unblock</td></tr>
+    <tr><td>Follow-Up Questions</td><td>The user (you)</td><td>What I need from you to proceed</td></tr>
+    <tr><td>Engineering Reference</td><td>Engineers only</td><td>File:line citations, schema migration, code sketches</td></tr>
+  </table>
+
+  <h3>Where we got the data</h3>
+  <p>Two Opus AI agents did parallel deep reads of the codebase on 2026-04-30:</p>
+  <ul>
+    <li><strong>Agent A</strong> reviewed <code>carelink-pms/carelink/agi/</code>, <code>carelink-backend/app/routers/agi.py</code>, the Inngest cold-revive functions, and the test fixtures. Output: file-by-file change list with line numbers, NEW files to create, schema migration plan, dispatch boundary refactor walkthrough.</li>
+    <li><strong>Agent B</strong> reviewed the FastAPI app factory, dependency injection layer, auth (WorkOS JWT), CareLink singleton, database connection layer, alembic migrations, GCS/Filestore plumbing, and existing org-bootstrap. Output: per-org tenancy gap analysis, control plane DB design, org-provisioning workflow, migration story for existing data.</li>
+  </ul>
+  <p>This document synthesizes both into one shipping plan.</p>
+</section>
+
+<!-- =========================================================== DIAGRAM -->
+<section class="panel" data-panel="diagram">
+  <h2>Now vs Target — the system shape</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph (no jargon)</div>
+    <p>Today, everything runs in one server process — the website talks to one backend, which holds the AI conversations in its own memory. If that server restarts, conversations vanish. If a second customer joins, they share the same database. The new shape splits this into specialized pieces — a thin "request handler" backend, a separate "AI runner" compute pool, and storage that any server can reach. Each customer gets their own database. Nothing is shared except the platform itself.</p>
+  </div>
+
+  <svg class="topology-svg" viewBox="0 0 1080 700" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="td-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+        <path d="M0,0 L0,10 L10,5 z" fill="#57606a"/>
+      </marker>
+    </defs>
+
+    <text x="270" y="25" text-anchor="middle" font-size="13" font-weight="700" fill="#cf222e">CURRENT STATE</text>
+    <text x="810" y="25" text-anchor="middle" font-size="13" font-weight="700" fill="#1a7f37">TARGET STATE</text>
+
+    <!-- CURRENT (left) -->
+    <rect x="40" y="45" width="460" height="44" rx="6" fill="#fff8e6" stroke="#bf8700" stroke-width="2"/>
+    <text x="270" y="71" text-anchor="middle" font-size="13" font-weight="600" fill="#bf8700">Browser (one customer at a time)</text>
+
+    <path d="M 270 92 L 270 110" stroke="#57606a" stroke-width="1.5" marker-end="url(#td-arr)"/>
+
+    <rect x="40" y="115" width="460" height="100" rx="6" fill="#dde7f5" stroke="#0550ae" stroke-width="2"/>
+    <text x="270" y="138" text-anchor="middle" font-size="13" font-weight="600" fill="#0550ae">One backend server (FastAPI)</text>
+    <text x="60" y="158" font-size="11" fill="#0550ae">- Handles HTTP requests</text>
+    <text x="60" y="174" font-size="11" fill="#0550ae">- Runs the AI orchestrator IN THE SAME PROCESS</text>
+    <text x="60" y="190" font-size="11" fill="#0550ae">- Holds AI conversation state in a dictionary in memory</text>
+    <text x="60" y="206" font-size="11" fill="#0550ae">- If it restarts, conversations are lost (cold-revive partial)</text>
+
+    <path d="M 270 220 L 270 240" stroke="#57606a" stroke-width="1.5" marker-end="url(#td-arr)"/>
+
+    <rect x="40" y="245" width="460" height="80" rx="6" fill="#f1f3f5" stroke="#57606a" stroke-width="2"/>
+    <text x="270" y="268" text-anchor="middle" font-size="13" font-weight="600" fill="#57606a">One database (Postgres)</text>
+    <text x="60" y="288" font-size="11" fill="#57606a">- One database per deployment</text>
+    <text x="60" y="304" font-size="11" fill="#57606a">- Adding a customer = spinning up a whole new deployment</text>
+    <text x="60" y="320" font-size="11" fill="#57606a">- No central registry of who owns what</text>
+
+    <rect x="40" y="335" width="460" height="60" rx="6" fill="#fafafa" stroke="#cf222e" stroke-width="2" stroke-dasharray="4,3"/>
+    <text x="270" y="358" text-anchor="middle" font-size="12" font-weight="600" fill="#cf222e">Workspace files in /tmp on the server's local disk</text>
+    <text x="270" y="376" text-anchor="middle" font-size="11" fill="#cf222e">- Conversations tied to one specific machine</text>
+    <text x="270" y="390" text-anchor="middle" font-size="11" fill="#cf222e">- Memories created during sessions are NEVER persisted</text>
+
+    <text x="540" y="220" font-size="36" fill="#57606a">→</text>
+
+    <!-- TARGET (right) -->
+    <rect x="580" y="45" width="460" height="44" rx="6" fill="#fff8e6" stroke="#bf8700" stroke-width="2"/>
+    <text x="810" y="71" text-anchor="middle" font-size="13" font-weight="600" fill="#bf8700">Browser (any customer)</text>
+
+    <path d="M 810 92 L 810 110" stroke="#57606a" stroke-width="1.5" marker-end="url(#td-arr)"/>
+
+    <rect x="580" y="115" width="220" height="100" rx="6" fill="#dde7f5" stroke="#0550ae" stroke-width="2"/>
+    <text x="690" y="138" text-anchor="middle" font-size="12" font-weight="600" fill="#0550ae">Backend server</text>
+    <text x="690" y="154" text-anchor="middle" font-size="10.5" fill="#0550ae">(thin HTTP handler)</text>
+    <text x="600" y="174" font-size="10.5" fill="#0550ae">- Routes per customer</text>
+    <text x="600" y="188" font-size="10.5" fill="#0550ae">- Looks up "who is</text>
+    <text x="600" y="202" font-size="10.5" fill="#0550ae">  hosting this AI?"</text>
+
+    <rect x="820" y="115" width="220" height="100" rx="6" fill="#f7e8ff" stroke="#8250df" stroke-width="2"/>
+    <text x="930" y="138" text-anchor="middle" font-size="12" font-weight="600" fill="#8250df">AI runtime</text>
+    <text x="930" y="154" text-anchor="middle" font-size="10.5" fill="#8250df">(Cloud Run worker pool)</text>
+    <text x="840" y="174" font-size="10.5" fill="#8250df">- Hosts running AI</text>
+    <text x="840" y="188" font-size="10.5" fill="#8250df">  conversations</text>
+    <text x="840" y="202" font-size="10.5" fill="#8250df">- Multi-tenant within</text>
+
+    <path d="M 690 220 L 690 240" stroke="#57606a" stroke-width="1.5" marker-end="url(#td-arr)"/>
+    <path d="M 930 220 L 930 240" stroke="#57606a" stroke-width="1.5" marker-end="url(#td-arr)"/>
+
+    <rect x="580" y="245" width="460" height="80" rx="6" fill="#dafbe1" stroke="#1a7f37" stroke-width="2"/>
+    <text x="810" y="268" text-anchor="middle" font-size="13" font-weight="600" fill="#1a7f37">Database PER customer (one each)</text>
+    <text x="600" y="288" font-size="11" fill="#1a7f37">- One database per organization (= structural isolation)</text>
+    <text x="600" y="304" font-size="11" fill="#1a7f37">- Central "control plane" registry maps customers → DBs</text>
+    <text x="600" y="320" font-size="11" fill="#1a7f37">- New customer = automated provisioning, not new deploy</text>
+
+    <rect x="580" y="335" width="220" height="80" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+    <text x="690" y="358" text-anchor="middle" font-size="12" font-weight="600" fill="#0969da">Filestore (NFS)</text>
+    <text x="690" y="375" text-anchor="middle" font-size="10.5" fill="#0969da">Hot session workspace</text>
+    <text x="600" y="395" font-size="10.5" fill="#0969da">- Any server can read it</text>
+    <text x="600" y="408" font-size="10.5" fill="#0969da">- Cold-revive works</text>
+
+    <rect x="820" y="335" width="220" height="80" rx="6" fill="#dafbe1" stroke="#1a7f37" stroke-width="2"/>
+    <text x="930" y="358" text-anchor="middle" font-size="12" font-weight="600" fill="#1a7f37">GCS canonical memory</text>
+    <text x="930" y="375" text-anchor="middle" font-size="10.5" fill="#1a7f37">Long-term learning</text>
+    <text x="840" y="395" font-size="10.5" fill="#1a7f37">- Per-customer bucket</text>
+    <text x="840" y="408" font-size="10.5" fill="#1a7f37">- Memories REALLY persist</text>
+
+    <rect x="580" y="425" width="460" height="50" rx="6" fill="#fff8c5" stroke="#bf8700" stroke-width="2"/>
+    <text x="810" y="448" text-anchor="middle" font-size="12" font-weight="600" fill="#bf8700">Inngest (durable functions)</text>
+    <text x="810" y="466" text-anchor="middle" font-size="10.5" fill="#bf8700">Cold-revive when conversations are paused; TTL sweeper</text>
+
+    <rect x="580" y="485" width="460" height="50" rx="6" fill="#f1f3f5" stroke="#57606a" stroke-width="2"/>
+    <text x="810" y="508" text-anchor="middle" font-size="12" font-weight="600" fill="#57606a">Control plane DB (NEW — small central registry)</text>
+    <text x="810" y="526" text-anchor="middle" font-size="10.5" fill="#57606a">Maps org_id → connection string + storage paths + HIPAA tier</text>
+
+    <text x="810" y="565" text-anchor="middle" font-size="11.5" font-weight="600" fill="#1a7f37">Properties this gives us:</text>
+    <text x="810" y="582" text-anchor="middle" font-size="11" fill="#1a7f37">1. Conversations survive server restarts (cold-revive across replicas)</text>
+    <text x="810" y="598" text-anchor="middle" font-size="11" fill="#1a7f37">2. New customer = automated 5-min provisioning, not new deploy</text>
+    <text x="810" y="614" text-anchor="middle" font-size="11" fill="#1a7f37">3. AI memories actually persist between sessions (canonical store)</text>
+    <text x="810" y="630" text-anchor="middle" font-size="11" fill="#1a7f37">4. Compute and storage scale independently</text>
+    <text x="810" y="646" text-anchor="middle" font-size="11" fill="#1a7f37">5. Vendor portability: storage is in our GCP project, not vendor-managed</text>
+  </svg>
+
+  <h3>What's BUILT today</h3>
+  <ul>
+    <li>The AGI runtime works end-to-end for one customer in one process</li>
+    <li>Inngest functions for cold-revive (HITL pause/resume) — already work cross-process</li>
+    <li>WorkOS authentication + Permit.io role checks (single-tenant)</li>
+    <li>GCS plumbing for transcripts and skills</li>
+    <li>Tests for invoke_expert per expert (hermetic, mocked SDK)</li>
+  </ul>
+
+  <h3>What's MISSING and needs to be built</h3>
+  <ul>
+    <li>Lease primitive (single-writer per session, DB-backed)</li>
+    <li>Worker pool — separate Cloud Run service with its own container image</li>
+    <li>Backend dispatcher — knows which worker is hosting which session</li>
+    <li>Memory canonical store + selector + merger (the actual persistent learning layer)</li>
+    <li>Filestore mount for session workspaces (replacing /tmp)</li>
+    <li>Control plane DB + org provisioning workflow</li>
+    <li>JWT extension to carry org_id + middleware to route per-org</li>
+    <li>CareLinkRegistry (per-org service bag instead of one singleton)</li>
+    <li>AuthorizationService refactor (pass tenant per-method-call, not per-construction)</li>
+    <li>Workflow engine globals → per-org factories</li>
+    <li>Admin tooling (provisioning APIs, migration runner against N DBs)</li>
+  </ul>
+</section>
+
+<!-- =========================================================== LAYERS -->
+<section class="panel" data-panel="layers">
+  <h2>The 9 layers — what depends on what</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In plain English</div>
+    <p>You can't build the roof before the walls. These are the 9 layers, in build order. Layers 1-6 are the AI worker-pool migration. Layers 7-9 are the per-customer (multi-tenant) work. After Layers 1-2, the two tracks can advance in parallel.</p>
+  </div>
+
+  <div class="layer-card">
+    <span class="layer-num">1</span><span class="layer-title">Foundation: schema + control plane</span>
+    <div class="layer-tagline">Add lease columns to AGISession. Build the central registry of customers → databases.</div>
+    <div class="layer-body">
+      <p><strong>What gets built:</strong></p>
+      <ul>
+        <li>5 new columns on <code>agi_sessions</code> for tracking which server hosts which conversation (Alembic migration)</li>
+        <li>NEW: control plane database — a small central database with one table mapping <code>org_id → connection_string, storage_paths, HIPAA_tier</code></li>
+        <li>JWT auth layer extended to extract <code>org_id</code> from the token</li>
+      </ul>
+      <p><strong>Why first:</strong> nothing else can route per-customer until the routing data exists.</p>
+    </div>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="layer-card">
+    <span class="layer-num">2</span><span class="layer-title">Routing primitives</span>
+    <div class="layer-tagline">Every request is now scoped to a specific customer.</div>
+    <div class="layer-body">
+      <p><strong>What gets built:</strong></p>
+      <ul>
+        <li>CareLinkRegistry — when a request arrives, look up the right database connection for the customer it's for</li>
+        <li>AuthorizationService refactor — instead of being constructed per customer, the org_id is passed per method call</li>
+        <li><code>get_carelink</code> dependency reads from request state (which has org_id from the JWT middleware)</li>
+      </ul>
+      <p><strong>Why second:</strong> services need to know which customer they're acting for before any per-customer logic works.</p>
+    </div>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="layer-card">
+    <span class="layer-num">3</span><span class="layer-title">Lease primitives + worker entrypoint</span>
+    <div class="layer-tagline">The new AI compute pool gets its HTTP surface.</div>
+    <div class="layer-body">
+      <p><strong>What gets built:</strong></p>
+      <ul>
+        <li><code>sessions/lease.py</code> — 4 methods: <span class="glossary-tip" data-tip="A lease is a temporary lock saying 'this server owns this conversation.' It has an expiry; if the server dies, the lease auto-expires and another server can pick it up.">acquire</span>, refresh, release, lookup. DB-backed.</li>
+        <li><code>worker/entrypoint.py</code> — the FastAPI app that runs INSIDE each worker pod, exposing internal endpoints like <code>POST /worker/sessions/spawn</code>, <code>POST /worker/sessions/{id}/turn</code>, etc.</li>
+        <li><code>worker/dispatcher.py</code> — backend-side companion. Looks up "which worker holds this session?" and forwards the request via internal HTTP.</li>
+      </ul>
+      <p><strong>Why third:</strong> can be built and deployed independently. Doesn't replace anything yet — exists alongside the in-process path.</p>
+    </div>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="layer-card">
+    <span class="layer-num">4</span><span class="layer-title">Storage decoupling</span>
+    <div class="layer-tagline">Session workspaces move from /tmp to shared storage. Skills come from a mount, not a copy.</div>
+    <div class="layer-body">
+      <p><strong>What gets built:</strong></p>
+      <ul>
+        <li><code>workspace_base</code> becomes environment-driven (dev still uses /tmp; prod uses Filestore mount)</li>
+        <li><code>_prepare_workspace</code> uses deterministic per-(org, session) paths so any server can find the workspace</li>
+        <li>Skills bundle mounted via <span class="glossary-tip" data-tip="GCS FUSE = mounting a Google Cloud Storage bucket as if it were a regular file system directory. Read-only with caching is great for static content like our 150MB skills tree.">GCS FUSE</span> read-only — instead of copying ~150MB per session</li>
+        <li>NEW <code>memory/store.py</code>, <code>memory/selector.py</code>, <code>memory/merger.py</code> — the canonical learning layer (the thing that's currently aspirational in expert MD prose but doesn't exist in code)</li>
+      </ul>
+      <p><strong>Why fourth:</strong> needs the control plane to know which storage paths each customer uses.</p>
+    </div>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="layer-card">
+    <span class="layer-num">5</span><span class="layer-title">Dispatch boundary refactor (the big one)</span>
+    <div class="layer-tagline">The 10 endpoints that hold the AI in process memory now route to the worker pool.</div>
+    <div class="layer-body">
+      <p><strong>What gets built:</strong></p>
+      <ul>
+        <li>Every endpoint in <code>routers/agi.py</code> that today does <code>cl._agi_clients[session_id]</code> now does "look up lease → forward request via HTTP to that worker"</li>
+        <li><code>_msg_to_sse_events</code> extracted from <code>routers/agi.py</code> to a shared module (worker uses it too)</li>
+        <li><code>broadcast_stats_event</code> in-process pub/sub becomes Redis pub/sub for cross-replica fan-out</li>
+        <li>Dispatcher streams server-sent events from worker → backend → browser</li>
+      </ul>
+      <p><strong>Why fifth:</strong> needs lease primitives (Layer 3) and storage (Layer 4) in place. This is the load-bearing change — it's where today's behavior actually changes.</p>
+    </div>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="layer-card">
+    <span class="layer-num">6</span><span class="layer-title">Cold-revive worker-pool aware</span>
+    <div class="layer-tagline">Pause/resume of conversations works across server restarts.</div>
+    <div class="layer-body">
+      <p><strong>What gets built:</strong></p>
+      <ul>
+        <li><code>_drive_cold_revive</code> calls dispatcher RPC instead of running the AI in-process</li>
+        <li><code>_drive_cold_approval</code> same pattern</li>
+        <li><code>_execute_parked_bash</code> still runs Python subprocesses — but on the worker that holds the lease, with workspace path on shared Filestore</li>
+      </ul>
+      <p><strong>Why sixth:</strong> cold-revive already works cross-process; this just changes who owns the SDK client.</p>
+    </div>
+  </div>
+
+  <div style="border-top: 2px dashed var(--border); margin: 32px 0; padding-top: 16px;">
+    <p style="font-style: italic; color: var(--text-muted);">— Below this line: the multi-tenant track. Can advance in parallel with Layers 3-6 once Layers 1-2 are done. —</p>
+  </div>
+
+  <div class="layer-card">
+    <span class="layer-num">7</span><span class="layer-title">Per-org workflow engine factories</span>
+    <div class="layer-tagline">The biggest tenancy refactor: module-level globals become per-customer factories.</div>
+    <div class="layer-body">
+      <p><strong>What gets built:</strong></p>
+      <ul>
+        <li><code>set_workflow_dependencies</code> in <code>integrations/inngest/functions.py</code>: replace module globals with a per-org factory</li>
+        <li>Same pattern in <code>document_processing.py</code>, <code>fax_sweeps.py</code>, <code>scheduled_dispatcher.py</code>, <code>agi_cold_revive.py</code>, <code>rx_flows/_orchestrator_bridge.py</code></li>
+        <li>Each Inngest event payload must carry <code>org_id</code> for routing</li>
+      </ul>
+      <p><strong>Why seventh:</strong> requires Layer 2 (CareLinkRegistry) and is the biggest single tenancy refactor.</p>
+    </div>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="layer-card">
+    <span class="layer-num">8</span><span class="layer-title">Provisioning + admin tooling (greenfield)</span>
+    <div class="layer-tagline">When a new customer signs up, what happens?</div>
+    <div class="layer-body">
+      <p><strong>What gets built (entirely NEW):</strong></p>
+      <ul>
+        <li>NEW: <code>carelink/provisioning/orchestrator.py</code> — sequences org creation steps (allocate org_id, create DB, run migrations, provision Filestore subdir, create GCS buckets, seed Permit.io roles)</li>
+        <li>NEW: alembic-against-N-databases runner (one CLI command runs migrations against every customer's DB)</li>
+        <li>NEW: <code>carelink-backend/app/routers/admin.py</code> — admin-only API for provisioning</li>
+      </ul>
+      <p><strong>Why eighth:</strong> can be built later — manual provisioning gets us to the first customer; automation is needed when we have many.</p>
+    </div>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="layer-card">
+    <span class="layer-num">9</span><span class="layer-title">Permit.io refactor + pharmacy projection</span>
+    <div class="layer-tagline">Role-based access checks become pharmacy-aware AND tenant-safe.</div>
+    <div class="layer-body">
+      <p><strong>What gets built:</strong></p>
+      <ul>
+        <li><code>AuthorizationService.check</code> accepts <code>pharmacy_id</code> in context (today it's there but ignored)</li>
+        <li><code>PermitClient</code> permission cache key changes from <code>role</code> to <code>(tenant, role)</code> — fixes a cross-tenant cache collision bug</li>
+        <li>~80-100 callsites that do <code>_authz.require/check</code> need to thread <code>actor.pharmacy_id</code> into the context</li>
+      </ul>
+      <p><strong>Why ninth:</strong> pre-existing gap (called out in 340B notes), aligns with our pharmacy-scoped HITL and memory design.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================== PR PLAN -->
+<section class="panel" data-panel="prplan">
+  <h2>The 8-PR shipping plan (worker-pool track)</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In plain English</div>
+    <p>Each of these is a self-contained pull request that can ship independently behind a feature flag. The first ones don't change behavior at all — they just add new capabilities. The big behavior change happens in PR 7. Each PR has a size estimate, a risk level, and what it depends on.</p>
+  </div>
+
+  <div class="pr-card">
+    <span class="pr-num">1</span><span class="pr-title">Lease columns + Alembic migration</span>
+    <div class="pr-pills">
+      <span class="pr-pill size-s">Size: Small</span>
+      <span class="pr-pill risk-low">Risk: Low</span>
+      <span class="pr-pill">Depends on: nothing</span>
+    </div>
+    <div class="pr-body">
+      <p>Add 6 columns to <code>agi_sessions</code>: <code>lease_holder_instance_id</code>, <code>lease_holder_machine_id</code>, <code>lease_acquired_at</code>, <code>lease_expires_at</code>, <code>worker_base_url</code>, <code>pharmacy_id</code>. Schema-only; nothing reads or writes them yet. Unblocks Layer 3.</p>
+    </div>
+  </div>
+
+  <div class="pr-card">
+    <span class="pr-num">2</span><span class="pr-title">JWT org_id extraction + auth.py refactor</span>
+    <div class="pr-pills">
+      <span class="pr-pill size-s">Size: Small</span>
+      <span class="pr-pill risk-low">Risk: Low</span>
+      <span class="pr-pill">Depends on: PR 1</span>
+    </div>
+    <div class="pr-body">
+      <p>JWT auth dependency returns <code>AuthClaims(sub, org_id, claims)</code> instead of just <code>sub</code>. Internal HS256 token (<code>create_internal_token</code>) accepts and embeds <code>org_id</code>. Behavior change is small — claims propagate; downstream can ignore <code>org_id</code> until they need it.</p>
+    </div>
+  </div>
+
+  <div class="pr-card">
+    <span class="pr-num">3</span><span class="pr-title">sessions/lease.py + tests</span>
+    <div class="pr-pills">
+      <span class="pr-pill size-s">Size: Small</span>
+      <span class="pr-pill risk-low">Risk: Low</span>
+      <span class="pr-pill">Depends on: PR 1</span>
+    </div>
+    <div class="pr-body">
+      <p>NEW module with <code>SessionLease</code> class — 4 methods. Pure DB operations. Unit-tested in isolation. Doesn't touch anything else.</p>
+    </div>
+  </div>
+
+  <div class="pr-card">
+    <span class="pr-num">4</span><span class="pr-title">worker/dispatcher.py + worker/entrypoint.py + compute_mode flag</span>
+    <div class="pr-pills">
+      <span class="pr-pill size-m">Size: Medium</span>
+      <span class="pr-pill risk-low">Risk: Low</span>
+      <span class="pr-pill">Depends on: PRs 1-3</span>
+    </div>
+    <div class="pr-body">
+      <p>NEW backend dispatcher (looks up lease, RPCs to worker). NEW worker entrypoint FastAPI app. <code>compute_mode</code> defaults to <code>"in_process"</code> so existing behavior is untouched. Deployable but unused until PR 7 toggles it.</p>
+    </div>
+  </div>
+
+  <div class="pr-card">
+    <span class="pr-num">5</span><span class="pr-title">_prepare_workspace deterministic paths + Skills GCS-FUSE</span>
+    <div class="pr-pills">
+      <span class="pr-pill size-m">Size: Medium</span>
+      <span class="pr-pill risk-low">Risk: Low</span>
+      <span class="pr-pill">Depends on: PRs 1-4</span>
+    </div>
+    <div class="pr-body">
+      <p>Workspace path becomes <code>${FILESTORE_ROOT}/${org_id}/${session_id}</code>. Skills mounted from GCS FUSE instead of copied. Activates only when env vars set; dev still uses /tmp.</p>
+    </div>
+  </div>
+
+  <div class="pr-card">
+    <span class="pr-num">6</span><span class="pr-title">Memory store + selector + merger</span>
+    <div class="pr-pills">
+      <span class="pr-pill size-l">Size: Large</span>
+      <span class="pr-pill risk-med">Risk: Medium</span>
+      <span class="pr-pill">Depends on: PRs 4-5</span>
+    </div>
+    <div class="pr-body">
+      <p>The actual canonical learning tier. NEW files in <code>agi/memory/</code>. Hooks into <code>create_session</code> (read snapshot at start) and <code>finalize_session</code> (merge writes at end). This is the feature that "memories actually persist" depends on.</p>
+    </div>
+  </div>
+
+  <div class="pr-card">
+    <span class="pr-num">7</span><span class="pr-title">routers/agi.py dispatch refactor (the BIG one)</span>
+    <div class="pr-pills">
+      <span class="pr-pill size-xl">Size: Extra Large</span>
+      <span class="pr-pill risk-high">Risk: High</span>
+      <span class="pr-pill">Depends on: PRs 1-6</span>
+    </div>
+    <div class="pr-body">
+      <p>The conversion. Every dispatch endpoint branches on <code>compute_mode</code>. SSE proxy (backend → worker → browser). Redis pub/sub for stats events. Touches ~30% of <code>agi.py</code>. This is where today's behavior actually changes for users on the new path. Heavy testing required.</p>
+    </div>
+  </div>
+
+  <div class="pr-card">
+    <span class="pr-num">8</span><span class="pr-title">Cold-revive worker-pool path</span>
+    <div class="pr-pills">
+      <span class="pr-pill size-m">Size: Medium</span>
+      <span class="pr-pill risk-med">Risk: Medium</span>
+      <span class="pr-pill">Depends on: PR 7</span>
+    </div>
+    <div class="pr-body">
+      <p>Cleanup pass on Inngest functions. Cold-revive flow is structurally the same; just calls dispatcher instead of in-process service. Most logic stays put.</p>
+    </div>
+  </div>
+
+  <h3>The parallel multi-tenant track (after PR 1-2 land)</h3>
+  <table>
+    <tr><th>#</th><th>PR</th><th>Size</th><th>Risk</th><th>Notes</th></tr>
+    <tr><td>T1</td><td>Control plane DB schema + secret-manager integration</td><td>M</td><td>Low</td><td>NEW infrastructure, separate from main DB</td></tr>
+    <tr><td>T2</td><td>CareLinkRegistry + per-request injection</td><td>L</td><td>Med</td><td>Touches every router; coordinate with PR 7</td></tr>
+    <tr><td>T3</td><td>AuthorizationService method-arg refactor</td><td>L</td><td>Med</td><td>Touches every <code>_authz.require/check</code> callsite</td></tr>
+    <tr><td>T4</td><td>PermitClient cache fix (tenant, role) keying</td><td>S</td><td>Low</td><td>Fixes a real cross-tenant bug</td></tr>
+    <tr><td>T5</td><td>Workflow engine globals → factories</td><td>XL</td><td>Med</td><td>The biggest tenancy refactor</td></tr>
+    <tr><td>T6</td><td>Org provisioning workflow + admin router</td><td>XL</td><td>High</td><td>Greenfield — no admin tooling exists today</td></tr>
+  </table>
+
+  <h3>Suggested parallel timeline</h3>
+  <pre>
+  Week 1-2:   PRs 1, 2, 3   |   T1
+  Week 3-4:   PRs 4, 5      |   T2 (coordinate with PR 7)
+  Week 5-6:   PR 6          |   T3, T4
+  Week 7-8:   PR 7  &lt;&lt; the big one         |   T5
+  Week 9-10:  PR 8                          |   T6
+  Week 11+:   production hardening, observability, scaling validation
+  </pre>
+  <p style="color: var(--text-muted); font-size: 13px;"><em>Engineer-month estimate: ~2-3 engineer-months for the worker-pool track, ~3-4 for the multi-tenant track. Parallelizable but coordination-heavy at PR 7 / T2 boundary.</em></p>
+</section>
+
+<!-- =========================================================== SURPRISES -->
+<section class="panel" data-panel="surprises">
+  <h2>What surprised us — 5 findings worth flagging</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In plain English</div>
+    <p>The two AI agents reading the codebase surfaced things we hadn't budgeted for. Some are bugs waiting to happen; others change the migration story. None are blockers, but all are worth knowing before we start writing code.</p>
+  </div>
+
+  <div class="finding-card">
+    <span class="finding-num">1</span><span class="finding-title">Today is already one-DB-per-deployment, just without orchestration</span>
+    <div class="finding-body">
+      <p><strong>The reframe:</strong> we'd been talking about "shared DB → split into per-org DBs" but the actual current shape is different. Each running prod deployment serves exactly one customer because <code>Settings.database_url</code> is baked at process startup. The migration isn't "split a shared DB" — it's "build the orchestration that turns N independent deployments into one routed deployment."</p>
+      <p><strong>Why this matters:</strong> the migration story is much cleaner than I'd been describing. There's no "untangle co-mingled data" step. Each existing deployment can become an entry in the control plane registry by writing one row.</p>
+      <p><strong>What we should verify:</strong> is this actually how production runs today? If there are multiple customers in one DB somewhere, the migration story changes significantly. <strong>Question for stakeholders.</strong></p>
+    </div>
+  </div>
+
+  <div class="finding-card">
+    <span class="finding-num">2</span><span class="finding-title">Streaming AI responses through backend → worker is a connection-pool concern</span>
+    <div class="finding-body">
+      <p><strong>The risk:</strong> when an AI conversation runs (which can take minutes for an rx-flow), the backend holds an open HTTP connection to the worker the entire time, just to forward the streaming response to the browser. At hundreds of concurrent conversations, the backend's HTTP client connection pool needs to be sized correctly.</p>
+      <p><strong>Why this matters:</strong> if we under-size the connection pool, conversations queue up and stall waiting for connection slots. We need to load-test this before going to production with multiple replicas.</p>
+      <p><strong>What needs to happen:</strong> dispatcher uses <code>httpx.AsyncClient</code> with explicit pool sizing (recommend <code>max_keepalive=300, max_connections=500</code> as starting point). Validate under expected concurrent-session load.</p>
+    </div>
+  </div>
+
+  <div class="finding-card">
+    <span class="finding-num">3</span><span class="finding-title">PermitClient permission cache has a cross-tenant collision bug</span>
+    <div class="finding-body">
+      <p><strong>The bug:</strong> Permit.io cache is currently keyed only by <code>role</code> (e.g., "pharmacist"). But Permit.io supports per-tenant role customization — "pharmacist" at Org A might have different permissions than "pharmacist" at Org B. Today's cache shares them.</p>
+      <p><strong>Why this matters:</strong> in single-tenant production today this is invisible. The first multi-tenant customer with a customized role definition will surface this as a permission bug. Could be either over-permissive (security concern) or under-permissive (broken UX).</p>
+      <p><strong>What needs to happen:</strong> change cache key from <code>role</code> to <code>(tenant, role)</code>. Small fix (~10 lines in <code>integrations/permit/client.py</code>) but must land before any second customer goes live. <strong>Goes in PR T4.</strong></p>
+    </div>
+  </div>
+
+  <div class="finding-card">
+    <span class="finding-num">4</span><span class="finding-title">Lease ticker scoping for long expert calls</span>
+    <div class="finding-body">
+      <p><strong>The risk:</strong> the lease has a 60-second expiry, refreshed every 20 seconds by a ticker running alongside the AI conversation. But individual "expert calls" (e.g., the billing expert running a complex check) can take longer than 60 seconds in some cases. If the ticker is scoped to the conversation drain (not the expert spawn), an expert call that takes 90 seconds could lose its lease mid-call.</p>
+      <p><strong>Why this matters:</strong> rare but ugly failure mode. Lease loss mid-call surfaces as session crash with a confusing error message.</p>
+      <p><strong>What we should do:</strong> raise lease TTL to 5 minutes (simple fix), OR move the ticker to a session-scoped daemon (more complex). Recommend the simple fix first; revisit if any expert routinely exceeds 5min. <strong>Goes in PR 3.</strong></p>
+    </div>
+  </div>
+
+  <div class="finding-card">
+    <span class="finding-num">5</span><span class="finding-title">Connection pool math gets dangerous at scale</span>
+    <div class="finding-body">
+      <p><strong>The risk:</strong> SQLAlchemy default connection pool is 5 base + 10 overflow per database. With per-org DBs across multiple replicas, the math is "N orgs × ~15 connections × M replicas" = potentially thousands of Cloud SQL connections. Cloud SQL connection limits are not unlimited.</p>
+      <p><strong>Why this matters:</strong> at ~20 customers and 4 backend replicas, we'd already be at 1,200 connections — close to default Cloud SQL limits.</p>
+      <p><strong>What needs to happen:</strong> drop pool size per org to 2-3 base. Deploy <span class="glossary-tip" data-tip="PgBouncer = a connection pooler that sits between your app and Postgres. It maintains a smaller pool of physical connections to Postgres and multiplexes thousands of app connections through them.">PgBouncer</span> in front of Cloud SQL. Connection management at multi-tenant scale is a real ops surface, not a freebie. <strong>Open decision below — do we deploy PgBouncer?</strong></p>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================== DECISIONS -->
+<section class="panel" data-panel="decisions">
+  <h2>Open decisions — 7 questions where we have options</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In plain English</div>
+    <p>These are decisions where we have multiple valid options. Each card shows the question, why it matters, the options with trade-offs, my recommendation, and current status. Stakeholders can review and weigh in on any of them.</p>
+  </div>
+
+  <!-- Decision 1 -->
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">1</span>
+      <span class="decision-title">Two AGIService classes, or one with a dispatcher decorator?</span>
+      <span class="status-badge pending">Pending</span>
+    </div>
+    <div class="decision-body">
+      <p class="why"><strong>Why it matters:</strong> the AGIService class today does many things — orchestrator session management, cold-revive, finalization. With the worker pool, half its responsibilities run on the worker (where the SDK client lives) and half run on the backend (where dispatch lives). Need to decide how to split this cleanly.</p>
+      <ul class="decision-options">
+        <li class="recommended"><span class="opt-label">Option A:</span> Two distinct classes — <code>BackendAGIService</code> (dispatcher) and <code>WorkerAGIService</code> (SDK-aware). Cleaner separation; backend container doesn't need SDK installed. <strong>← Recommended</strong></li>
+        <li><span class="opt-label">Option B:</span> One class with a <code>@dispatch_or_execute</code> decorator on each method that branches on <code>compute_mode</code>. Caller code unchanged; harder to test cleanly.</li>
+      </ul>
+      <div class="recommendation-box">
+        <strong>My recommendation:</strong> Option A. 2-hour spike to validate; ship in PR 4. Smaller backend container image is a bonus.
+      </div>
+    </div>
+  </div>
+
+  <!-- Decision 2 -->
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">2</span>
+      <span class="decision-title">Lease TTL: 60 seconds (with session-scoped ticker) or 5 minutes (with drain-scoped ticker)?</span>
+      <span class="status-badge pending">Pending</span>
+    </div>
+    <div class="decision-body">
+      <p class="why"><strong>Why it matters:</strong> long-running expert calls could exceed a 60-second lease TTL with a drain-scoped ticker. Two ways to fix.</p>
+      <ul class="decision-options">
+        <li class="recommended"><span class="opt-label">Option A:</span> Raise TTL to 5 minutes. Simple. Ticker stays drain-scoped. Risk: a server crash means 5 min before another server can pick up the session. <strong>← Recommended for v1</strong></li>
+        <li><span class="opt-label">Option B:</span> Keep TTL at 60s. Move ticker to session-scoped daemon (refreshes regardless of what the orchestrator is doing). More complex; cleaner failover.</li>
+      </ul>
+      <div class="recommendation-box">
+        <strong>My recommendation:</strong> Option A for v1 (simpler), revisit if any expert routinely exceeds 5min in practice.
+      </div>
+    </div>
+  </div>
+
+  <!-- Decision 3 -->
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">3</span>
+      <span class="decision-title">GCS bucket-per-org or shared bucket with prefix-per-org?</span>
+      <span class="status-badge pending">Pending</span>
+    </div>
+    <div class="decision-body">
+      <p class="why"><strong>Why it matters:</strong> for canonical memory, transcripts, etc. — one bucket with paths like <code>gs://shared/{org_id}/...</code>, OR one bucket per customer like <code>gs://carelink-orgX-canonical/</code>?</p>
+      <ul class="decision-options">
+        <li class="recommended"><span class="opt-label">Option A:</span> Bucket-per-org. Cleaner IAM auditability. Per-bucket quotas prevent noisy neighbor. Per-customer backup/restore is one <code>gsutil</code> command. <strong>← Recommended</strong></li>
+        <li><span class="opt-label">Option B:</span> Shared bucket with prefix-per-org. Fewer buckets to manage. Risk: misconfigured policy on one bucket leaks across customers.</li>
+      </ul>
+      <div class="recommendation-box">
+        <strong>My recommendation:</strong> Option A for production. Option B acceptable for dev/staging where speed of provisioning matters.
+      </div>
+    </div>
+  </div>
+
+  <!-- Decision 4 -->
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">4</span>
+      <span class="decision-title">Connection pool: deploy PgBouncer or accept connection limits?</span>
+      <span class="status-badge pending">Pending</span>
+    </div>
+    <div class="decision-body">
+      <p class="why"><strong>Why it matters:</strong> N orgs × per-org pool × M replicas can exhaust Cloud SQL connection limits at ~20 customers. PgBouncer fixes this but adds an ops surface.</p>
+      <ul class="decision-options">
+        <li class="recommended"><span class="opt-label">Option A:</span> Deploy PgBouncer (Cloud SQL Auth Proxy includes it; or a sidecar). Worth the ops surface; mandatory at scale. <strong>← Recommended</strong></li>
+        <li><span class="opt-label">Option B:</span> Drop pool size per org to 1-2; skip PgBouncer for v1; revisit when we hit ~10 customers.</li>
+      </ul>
+      <div class="recommendation-box">
+        <strong>My recommendation:</strong> Option A. Cloud SQL Auth Proxy includes PgBouncer functionality and is the standard GCP pattern.
+      </div>
+    </div>
+  </div>
+
+  <!-- Decision 5 -->
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">5</span>
+      <span class="decision-title">Redis for pub/sub: deploy now or defer?</span>
+      <span class="status-badge pending">Pending</span>
+    </div>
+    <div class="decision-body">
+      <p class="why"><strong>Why it matters:</strong> session stats events and the live trace panel use in-process pub/sub today. Multi-replica needs Redis (or alternative). If we defer, the live trace panel won't work cross-replica until later.</p>
+      <ul class="decision-options">
+        <li><span class="opt-label">Option A:</span> Deploy Cloud Memorystore Redis as part of this work. Adds ops surface, $50-100/mo. Live trace panel works correctly cross-replica from day one.</li>
+        <li class="recommended"><span class="opt-label">Option B:</span> Defer. Single-replica deploy is acceptable for v1. Live trace shows partial data when scaling beyond one replica until Redis ships in v2. <strong>← Recommended for v1</strong></li>
+      </ul>
+      <div class="recommendation-box">
+        <strong>My recommendation:</strong> Option B. Single-replica is fine for first ~5-10 customers. Redis lands as part of the multi-replica scale-out work later.
+      </div>
+    </div>
+  </div>
+
+  <!-- Decision 6 -->
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">6</span>
+      <span class="decision-title">Demo router: delete or wrap with auth?</span>
+      <span class="status-badge pending">Pending</span>
+    </div>
+    <div class="decision-body">
+      <p class="why"><strong>Why it matters:</strong> <code>carelink-backend/app/routers/demos.py:35-43</code> is unauthenticated and explicitly says it's a single-tenant choice. For multi-tenant, we can't ship this as-is.</p>
+      <ul class="decision-options">
+        <li class="recommended"><span class="opt-label">Option A:</span> Delete. Demos can be authenticated like everything else. <strong>← Recommended</strong></li>
+        <li><span class="opt-label">Option B:</span> Wrap with auth + tenant filtering. Keeps the demo flow but adds auth.</li>
+      </ul>
+      <div class="recommendation-box">
+        <strong>My recommendation:</strong> Option A unless there's an active business reason for unauthenticated demos. Quick to delete; can be reintroduced if needed.
+      </div>
+    </div>
+  </div>
+
+  <!-- Decision 7 -->
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">7</span>
+      <span class="decision-title">First customer rollout strategy: parallel deploys or shared deploy?</span>
+      <span class="status-badge pending">Pending</span>
+    </div>
+    <div class="decision-body">
+      <p class="why"><strong>Why it matters:</strong> after Layers 1-6 land, we have the worker-pool architecture. Before Layers 7-9 (full multi-tenant), each customer still needs their own deploy. Phased rollout strategy matters.</p>
+      <ul class="decision-options">
+        <li class="recommended"><span class="opt-label">Option A:</span> Phase 0 — first customer ships on the worker-pool architecture as a single-tenant deploy. Layers 1-6. ~2 months. <strong>← Recommended order</strong></li>
+        <li><span class="opt-label">Phase 1:</span> Second customer = second deploy (still single-tenant per deploy). Validates duplication is manageable.</li>
+        <li><span class="opt-label">Phase 2:</span> Layers 7-9 ship. All customers move to one shared deploy with control plane routing. ~2-3 more months.</li>
+      </ul>
+      <div class="recommendation-box">
+        <strong>My recommendation:</strong> Phase 0 → Phase 1 → Phase 2. We'd never have to choose between "ship the worker pool" and "ship multi-tenancy" — they layer cleanly.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================== QUESTIONS -->
+<section class="panel" data-panel="questions">
+  <h2>Follow-up questions for stakeholders</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In plain English</div>
+    <p>These are questions I (the AI agent doing this analysis) need answered to refine the plan further. Some are about current production reality; others are about preferences and constraints we haven't surfaced yet.</p>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">A</span>
+      <span class="decision-title">Is production really already one-DB-per-deployment?</span>
+      <span class="status-badge followup">Need verification</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">Agent B's biggest reframe was that today's deployment is already one-DB-per-deployment (each running CareLink instance serves one customer because <code>Settings.database_url</code> is baked at startup). If this is true, the migration story is much cleaner. If it's false (multiple customers in one DB), the migration is significantly more complex (data split + cutover).</p>
+      <p><strong>What I need:</strong> confirm or correct this. If multiple orgs share one DB anywhere, list the affected deploys.</p>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">B</span>
+      <span class="decision-title">How many customers do we expect at year 1, year 3?</span>
+      <span class="status-badge followup">Need information</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">Sizes the control plane and influences PgBouncer / Redis decisions. 5 customers is fundamentally different from 50.</p>
+      <p><strong>What I need:</strong> rough order-of-magnitude. Year 1 = ?, Year 3 = ?</p>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">C</span>
+      <span class="decision-title">Are there existing admin tools or is everything via direct DB access today?</span>
+      <span class="status-badge followup">Need information</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">Agent B couldn't find any admin router or provisioning tooling. If it doesn't exist, Layer 8 is fully greenfield. If you've got something built, we extend it.</p>
+      <p><strong>What I need:</strong> confirm "no admin tooling" or point at what exists.</p>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">D</span>
+      <span class="decision-title">Are there any HIPAA tier or compliance constraints we haven't surfaced?</span>
+      <span class="status-badge followup">Need information</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">The control plane DB has a <code>hipaa_tier</code> column placeholder. If different customers have different compliance needs (e.g., DoD-strict, single-tenant compute), the tier flag matters from day one. Otherwise it's noise.</p>
+      <p><strong>What I need:</strong> are there customers we anticipate needing Option B (per-org compute pool)? Any specific compliance certifications beyond HIPAA?</p>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">E</span>
+      <span class="decision-title">Engineering capacity & timeline — when do you want this live?</span>
+      <span class="status-badge followup">Need information</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">My estimates assume 1-2 engineers on the worker-pool track and 1-2 on the multi-tenant track. Less capacity = serialize, longer total. More = parallelize harder.</p>
+      <p><strong>What I need:</strong> rough engineering team size and target shipping date for Phase 0 (first customer on worker pool).</p>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">F</span>
+      <span class="decision-title">Local development story — what's acceptable?</span>
+      <span class="status-badge followup">Need information</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">Devs need to test the worker pool flow before pushing. Two flavors: (1) docker-compose with fake-gcs-server + local NFS, or (2) "every dev gets a personal GCP project." Cost / friction trade-off.</p>
+      <p><strong>What I need:</strong> preference. Is docker-compose acceptable, or is the team comfortable with personal cloud projects?</p>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">G</span>
+      <span class="decision-title">Do you want me to do the AGIService split spike?</span>
+      <span class="status-badge followup">Awaiting decision</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">Decision 1 above (two classes vs decorator). I recommended Option A. A 2-hour spike to validate would produce concrete code sketches showing how the split looks. Useful before committing to the approach.</p>
+      <p><strong>What I need:</strong> green light for me to spawn an agent to do the spike, or "skip the spike, just do Option A in PR 4."</p>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">H</span>
+      <span class="decision-title">Should I draft the schema migration as actual Alembic Python code?</span>
+      <span class="status-badge followup">Awaiting decision</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">PR 1 (lease columns) is small and well-defined. I could draft the actual Alembic migration file as a starting point — saves engineering time and gives you something concrete to review.</p>
+      <p><strong>What I need:</strong> green light for me to draft the migration code, or "we'll write that ourselves."</p>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">I</span>
+      <span class="decision-title">Where should this implementation plan live long-term?</span>
+      <span class="status-badge followup">Awaiting decision</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">This HTML doc is in the mock-ui repo. As work proceeds, decisions get made and statuses change. Should this doc become a living artifact (updated as PRs land), or is it a one-shot snapshot and we'll create new docs as we iterate?</p>
+      <p><strong>What I need:</strong> preference on doc lifecycle. If "living," I'd recommend reviewing the open decisions tab quarterly and updating statuses.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================== REFERENCE -->
+<section class="panel" data-panel="reference">
+  <h2>Engineering reference</h2>
+
+  <div class="tech-frame">
+    <div class="tech-label">For engineers only</div>
+    <p>This tab has the file:line citations, schema migration sketches, and code patterns from the agent reports. Lighter on prose, denser on facts. The other tabs handle context.</p>
+  </div>
+
+  <h3>Files that need changes — worker-pool migration</h3>
+
+  <details>
+    <summary><code>carelink-pms/carelink/agi/models.py</code> (12-48) — add lease columns</summary>
+    <div>
+      <p>Append after <code>system_prompt</code> column (line 32):</p>
+      <pre>lease_holder_instance_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+lease_holder_machine_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+lease_acquired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+lease_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+worker_base_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+pharmacy_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)</pre>
+    </div>
+  </details>
+
+  <details>
+    <summary><code>carelink-pms/carelink/agi/config.py</code> (35-104) — add compute mode + worker pool config</summary>
+    <div>
+      <p>Append after <code>workspace_base</code> (line 50):</p>
+      <pre>compute_mode: str = "in_process"
+filestore_root: Optional[str] = None
+skills_fuse_root: Optional[str] = None
+lease_ttl_seconds: int = 60
+lease_refresh_interval_seconds: int = 20
+worker_pool_dispatch_base_url: Optional[str] = None
+worker_dispatch_secret: Optional[str] = None</pre>
+    </div>
+  </details>
+
+  <details>
+    <summary><code>carelink-pms/carelink/agi/service.py</code> (multiple methods) — split logic for worker pool</summary>
+    <div>
+      <ul>
+        <li><code>_prepare_workspace</code> (1622-1651): branch on <code>compute_mode</code>; deterministic path on Filestore when worker_pool</li>
+        <li><code>create_session</code> (510-758): caller-side becomes thin RPC; SDK setup runs on worker</li>
+        <li><code>resume_with_answer</code> (762-1024): unchanged on worker; called via dispatcher from backend</li>
+        <li><code>resume_with_approval_result</code> (1028-1246): same pattern</li>
+        <li><code>finalize_session</code> (1571-1615): drop <code>shutil.rmtree</code> when <code>compute_mode=worker_pool</code>; archive job sweeps after TTL</li>
+        <li><code>_find_active_client</code> (1538-1553): backend-side becomes lease lookup + RPC for live stats</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary><code>carelink-pms/carelink/agi/sessions/store.py</code> — add lease ops + Redis pub/sub</summary>
+    <div>
+      <p>NEW methods near line 207:</p>
+      <pre>async def acquire_lease(session_id, instance_id, machine_id, worker_base_url, ttl_seconds) -&gt; bool
+async def refresh_lease(session_id, instance_id, ttl_seconds) -&gt; bool
+async def release_lease(session_id, instance_id) -&gt; None
+async def lookup_lease(session_id) -&gt; LeaseInfo | None</pre>
+      <p><code>broadcast_stats_event</code> (121-148): replace <code>put_nowait</code> loop with Redis publish on <code>agi:stats:{org_id}:{session_id}</code>.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary><code>carelink-pms/carelink/agi/drain.py</code> — add lease refresh ticker</summary>
+    <div>
+      <p>After <code>meta = getattr(client, "_agi_meta", None)</code> (around line 148-170):</p>
+      <pre>lease_refresh_task = asyncio.create_task(
+    _refresh_lease_loop(session_id, store, lease_ttl_seconds)
+)
+try:
+    # existing drain loop
+    ...
+finally:
+    lease_refresh_task.cancel()
+    try:
+        await lease_refresh_task
+    except asyncio.CancelledError:
+        pass</pre>
+    </div>
+  </details>
+
+  <details>
+    <summary><code>carelink-backend/app/routers/agi.py</code> — dispatch boundary refactor</summary>
+    <div>
+      <p>10 endpoints touch <code>cl._agi_clients</code> today. Each branches on <code>compute_mode</code>:</p>
+      <ul>
+        <li><code>POST /sessions</code> (214-261): in worker_pool mode, RPC to <code>worker/sessions/spawn</code></li>
+        <li><code>POST /sessions/{id}/messages</code> (264-488): RPC to <code>worker/sessions/{id}/turn</code>, proxy SSE</li>
+        <li><code>POST /sessions/{id}/answer</code> (880-1008): hot=RPC, cold=Inngest event (already worker-aware)</li>
+        <li><code>POST /sessions/{id}/approve-tool</code> (1011-1147): same pattern</li>
+        <li><code>POST /sessions/{id}/stop</code> (678-706): RPC to <code>worker/sessions/{id}/stop</code></li>
+        <li><code>POST /sessions/{id}/resume</code> (709-855): replace <code>cl._agi_clients</code> check with <code>lookup_lease</code></li>
+        <li><code>_resolve_session_for_trace</code> (147-209): drop <code>cl._agi_clients</code> peek; rely on <code>extra_data.sdk_session_id</code></li>
+      </ul>
+      <p><code>_msg_to_sse_events</code> (1672+) and <code>_StreamState</code> (1627) extracted to <code>carelink-pms/carelink/agi/sse_events.py</code> (NEW shared module).</p>
+    </div>
+  </details>
+
+  <details>
+    <summary><code>carelink-pms/carelink/integrations/inngest/agi_cold_revive.py</code> — worker-pool aware</summary>
+    <div>
+      <ul>
+        <li><code>_drive_cold_revive</code> (464-575): replace direct <code>agi.resume_with_answer</code> with dispatcher RPC; drop <code>cl._agi_clients[session_id] = revived_client</code></li>
+        <li><code>_drive_cold_approval</code> (909-968): same pattern</li>
+        <li><code>_execute_parked_bash</code> (597-673): runs on worker side; workspace path on Filestore is already shared</li>
+      </ul>
+    </div>
+  </details>
+
+  <h3>NEW files to create</h3>
+  <table>
+    <tr><th>File</th><th>Purpose</th></tr>
+    <tr><td><code>carelink-pms/carelink/agi/sessions/lease.py</code></td><td>SessionLease class — acquire/refresh/release/lookup</td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/memory/store.py</code></td><td>GCS canonical R/W with if-generation-match CAS</td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/memory/selector.py</code></td><td>Memory selector — workflow + role + pharmacy → projection set</td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/memory/merger.py</code></td><td>Session-end merger — diff workspace vs manifest, append to canonical</td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/worker/entrypoint.py</code></td><td>Worker pool FastAPI app; internal endpoints</td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/worker/dispatcher.py</code></td><td>Backend-side companion; lease lookup + RPC</td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/sse_events.py</code></td><td>Shared SSE event builder (extracted from routers/agi.py)</td></tr>
+    <tr><td><code>carelink-pms/carelink/provisioning/orchestrator.py</code></td><td>Org provisioning sequence</td></tr>
+    <tr><td><code>carelink-pms/carelink/provisioning/db.py</code></td><td>Cloud SQL admin API + alembic invoke</td></tr>
+    <tr><td><code>carelink-pms/carelink/provisioning/control_plane.py</code></td><td>Control plane DB CRUD</td></tr>
+    <tr><td><code>carelink-backend/app/routers/admin.py</code></td><td>Admin-only API</td></tr>
+  </table>
+
+  <h3>Schema migration sketch</h3>
+  <pre>"""Add AGI session lease columns + pharmacy_id
+
+Revision ID: &lt;new_rev&gt;
+Revises: 76767ee6f926
+Create Date: 2026-05-XX
+"""
+from alembic import op
+import sqlalchemy as sa
+
+revision = '&lt;new_rev&gt;'
+down_revision = '76767ee6f926'
+
+def upgrade():
+    op.add_column('agi_sessions', sa.Column('lease_holder_instance_id', sa.String(255), nullable=True))
+    op.add_column('agi_sessions', sa.Column('lease_holder_machine_id', sa.String(64), nullable=True))
+    op.add_column('agi_sessions', sa.Column('lease_acquired_at', sa.DateTime(timezone=True), nullable=True))
+    op.add_column('agi_sessions', sa.Column('lease_expires_at', sa.DateTime(timezone=True), nullable=True))
+    op.add_column('agi_sessions', sa.Column('worker_base_url', sa.String(500), nullable=True))
+    op.add_column('agi_sessions', sa.Column('pharmacy_id', sa.String(255), nullable=True))
+    op.create_index('ix_agi_sessions_lease_holder', 'agi_sessions',
+                    ['lease_holder_instance_id', 'lease_expires_at'])
+    op.create_index('ix_agi_sessions_pharmacy', 'agi_sessions', ['pharmacy_id'])
+
+def downgrade():
+    op.drop_index('ix_agi_sessions_pharmacy', table_name='agi_sessions')
+    op.drop_index('ix_agi_sessions_lease_holder', table_name='agi_sessions')
+    op.drop_column('agi_sessions', 'pharmacy_id')
+    op.drop_column('agi_sessions', 'worker_base_url')
+    op.drop_column('agi_sessions', 'lease_expires_at')
+    op.drop_column('agi_sessions', 'lease_acquired_at')
+    op.drop_column('agi_sessions', 'lease_holder_machine_id')
+    op.drop_column('agi_sessions', 'lease_holder_instance_id')</pre>
+
+  <h3>Lease acquisition SQL</h3>
+  <pre>UPDATE agi_sessions
+SET lease_holder_instance_id = :iid,
+    lease_holder_machine_id = :mid,
+    lease_acquired_at = NOW(),
+    lease_expires_at = NOW() + interval ':ttl seconds',
+    worker_base_url = :url
+WHERE id = :sid
+  AND (lease_expires_at IS NULL
+       OR lease_expires_at &lt; NOW()
+       OR lease_holder_instance_id = :iid)
+RETURNING id;</pre>
+
+  <h3>Per-org tenancy gaps — file:line citations</h3>
+  <table>
+    <tr><th>File:line</th><th>Gap</th></tr>
+    <tr><td><code>carelink-backend/app/main.py:94-103</code></td><td>Lifespan builds one CareLink at startup; needs to build CareLinkRegistry</td></tr>
+    <tr><td><code>carelink-backend/app/auth.py:148</code></td><td>Decodes only <code>sub</code> from JWT; needs to extract <code>org_id</code></td></tr>
+    <tr><td><code>carelink-backend/app/auth.py:50-58</code></td><td><code>create_internal_token</code> doesn't carry <code>org_id</code></td></tr>
+    <tr><td><code>carelink-backend/app/dependencies.py:13-15</code></td><td><code>get_carelink</code> returns singleton; needs to read <code>request.state.org_id</code></td></tr>
+    <tr><td><code>carelink-pms/carelink/__init__.py:45-243</code></td><td>CareLink singleton holds one Database, one authz; needs to be per-org factory</td></tr>
+    <tr><td><code>carelink-pms/carelink/core/authorization.py:42-46</code></td><td>AuthorizationService bound to one tenant at construction; hoist to method args</td></tr>
+    <tr><td><code>carelink-pms/carelink/integrations/permit/client.py:21,41-46</code></td><td><code>_role_permissions_cache</code> keyed by role only; cross-tenant collision bug</td></tr>
+    <tr><td><code>carelink-pms/carelink/integrations/inngest/functions.py:23-54</code></td><td>Module-level globals via <code>set_workflow_dependencies</code>; needs per-org factory</td></tr>
+    <tr><td><code>carelink-pms/carelink/integrations/inngest/agi_cold_revive.py:65</code></td><td>Same pattern</td></tr>
+    <tr><td><code>carelink-pms/carelink/agi/service.py:333-334</code></td><td>GCSClient built once at process startup with shared bucket; per-org needed</td></tr>
+    <tr><td><code>carelink-backend/app/routers/demos.py:35-43</code></td><td>Unauthenticated; explicit single-tenant choice</td></tr>
+    <tr><td><code>carelink-pms/carelink/core/database.py:21-28</code></td><td>Pool size 5+10 per Database; reduce for multi-tenant</td></tr>
+  </table>
+
+  <h3>Test coverage gaps</h3>
+  <ul>
+    <li>NEW: <code>tests/section4_services/test_session_lease.py</code> — lease primitive unit tests</li>
+    <li>NEW: <code>tests/section4_services/test_worker_dispatcher.py</code> — dispatcher RPC tests with mocked httpx</li>
+    <li>NEW: <code>tests/section3_integrations/test_memory_store.py</code>, <code>test_memory_selector.py</code>, <code>test_memory_merger.py</code></li>
+    <li>EXTEND: <code>tests/section4_services/test_func_cancel_internal.py</code> — add <code>_fake_worker_dispatch</code> for cold-revive in worker-pool mode</li>
+    <li>EXTEND: <code>tests/section4_services/conftest.py:107-158</code> — <code>carelink_with_agi</code> fixture variant for <code>compute_mode="worker_pool"</code></li>
+  </ul>
+
+  <h3>Companion documents</h3>
+  <ul>
+    <li><code>agi-architecture-overview.html</code> — multi-tenancy architecture (5-scope hierarchy, workflows as first-class, HITL, observability)</li>
+    <li><code>agi-sandbox-memory-architecture.html</code> — sandbox + memory cardinality decisions</li>
+    <li><code>agi-storage-architecture.html</code> — storage tiers + lifecycle phases + Cloud Run worker pools + deployment playbook</li>
+    <li><code>agi-implementation-plan.html</code> — THIS DOC — concrete shipping plan + open decisions</li>
+  </ul>
+</section>
+
+<div class="footer-note">
+  <strong>Document state</strong>: design synthesis. No code committed yet.<br>
+  <strong>Next step pending stakeholder input</strong>: 7 open decisions + 9 follow-up questions on the Open Decisions and Follow-Up Questions tabs.<br>
+  <strong>Sources</strong>: two parallel Opus deep-code-review agents (2026-04-30) over <code>carelink-pms/</code>, <code>carelink-backend/</code>, integrations layer.
+</div>
+
+</main>
+
+<script>
+  const tabs = document.querySelectorAll('nav.tabs button');
+  const panels = document.querySelectorAll('section.panel');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      tabs.forEach(t => t.classList.toggle('active', t === tab));
+      panels.forEach(p => p.classList.toggle('active', p.dataset.panel === target));
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+</script>
+
+</body>
+</html>
