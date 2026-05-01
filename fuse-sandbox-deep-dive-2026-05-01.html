@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GCS+FUSE Sandbox — Deep-Dive Analysis (2026-05-01)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --bg-code: #f6f8fa;
+    --border: #d0d7de;
+    --border-strong: #afb8c1;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --text-faint: #8c959f;
+    --primary: #8250df;
+    --info: #0969da;
+    --success: #1a7f37;
+    --warn: #bf8700;
+    --danger: #cf222e;
+    --neutral: #57606a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  header {
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 32px 20px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
+  header .meta { color: var(--text-muted); font-size: 13px; }
+  header .intent { margin-top: 12px; max-width: 820px; }
+  header .meta a { color: var(--info); text-decoration: none; }
+  header .meta a:hover { text-decoration: underline; }
+  nav.tabs {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  nav.tabs button {
+    background: transparent;
+    border: 0;
+    padding: 14px 18px;
+    font-size: 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active { color: var(--text); border-bottom-color: var(--primary); }
+  nav.tabs .count {
+    background: var(--bg-alt);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  nav.tabs button.active .count { background: var(--primary); color: white; border-color: var(--primary); }
+  main {
+    padding: 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  section.panel { display: none; animation: fadein 0.2s ease; }
+  section.panel.active { display: block; }
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  h2 { font-size: 22px; margin: 0 0 16px; font-weight: 600; }
+  h3 { font-size: 17px; margin: 26px 0 10px; font-weight: 600; }
+  h3 .anchor { color: var(--text-faint); font-weight: normal; margin-right: 6px; font-size: 14px; cursor: pointer; }
+  h3:hover .anchor { color: var(--info); }
+  h4 { font-size: 13px; margin: 18px 0 6px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  p { margin: 0 0 12px; }
+  ul, ol { padding-left: 22px; }
+  ul li, ol li { margin: 4px 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--bg-code);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  table th, table td {
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table th { background: var(--bg-alt); font-weight: 600; }
+  table tr:hover td { background: #fbfcfe; }
+
+  /* Plain-language frame */
+  .plain-frame {
+    background: #f7f3ff;
+    border-left: 4px solid var(--primary);
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .plain-frame .plain-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .tech-frame {
+    background: var(--bg-alt);
+    border-left: 4px solid var(--neutral);
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .tech-frame .tech-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--neutral);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .recommendation-box {
+    background: #ddf4ff;
+    border-left: 4px solid var(--info);
+    padding: 12px 16px;
+    margin: 12px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 14px;
+  }
+  .recommendation-box strong { color: var(--info); }
+
+  /* Status / severity badges */
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+  }
+  .badge.dataloss { background: #ffebe9; color: #82071e; border: 1px solid var(--danger); }
+  .badge.high     { background: #ffebe9; color: #82071e; border: 1px solid var(--danger); }
+  .badge.medium   { background: #fff8c5; color: #4d2d00; border: 1px solid var(--warn); }
+  .badge.low      { background: #ddf4ff; color: #033780; border: 1px solid var(--info); }
+  .badge.match    { background: #dafbe1; color: #0a3622; border: 1px solid var(--success); }
+  .badge.compat   { background: #dafbe1; color: #0a3622; border: 1px solid var(--success); }
+  .badge.contradicts { background: #ffebe9; color: #82071e; border: 1px solid var(--danger); }
+  .badge.inverted { background: #f7f3ff; color: #3e1f7f; border: 1px solid var(--primary); }
+  .badge.followup { background: #f7f3ff; color: #3e1f7f; border: 1px solid var(--primary); }
+  .badge.do      { background: #dafbe1; color: #0a3622; border: 1px solid var(--success); }
+  .badge.dont    { background: #ffebe9; color: #82071e; border: 1px solid var(--danger); }
+  .badge.defer   { background: #fff8c5; color: #4d2d00; border: 1px solid var(--warn); }
+
+  /* Sharp-edge card */
+  .edge-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 12px 0;
+    overflow: hidden;
+    background: white;
+  }
+  .edge-card[open] { border-color: var(--border-strong); box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .edge-card summary {
+    background: var(--bg-alt);
+    padding: 14px 18px;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .edge-card summary::-webkit-details-marker { display: none; }
+  .edge-card summary::before {
+    content: "▸";
+    color: var(--text-faint);
+    font-size: 12px;
+    transition: transform 0.15s;
+  }
+  .edge-card[open] summary::before { transform: rotate(90deg); }
+  .edge-card .edge-id {
+    background: var(--neutral);
+    color: white;
+    width: 38px;
+    height: 24px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 11px;
+  }
+  .edge-card .edge-title { font-weight: 600; font-size: 14.5px; flex: 1; min-width: 0; }
+  .edge-card .edge-body { padding: 16px 18px; border-top: 1px solid var(--border); background: white; }
+  .edge-card .edge-body p:first-child { margin-top: 0; }
+  .edge-card .edge-fix {
+    background: #ddf4ff;
+    border-left: 3px solid var(--info);
+    padding: 10px 14px;
+    margin: 12px 0 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 13.5px;
+  }
+  .edge-card .edge-fix strong { color: var(--info); }
+
+  /* Filter bar */
+  .filter-bar {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 8px 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .filter-bar .filter-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .filter-chip {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--text-muted);
+  }
+  .filter-chip:hover { border-color: var(--border-strong); color: var(--text); }
+  .filter-chip.active {
+    background: var(--text);
+    color: white;
+    border-color: var(--text);
+  }
+  .filter-chip[data-sev="dataloss"].active { background: var(--danger); border-color: var(--danger); }
+  .filter-chip[data-sev="high"].active     { background: var(--danger); border-color: var(--danger); }
+  .filter-chip[data-sev="medium"].active   { background: var(--warn); border-color: var(--warn); color: #2c1d00; }
+  .filter-chip[data-sev="low"].active      { background: var(--info); border-color: var(--info); }
+  .filter-bar input[type="text"] {
+    flex: 1;
+    min-width: 200px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    background: white;
+  }
+  .filter-bar input[type="text"]:focus { outline: 2px solid var(--info); outline-offset: -1px; }
+
+  /* Cherry-pick / recommendation cards */
+  .pick-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 12px 0;
+    background: white;
+  }
+  .pick-card .pick-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .pick-card .pick-title { font-weight: 600; font-size: 15px; flex: 1; }
+
+  /* Headline list */
+  .headlines {
+    border-left: 4px solid var(--info);
+    background: #f6fafd;
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .headlines ol { margin: 0; padding-left: 22px; line-height: 1.85; }
+  .headlines li { margin: 6px 0; }
+
+  /* Topology diagram (lightweight inline) */
+  .topology {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    margin: 16px 0;
+    background: var(--bg-alt);
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 12.5px;
+    line-height: 1.65;
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  /* Footer */
+  .footer-note {
+    margin: 40px auto 60px;
+    max-width: 1200px;
+    padding: 16px 32px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .hidden { display: none !important; }
+
+  /* Side-by-side comparison */
+  .compare-row {
+    display: grid;
+    grid-template-columns: 200px 1fr 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 8px 0;
+    overflow: hidden;
+    font-size: 13.5px;
+  }
+  .compare-row > div { padding: 10px 12px; border-right: 1px solid var(--border); }
+  .compare-row > div:last-child { border-right: 0; }
+  .compare-row .cmp-axis { background: var(--bg-alt); font-weight: 600; }
+  .compare-row.header { background: var(--bg-alt); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+  .compare-row.header .cmp-axis { background: transparent; }
+
+  /* In-tab anchor links */
+  a.anchor-link { color: var(--info); text-decoration: none; }
+  a.anchor-link:hover { text-decoration: underline; }
+
+  @media (max-width: 800px) {
+    .compare-row { grid-template-columns: 1fr; }
+    .compare-row > div { border-right: 0; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>GCS+FUSE Per-Session Sandbox — Deep-Dive Analysis</h1>
+  <div class="meta">
+    Branch: <code>inbound-voice-fuse-sandbox</code> @ <code>b0bb495</code> &nbsp;·&nbsp; Synthesized 2026-05-01 &nbsp;·&nbsp; 4 parallel Opus subagents
+  </div>
+  <div class="intent">
+    <p style="margin: 8px 0 0;">A code-level read of the per-session sandbox introduced in commit <code>b0bb495</code> ("per-session sandbox for carelink-agi backed by gcs + gcsfuse"), with explicit comparison against the current production-track branch (<code>feature/ai-orchestration-with-domain-agents</code>) and the sibling subagent branch (<code>openaiagentssdk@91c1039</code>). Voice-tooling commits (5 of them) are intentionally out of scope.</p>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="overview" class="active">Overview</button>
+  <button data-tab="topology">Branch Topology</button>
+  <button data-tab="library">Workspaces Library</button>
+  <button data-tab="integration">App Integration</button>
+  <button data-tab="deployment">Deployment &amp; Ops</button>
+  <button data-tab="alignment">3-Way Alignment</button>
+  <button data-tab="edges">Sharp Edges <span class="count">10</span></button>
+  <button data-tab="recommendations">Recommendations</button>
+  <button data-tab="questions">Open Questions <span class="count">8</span></button>
+  <button data-tab="reference">Reference</button>
+</nav>
+
+<main>
+
+<!-- ============================================================ OVERVIEW -->
+<section class="panel active" data-panel="overview">
+  <h2>Executive summary</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph</div>
+    <p>An engineer on a parallel branch built a working per-session sandbox primitive: each chat session gets its own isolated working directory backed by Google Cloud Storage, with optional fast-read access via gcsfuse. The library half (~1,000 lines of code + 666 lines of tests) is high quality and drops cleanly into our current PR 5 plan with a single targeted refactor. The consumer half (a parallel AI service named "carelink-agi") conflicts with our locked architectural decision and should NOT be pulled in. Four data-loss-class bugs need patching before any production use.</p>
+  </div>
+
+  <h3>The headlines</h3>
+
+  <div class="headlines">
+    <ol>
+      <li><strong>The <code>b0bb495</code> commit splits cleanly into a library half (cherry-pickable) and a consumer half (don't pick).</strong> <code>carelink-pms/carelink/agi/workspaces/</code> is ~1,022 LoC of clean primitives + 666 LoC of tests with near-zero CareLink coupling — drops into PR 5 with a single <code>org_id → MemoryScope</code> refactor (~2–3 day port).</li>
+      <li><strong>The PMS service.py is byte-for-byte identical between sibling and FUSE.</strong> <code>git diff 91c1039 b0bb495 -- carelink-pms/carelink/agi/service.py</code> returns empty. The cherry-pick is genuinely additive; no merge in service.py.</li>
+      <li><strong>Four data-loss-class sharp edges must be fixed before any merge.</strong> The most dangerous: <code>_load_manifest</code> swallows transient GCS errors and returns an empty manifest, which is then uploaded over the real one on the next checkpoint.</li>
+      <li><strong>The deployment surface is dev-VM-only.</strong> Hardcoded <code>User=sangeet</code>, no systemd hardening, no IaC, ADC user creds (not workload identity), versioning on with no lifecycle. Roughly a 30-min hardening pass + 2-day Terraform job to make non-dev usable.</li>
+      <li><strong>The 23-test fake-GCS hermetic suite is reusable as-is.</strong> Establishes a <code>FakeGCSClient</code> pattern that's directly applicable to lease-test infrastructure for PR 1 + PR 3.</li>
+    </ol>
+  </div>
+
+  <h3>Reading order by audience</h3>
+  <table>
+    <tr><th>Tab</th><th>For who</th><th>What's in it</th></tr>
+    <tr><td>Branch Topology</td><td>Everyone</td><td>How <code>inbound-voice-fuse-sandbox</code> relates to the sibling and current branches; what we ignored</td></tr>
+    <tr><td>Workspaces Library</td><td>Engineers</td><td>Public API, lifecycle, lease semantics, GCS+FUSE interaction, manifest format, idempotency, test coverage</td></tr>
+    <tr><td>App Integration</td><td>Engineers</td><td>End-to-end session lifecycle through chat/jobs routers, sweeper, skills loading, app boot, env vars</td></tr>
+    <tr><td>Deployment &amp; Ops</td><td>Ops + sec</td><td>systemd unit, gcsfuse flags, bucket setup, benchmark methodology, HIPAA posture, Cloud Run readiness</td></tr>
+    <tr><td>3-Way Alignment</td><td>Architects + planners</td><td>Per-axis comparison vs current branch + sibling, where FUSE is ahead, where it contradicts, cherry-pick plan</td></tr>
+    <tr><td>Sharp Edges</td><td>Everyone</td><td>10 ranked findings with fix sketches, filterable by severity</td></tr>
+    <tr><td>Recommendations</td><td>Stakeholders</td><td>Cherry-pick plan, bug fixes, sequencing for PR 5 + PR 6</td></tr>
+    <tr><td>Open Questions</td><td>Stakeholders</td><td>8 questions that block a final decision on the cherry-pick</td></tr>
+  </table>
+
+  <h3>How this analysis was produced</h3>
+  <p>Four parallel <strong>Opus</strong> subagents read the commit's 21 files (~3,864 LoC + ~926 LoC of design docs) with non-overlapping slices:</p>
+  <ul>
+    <li><strong>Agent A</strong> — the new <code>workspaces/</code> module + 666 LoC of unit tests. Output: public API map, lifecycle states, lease semantics, GCS+FUSE interaction, manifest semantics, idempotency guards, error handling, test coverage gaps, smells.</li>
+    <li><strong>Agent B</strong> — modified <code>carelink-agi/app/*</code> files + 2 design docs. Output: end-to-end session-lifecycle trace, where the manager is constructed, sweeper analysis, skills loading old-vs-new, jobs flow, chat router changes, app boot sequence, docs-vs-code drift checks.</li>
+    <li><strong>Agent C</strong> — scripts (<code>bench-sandbox.py</code>, <code>mount-sandbox-fuse.sh</code>, <code>sandbox-fuse.service</code>, <code>setup-sandbox-bucket.sh</code>) + config + runbook ops sections. Output: deployment graph, mount semantics, bucket layout, systemd unit critique, benchmark methodology critique, HIPAA posture, cost model, Cloud Run readiness.</li>
+    <li><strong>Agent D</strong> — cross-branch reads against <code>origin/openaiagentssdk</code> + current branch <code>service.py</code>. Output: per-axis comparison matrix, where FUSE is ahead, where it contradicts locked decisions, where it's compatible, sibling-branch DNA assessment, concrete next-step recommendations.</li>
+  </ul>
+  <p>This document synthesizes those four reads into a single navigable view. The four scratch files are preserved at <code>.analysis-scratch/0[1-4]-*.md</code> in the worktree.</p>
+</section>
+
+<!-- ============================================================ TOPOLOGY -->
+<section class="panel" data-panel="topology">
+  <h2>Branch topology</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph</div>
+    <p>The FUSE branch is built directly on top of the "slightly native SDK" sibling branch (<code>openaiagentssdk@91c1039</code>). Five voice-tooling commits sit between them; we're ignoring those. The single FUSE/storage commit (<code>b0bb495</code>) does not modify <code>carelink-pms/carelink/agi/service.py</code> at all — it adds a new <code>workspaces/</code> module next to it and wires the module into the standalone <code>carelink-agi/</code> service that exists in the sibling but does not exist in our current production-track branch. This is why the library half cherry-picks cleanly: there's no conflicting service.py edit.</p>
+  </div>
+
+  <div class="topology">                    ┌─ openaiagentssdk @ 91c1039 ─ "slightly native SDK" sibling
+                    │   • carelink-agi/ standalone v2 service (port 8001)
+                    │   • claude_agent_sdk + native agents=
+                    │   • PMS service.py uses claude_code_sdk (legacy)
+                    │
+b0bb495 builds on ──┴──▶ inbound-voice-fuse-sandbox @ b0bb495
+                         • +5 voice commits          ← OUT OF SCOPE
+                         • +b0bb495: workspaces/ + GCS+FUSE wiring
+                         • git diff 91c1039..b0bb495 -- carelink-pms/carelink/agi/service.py
+                           is EMPTY — the FUSE commit does not modify the PMS service.
+
+                    ┌─ feature/ai-orchestration-with-domain-agents @ 6173360 (current)
+                    │   • PMS service.py: 8-expert orchestration via invoke_expert MCP
+                    │   • claude_agent_sdk migrated; native agents= wired but DORMANT
+                    │   • Phase D verdict: native agents= retrofit infeasible
+main ───────────────┘   • PR 5 (planned, unstarted): _prepare_workspace deterministic paths + Skills GCS-FUSE</div>
+
+  <h3>What's in the commit</h3>
+  <table>
+    <tr><th>Group</th><th>Files</th><th>LoC</th><th>Status</th></tr>
+    <tr><td><strong>Workspaces library (NEW)</strong></td><td><code>carelink-pms/carelink/agi/workspaces/{__init__,manager,manifest,schemas}.py</code></td><td>1,022</td><td><span class="badge do">Cherry-pick</span></td></tr>
+    <tr><td><strong>Tests (NEW)</strong></td><td><code>carelink-pms/tests/section1_unit/test_workspace_manager.py</code></td><td>666</td><td><span class="badge do">Cherry-pick</span></td></tr>
+    <tr><td><strong>App integration (MODIFIED)</strong></td><td><code>carelink-agi/app/{agent,jobs,main,skills,sweeper,storage,routers/*}.py</code></td><td>~970</td><td><span class="badge dont">Don't pick</span></td></tr>
+    <tr><td><strong>Sweeper (NEW)</strong></td><td><code>carelink-agi/app/sweeper.py</code></td><td>99</td><td><span class="badge defer">Adapt for PMS</span></td></tr>
+    <tr><td><strong>Scripts (NEW)</strong></td><td><code>scripts/{bench-sandbox.py,mount-sandbox-fuse.sh,sandbox-fuse.service,setup-sandbox-bucket.sh}</code></td><td>383</td><td><span class="badge do">Cherry-pick + harden</span></td></tr>
+    <tr><td><strong>Docs (NEW)</strong></td><td><code>docs/{agent-sandbox-runbook,sandbox-walkthrough}.md</code></td><td>926</td><td><span class="badge do">Cherry-pick + rebrand</span></td></tr>
+  </table>
+
+  <h3>What we ignored</h3>
+  <p>Per the task brief, voice-tooling work in this branch is excluded:</p>
+  <ul>
+    <li><code>carelink-backend/app/routers/{calls,voice_tools}.py</code></li>
+    <li><code>carelink-backend/app/voice_tools_auth.py</code></li>
+    <li><code>carelink-pms/carelink/integrations/asepha_voice/client.py</code></li>
+    <li><code>carelink-pms/carelink/ivr/{models,schemas,service,voice_tools_*}.py</code></li>
+    <li><code>carelink-frontend/src/components/workspace/tabs/{Call,InboundCalls}*.tsx</code></li>
+    <li><code>docs/{inbound-voice-agent-handoff,inbound-voice-testing,voice-tools-v2-architecture}.md</code></li>
+    <li><code>scripts/update-voice-tunnel.sh</code></li>
+  </ul>
+</section>
+
+<!-- ============================================================ LIBRARY -->
+<section class="panel" data-panel="library">
+  <h2>The <code>workspaces/</code> library</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph</div>
+    <p>This is the part worth taking. Four files, ~1,000 lines of code with virtually no CareLink-specific imports, plus a 666-line test suite. The library packages "give every chat session its own isolated working directory" into a clean Python interface: a manager class that creates the directory, copies in skills/memories/transcripts at start, snapshots changes to GCS at every turn, and reaps stale dirs on a timer. The design is solid; a few rough edges around error handling need fixing before merge.</p>
+  </div>
+
+  <h3 id="api"><a class="anchor-link" href="#api">§</a> Public API surface</h3>
+  <p>Exported from <code>__init__.py:21-31</code>:</p>
+  <ul>
+    <li><code>HydrateOptions</code> — frozen dataclass: <code>skills</code>, <code>agents</code>, <code>memories</code>, <code>session_state</code>. Defaults pull all skills, no agents, all memories, prior session state (<code>manager.py:100-117</code>).</li>
+    <li><code>WorkspaceManager</code> — owner of the per-session round trip. Methods: <code>hydrate</code>, <code>checkpoint</code>, <code>finalize</code>, <code>sweep_cold</code>, <code>layout_for</code>, <code>session_exists_locally</code>, <code>fuse_available</code>, <code>write_restish_config</code>. Constructor: <code>(org_id, local_root, gcs_client, fuse_root)</code> (<code>manager.py:131-178</code>).</li>
+    <li><code>WorkspaceManifest</code> — dataclass; persisted as <code>sessions/&lt;sid&gt;/manifest.json</code> in GCS (<code>manifest.py:52-107</code>).</li>
+    <li><code>WorkspaceFile</code> — manifest entry: <code>path</code>, <code>sha256</code>, <code>size</code>, <code>mtime</code>, <code>classification</code>, <code>blob_path</code> (<code>manifest.py:20-49</code>).</li>
+    <li><code>SandboxLayout</code> — frozen path bundle: <code>skills_dir</code>, <code>agents_dir</code>, <code>memories_dir</code>, <code>artifacts_dir</code>, <code>proposals_dir</code>, <code>scratch_dir</code>, <code>restish_config_linux</code>, <code>restish_config_macos</code>, <code>transcript_file()</code> (<code>schemas.py:74-139</code>).</li>
+  </ul>
+
+  <h3 id="lifecycle"><a class="anchor-link" href="#lifecycle">§</a> Lifecycle (implicit, no explicit state machine)</h3>
+  <table>
+    <tr><th>State</th><th>How to detect</th><th>How to enter</th><th>How to leave</th></tr>
+    <tr><td>does-not-exist</td><td><code>not layout.root.is_dir()</code></td><td>(initial)</td><td><code>hydrate()</code> creates dir tree</td></tr>
+    <tr><td>hydrated/active</td><td><code>layout.root.is_dir()</code> + no manifest blob</td><td>first <code>hydrate()</code></td><td><code>checkpoint()</code></td></tr>
+    <tr><td>checkpointed</td><td><code>manifest.json</code> blob in GCS</td><td><code>checkpoint()</code></td><td>next <code>checkpoint()</code> or <code>finalize()</code></td></tr>
+    <tr><td>finalized</td><td>local dir gone; manifest in bucket</td><td><code>finalize()</code> → <code>shutil.rmtree</code></td><td>(terminal)</td></tr>
+    <tr><td>swept</td><td>local dir gone; manifest in bucket</td><td><code>sweep_cold()</code> by TTL</td><td>re-hydrate</td></tr>
+  </table>
+
+  <h3 id="lease"><a class="anchor-link" href="#lease">§</a> Lease semantics — or lack thereof</h3>
+  <p>There is no lease in any meaningful distributed sense. What exists:</p>
+  <pre>self._locks: dict[str, asyncio.Lock]      # manager.py:172
+def _lock_for(session_id): ...            # manager.py:704-709</pre>
+  <p>In-process only. Two replicas of the FastAPI service or one FastAPI + one Inngest worker both holding <code>session_id="X"</code> will both <code>hydrate</code>, both <code>checkpoint</code>. <strong>Last writer wins on every blob.</strong> No fencing token, no GCS object lease, no Postgres row lock. <code>_locks</code> only shrinks on <code>finalize</code> — so swept sessions leak lock entries until process restart (minor memory leak in long-running pods).</p>
+
+  <table>
+    <tr><th>Property</th><th>Standard distributed lock</th><th>This module</th></tr>
+    <tr><td>Cross-process coordination</td><td>Yes (Redis/ZK/GCS lease/fcntl)</td><td><strong>No</strong> — pure asyncio.Lock</td></tr>
+    <tr><td>TTL / fencing</td><td>Yes</td><td><strong>No</strong> — held only for one method call</td></tr>
+    <tr><td>Renewal</td><td>Yes (heartbeat)</td><td>N/A</td></tr>
+    <tr><td>Crash recovery</td><td>Lease expiry releases lock</td><td>Process exit drops <code>_locks</code></td></tr>
+    <tr><td>Concurrent hydrate from 2 pods</td><td>Defined</td><td><strong>Both pods hydrate + checkpoint; last writer wins on every blob</strong></td></tr>
+  </table>
+
+  <h3 id="gcsfuse"><a class="anchor-link" href="#gcsfuse">§</a> GCS+FUSE interaction</h3>
+  <ul>
+    <li><strong>Reads</strong>: prefer FUSE if <code>fuse_root.is_dir()</code>; else GCS API (<code>manager.py:400-407</code>). Per-call check, no caching of "is FUSE alive". A degraded-but-mounted gcsfuse silently produces empty hydrates.</li>
+    <li><strong>Writes</strong>: always <code>GCSClient.upload_blob</code> — explicitly bypassing FUSE because of "gcsfuse upload-on-close quirks" (module docstring <code>manager.py:18-21</code>).</li>
+    <li><strong>Mount</strong>: assumed pre-mounted by sidecar/systemd. Manager never shells out to <code>gcsfuse</code>.</li>
+    <li><strong>Hash-diff before copy</strong> (<code>manager.py:423-427</code>): SHA256 short-circuit on identical files. <strong>Reads every byte of every file twice</strong> (source hash + target hash) on each idempotent re-hydrate — measurable per-session cold-start cost.</li>
+    <li><strong>Cross-session memory propagation depends on gcsfuse stat-cache TTL</strong> (production: 10 min). The test at <code>test_workspace_manager.py:621-647</code> simulates this manually by writing the GCS blob into <code>fuse_root</code> after checkpoint. Real gcsfuse with default TTL = up to 10 min lag.</li>
+  </ul>
+
+  <h3 id="manifest"><a class="anchor-link" href="#manifest">§</a> Manifest semantics</h3>
+  <ul>
+    <li>Stored as <code>gs://&lt;bucket&gt;/sessions/&lt;session_id&gt;/manifest.json</code> only — <strong>not on local disk</strong> (<code>manager.py:641-642</code>).</li>
+    <li>Per-checkpoint flow: load manifest → walk sandbox → upload changed files → upload new manifest LAST. The "manifest last" ordering is the only consistency guarantee (<code>manager.py:471-550</code>).</li>
+    <li><code>bump()</code> runs <em>before</em> manifest upload (<code>manager.py:521</code>); on upload failure, the in-memory manifest still advertises <code>version=N+1</code> while bucket stays at <code>version=N</code>. <strong>Misleading return value.</strong></li>
+    <li><code>_load_manifest</code> catches all exceptions and returns <code>WorkspaceManifest.empty(...)</code> (<code>manager.py:644-652</code>, <code>manifest.py:106-107</code>). Cannot distinguish 404 (legit empty) from 503 (transient → should retry, not nuke). <span class="badge dataloss">Data loss</span></li>
+  </ul>
+
+  <h3 id="idempotency"><a class="anchor-link" href="#idempotency">§</a> Idempotency &amp; retry guards</h3>
+  <p>Extensive (15 sites identified). Everything is logged-and-skipped, never retried with backoff. The "next checkpoint will retry" pattern is consistent for per-file uploads and the manifest itself. <strong>No <code>if-generation-match</code> on manifest upload</strong> — overwrite is unconditional. <strong>No timeout / deadline</strong> on any GCS call. A hung gcsfuse mount blocks the lock indefinitely.</p>
+
+  <h3 id="errors"><a class="anchor-link" href="#errors">§</a> Error-handling posture</h3>
+  <table>
+    <tr><th>Function</th><th>Posture</th><th>Risk</th></tr>
+    <tr><td><code>_hydrate</code></td><td>Bubbles up</td><td>Probably correct — agent without memories is dangerous</td></tr>
+    <tr><td><code>_hydrate_transcript</code></td><td><strong>Swallows ALL exceptions silently</strong> (<code>:461-464</code>)</td><td><span class="badge medium">Sharp edge</span> Real GCS 500 produces silent empty session</td></tr>
+    <tr><td><code>_checkpoint</code> per-file upload</td><td>Logs warning, skips file in manifest, continues</td><td>Acceptable if logs are monitored</td></tr>
+    <tr><td><code>_checkpoint</code> manifest upload</td><td>Logs warning, returns bumped manifest anyway</td><td>Caller-visible drift</td></tr>
+    <tr><td><code>_load_manifest</code></td><td><strong>Returns empty manifest on any exception</strong> (<code>:644-652</code>)</td><td><span class="badge dataloss">Data loss</span> Transient GCS read error overwrites real manifest with empty</td></tr>
+    <tr><td><code>finalize</code></td><td>Calls checkpoint + unconditional <code>rmtree</code></td><td>If checkpoint silently lost data, finalize wipes local evidence</td></tr>
+  </table>
+
+  <h3 id="tests"><a class="anchor-link" href="#tests">§</a> Test coverage map</h3>
+  <p>15 tests, 6 classes, 666 LoC. Solid for happy paths.</p>
+
+  <details>
+    <summary><strong>15 tests covered (click to expand)</strong></summary>
+    <ul>
+      <li><strong>TestHydrate</strong> (8 tests, lines 186-308): full layout, all skills, skills subset, skills none, memories org-scope, idempotent skip-unchanged, picks up template changes on resume, GCS fallback when no FUSE.</li>
+      <li><strong>TestCheckpoint</strong> (6 tests, lines 316-460): basic upload, skip unchanged, skip skills/agents, skip ephemeral, transcript upload, full round-trip + manifest version bump.</li>
+      <li><strong>TestFinalize</strong> (1 test, lines 468-481): final checkpoint + rmtree.</li>
+      <li><strong>TestSweepCold</strong> (2 tests, lines 489-538): mtime eviction, <code>is_session_active</code> respected.</li>
+      <li><strong>TestRestishConfig</strong> (1 test, lines 546-564): writes both Linux + macOS paths.</li>
+      <li><strong>TestManifest</strong> (1 test, lines 572-582): JSON roundtrip.</li>
+      <li><strong>TestSmoke</strong> (3 tests, lines 590-666): two concurrent sessions isolated, cross-session memory propagates after checkpoint, subagent shares orchestrator's sandbox.</li>
+    </ul>
+  </details>
+
+  <details>
+    <summary><strong>Seams NOT covered (click to expand)</strong></summary>
+    <ul>
+      <li>Concurrency / lock contention — zero tests for two concurrent <code>hydrate</code> or two concurrent <code>checkpoint</code>.</li>
+      <li>Per-file upload failure (<code>manager.py:494-509</code>'s warn-and-skip path).</li>
+      <li>Manifest upload failure (<code>manager.py:537-549</code>).</li>
+      <li><strong><code>_load_manifest</code> exception → empty manifest (the most dangerous silent path).</strong></li>
+      <li>Agents-template hydrate (<code>HydrateOptions(agents=[...])</code>).</li>
+      <li><code>_classify</code> proposals branch.</li>
+      <li>Empty checkpoint (no scannable files).</li>
+      <li>Most <code>_is_ephemeral</code> paths (<code>node_modules</code>, <code>.cache</code>, <code>.npm</code>, <code>.local</code>).</li>
+      <li>Transcript fallback when FUSE has no copy.</li>
+      <li><code>HydrateOptions(session_state=False)</code>.</li>
+      <li><code>finalize()</code> race window between checkpoint and rmtree.</li>
+      <li><code>sweep_cold</code> lock-dict leak.</li>
+      <li>gcsfuse stat-cache TTL effects on cross-session memory.</li>
+    </ul>
+  </details>
+</section>
+
+<!-- ============================================================ INTEGRATION -->
+<section class="panel" data-panel="integration">
+  <h2>App integration (<code>carelink-agi/app/*</code>)</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph</div>
+    <p>The library is wired into a separate FastAPI service called "carelink-agi" — different from our current backend. Sessions are sandboxed per-request with a clever trick: a fresh job hydrates under its <code>job_id</code> because the SDK hasn't issued a <code>session_id</code> yet, then mirrors itself once the SDK identifies the session. Skills moved entirely to GCS (no in-process cache; every <code>GET /skills</code> re-lists the bucket). A new background sweeper reaps stale local sandboxes on a 1-hour timer. There's no startup health check for GCS auth — failures only surface on the first request.</p>
+  </div>
+
+  <h3 id="lifecycle-trace"><a class="anchor-link" href="#lifecycle-trace">§</a> End-to-end chat lifecycle (one session, one turn)</h3>
+  <table>
+    <tr><th>Phase</th><th>Step</th><th>file:line</th></tr>
+    <tr><td>Request arrives</td><td><code>_resolve_session_and_resume</code> → <code>manager.hydrate(session_id)</code> (or fresh UUID)</td><td><code>chat.py:69-103</code></td></tr>
+    <tr><td>Build SDK options</td><td>hydrate → mkdir layout, copy skills, copy memories, copy session-state, write <code>apis.json</code></td><td><code>agent.py:119-269</code>, <code>manager.py:200-216</code></td></tr>
+    <tr><td>SDK turn runs</td><td>first <code>init</code> SystemMessage carries <code>session_id</code>; captured into local var, emitted to SSE</td><td><code>chat.py:418-424</code></td></tr>
+    <tr><td>End of turn</td><td>mirror local sandbox from job_id-key to sdk-session-id-key (if differs), checkpoint</td><td><code>chat.py:151-166</code> (sync), <code>:478-484</code> (stream)</td></tr>
+    <tr><td>Checkpoint body</td><td><code>_load_manifest</code> from GCS → walk sandbox excluding ephemeral paths → SHA256-diff → upload changed files → upload new manifest LAST</td><td><code>manager.py:471-550</code></td></tr>
+    <tr><td>Transcript</td><td>re-snapshotted to <code>sessions/&lt;sid&gt;/transcript/&lt;sid&gt;.jsonl</code> separately from the walker (which excludes <code>.claude/projects/</code>)</td><td><code>manager.py:579-598</code></td></tr>
+    <tr><td>Session "death"</td><td>TTL sweeper at 1h interval reaps <code>&lt;local_root&gt;/&lt;sid&gt;/</code> if mtime &gt; 24h AND not in <code>JobManager.list()</code>. <strong>No explicit "session done" event.</strong></td><td><code>sweeper.py:56-96</code>, <code>manager.py:260-282</code></td></tr>
+  </table>
+
+  <h3 id="key-bifurcation"><a class="anchor-link" href="#key-bifurcation">§</a> Sandbox-key bifurcation</h3>
+  <p>The trickiest mechanic in the diff (<code>jobs.py:498-508,746-748,781-803</code>; <code>chat.py:151-154</code>):</p>
+  <pre>sandbox_key = job.session_id or job.job_id   # fresh job → job_id; on resume → session_id
+hydrate under sandbox_key
+... SDK runs ...
+SDK init emits session_id
+job.session_id = session_id
+end_of_turn: if job_id != session_id:
+    shutil.copytree(&lt;job_id&gt;/, &lt;session_id&gt;/)   # MIRROR, not move
+    checkpoint under session_id</pre>
+  <p>Both <code>&lt;job_id&gt;/</code> and <code>&lt;session_id&gt;/</code> live in <code>/tmp</code> until the sweeper reaps the orphan. <span class="badge medium">Sharp edge</span> Orphaned <code>&lt;job_id&gt;/</code> is protected by the sweeper (<code>_build_active_predicate</code> at <code>sweeper.py:36-53</code> checks both keys), but only via JobManager — chat sessions are NOT tracked there.</p>
+
+  <h3 id="manager-life"><a class="anchor-link" href="#manager-life">§</a> WorkspaceManager construction &amp; lifetime</h3>
+  <pre># carelink-agi/app/main.py:66-71
+workspace_manager = WorkspaceManager(
+    org_id=settings.sandbox_org_id,
+    local_root=settings.sandbox_local_root,
+    gcs_client=gcs,
+    fuse_root=fuse_root,
+)</pre>
+  <p>Single process-wide singleton, stashed on <code>app.state.workspace_manager</code>. Every consumer fetches via <code>request.app.state.workspace_manager</code>. The <code>org_id</code> is baked at construction → <strong>one-org-per-process</strong> (will need a registry for multi-tenant). <span class="badge high">High</span></p>
+
+  <h3 id="sweeper"><a class="anchor-link" href="#sweeper">§</a> Sweeper analysis</h3>
+  <ul>
+    <li><strong>Lifecycle</strong>: single asyncio task; while-loop with <code>asyncio.sleep(interval_seconds)</code>; default <code>interval=1h</code>, <code>max_age=24h</code> (<code>main.py:89-96</code>).</li>
+    <li><strong>What it sweeps</strong>: only <code>/tmp/agi-sandboxes/&lt;sid&gt;/</code> on local FS. <strong>Never the bucket</strong> (explicit invariant <code>sweeper.py:5-6</code>).</li>
+    <li><strong>"Is hot" predicate</strong>: <code>_build_active_predicate</code> (<code>sweeper.py:36-53</code>) walks <code>jobs_manager.list()</code> for jobs in <code>pending|running|waiting_hot|waiting_cold</code> matching either <code>job_id</code> or <code>session_id</code>.</li>
+    <li><span class="badge medium">Sharp edge</span> <strong>Chat sessions are NOT tracked in JobManager.</strong> A long-running chat stream that's actively streaming tokens has no entry in <code>jobs_manager.list()</code>. Protection is implicit via mtime updates (the SDK writes during streaming).</li>
+    <li><strong>Failure handling</strong>: <code>try/except Exception</code> at <code>sweeper.py:91-92</code> logs and continues. <code>CancelledError</code> re-raised. Net: very robust.</li>
+  </ul>
+
+  <h3 id="skills"><a class="anchor-link" href="#skills">§</a> Skills loading: old vs new</h3>
+  <p><strong>Old</strong>: <code>SkillsRegistry(agent_workspace=…)</code> — filesystem-backed. <strong>New</strong>: <code>SkillsRegistry(gcs_client=…, templates_prefix="templates/skills")</code> — every CRUD method is a direct GCS call (<code>skills.py:99-329</code>).</p>
+  <ul>
+    <li><strong>No in-process cache.</strong> Every <code>GET /skills</code> re-lists the bucket.</li>
+    <li><strong>Per-session local copies.</strong> Each session's sandbox gets its own <code>shutil.copy2</code>'d copy of the templates.</li>
+    <li><span class="badge medium">Sharp edge</span> <strong>Checkpoint walker REFUSES to push <code>.claude/skills/</code> back</strong> (<code>manager.py:634-635</code>). An agent that edits a skill via Bash sees the write succeed locally; the change vanishes on next hydrate of any session. Skill mutation must go through the HTTP CRUD endpoints. Intentional but a documented footgun.</li>
+  </ul>
+
+  <h3 id="boot"><a class="anchor-link" href="#boot">§</a> App boot sequence</h3>
+  <ol>
+    <li><code>settings.sandbox_local_root.mkdir(parents=True, exist_ok=True)</code> (<code>main.py:35</code>)</li>
+    <li><code>gcs = GCSClient(settings.sandbox_bucket)</code> (<code>:54</code>) — <strong>no probe</strong></li>
+    <li>FUSE startup probe: <code>fuse_root = settings.sandbox_fuse_root if settings.sandbox_fuse_root.is_dir() else None</code>; logs WARNING if missing (<code>:55-65</code>)</li>
+    <li><code>WorkspaceManager(...)</code> constructed (<code>:66-71</code>)</li>
+    <li><code>SkillsRegistry(...)</code>; <code>ensure_root()</code> is now a documented no-op (<code>:73-77</code>, <code>skills.py:111-118</code>)</li>
+    <li>Sweeper task scheduled (<code>:89-96</code>)</li>
+  </ol>
+  <div class="recommendation-box">
+    <strong>No startup health gate for GCS/ADC.</strong> First failure surfaces at the very first hydrate request. Combined with the silent FUSE fallback (logged WARNING only), a misconfigured prod deploy can appear healthy at boot but fail every chat turn.
+  </div>
+
+  <h3 id="env"><a class="anchor-link" href="#env">§</a> Required env vars</h3>
+  <table>
+    <tr><th>Var</th><th>Where read</th><th>What fails if missing/wrong</th></tr>
+    <tr><td><code>AGI_ANTHROPIC_API_KEY</code></td><td><code>agent.py:68-72</code></td><td>Hard 500</td></tr>
+    <tr><td><code>AGI_INTERNAL_SECRET</code></td><td><code>agent.py:50</code></td><td>Falls back to hard-coded default. Must match backend or restish bearer fails</td></tr>
+    <tr><td><code>SANDBOX_BUCKET</code></td><td><code>config.py:237</code></td><td>First hydrate raises 404; <strong>no startup probe</strong></td></tr>
+    <tr><td><code>SANDBOX_LOCAL_ROOT</code></td><td><code>config.py:238</code></td><td>mkdir at startup; fails fast if not writable</td></tr>
+    <tr><td><code>SANDBOX_FUSE_ROOT</code></td><td><code>config.py:239</code></td><td>If missing, logs WARNING and falls back to GCS API. Functional but slower</td></tr>
+    <tr><td><code>SANDBOX_ORG_ID</code></td><td><code>config.py:244</code></td><td>Default <code>"test-org"</code>. <span class="badge medium">Sharp edge</span> a fresh deploy writes to <code>memories/test-org/</code> until overridden</td></tr>
+    <tr><td><code>SANDBOX_TTL_HOURS</code></td><td><code>config.py:248</code></td><td>Sweeper TTL changes</td></tr>
+    <tr><td>Google ADC</td><td><code>GCSClient</code> consumes implicitly</td><td>All hydrates fail with 401/403; <strong>silent at startup</strong></td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ DEPLOYMENT -->
+<section class="panel" data-panel="deployment">
+  <h2>Deployment &amp; operations</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph</div>
+    <p>The deployment is dev-VM-only — not Cloud Run-ready. The systemd unit hardcodes a developer username (<code>sangeet</code>), depends on user-identity Google credentials (not workload identity), and has no security hardening directives. The bucket-setup script doesn't actually create the bucket; it just hardens an existing one. Versioning is on with no lifecycle policy, which means storage will grow without bound. The benchmark script measures things but reports nothing meaningful (single-run, no median/p95). About 2 days of cleanup separates this from "ops-handoffable".</p>
+  </div>
+
+  <h3 id="topology-dep"><a class="anchor-link" href="#topology-dep">§</a> Deployment topology</h3>
+  <table>
+    <tr><th>Layer</th><th>Codified by</th><th>Status</th></tr>
+    <tr><td>Bucket creation</td><td>None — script verifies only</td><td><span class="badge dont">No IaC</span></td></tr>
+    <tr><td>Bucket flags (UBLA, versioning, public-access)</td><td><code>setup-sandbox-bucket.sh:33-36</code></td><td><span class="badge do">Set</span></td></tr>
+    <tr><td>IAM bindings</td><td>None</td><td><span class="badge dont">No IaC</span></td></tr>
+    <tr><td>Lifecycle policy</td><td>None</td><td><span class="badge high">Cost growth risk</span></td></tr>
+    <tr><td>CMEK</td><td>None — explicitly out of scope</td><td><span class="badge defer">Acknowledged</span></td></tr>
+    <tr><td>gcsfuse install</td><td>None</td><td><span class="badge dont">Manual</span></td></tr>
+    <tr><td>FUSE kernel module</td><td>None</td><td><span class="badge dont">Manual</span></td></tr>
+    <tr><td>VM provisioning</td><td>None</td><td><span class="badge dont">Manual</span></td></tr>
+    <tr><td>Mount lifecycle</td><td>systemd unit OR manual script</td><td><span class="badge do">Set</span></td></tr>
+  </table>
+
+  <h3 id="systemd"><a class="anchor-link" href="#systemd">§</a> systemd unit critique</h3>
+  <p>From <code>scripts/sandbox-fuse.service</code>:</p>
+  <table>
+    <tr><th>Directive</th><th>Status</th><th>Note</th></tr>
+    <tr><td><code>User=sangeet</code> / <code>Group=sangeet</code></td><td><span class="badge high">Hardcoded</span></td><td>Developer username; not portable</td></tr>
+    <tr><td><code>Environment=HOME=/home/sangeet</code></td><td><span class="badge high">Hardcoded</span></td><td>Required for ADC discovery</td></tr>
+    <tr><td><code>ExecStartPre=/bin/mkdir -p /mnt/...</code></td><td><span class="badge medium">Fragile</span></td><td>Fresh VM cold-start would fail — user can't <code>mkdir -p /mnt/</code> without sudo</td></tr>
+    <tr><td><code>Restart=on-failure</code> / <code>RestartSec=10</code></td><td><span class="badge do">Set</span></td><td>Conservative; no <code>RestartLimitBurst</code></td></tr>
+    <tr><td>Stale-mount handling on hang</td><td><span class="badge high">Missing</span></td><td>Manual script has <code>fusermount -u || sudo umount -l</code>; unit relies only on <code>Restart=on-failure</code>, but a hung-but-not-dead gcsfuse won't trigger that</td></tr>
+    <tr><td><code>PrivateTmp</code></td><td><span class="badge high">Missing</span></td><td></td></tr>
+    <tr><td><code>NoNewPrivileges</code></td><td><span class="badge high">Missing</span></td><td></td></tr>
+    <tr><td><code>ProtectSystem</code></td><td><span class="badge high">Missing</span></td><td></td></tr>
+    <tr><td><code>ProtectHome</code></td><td><span class="badge high">Missing</span></td><td></td></tr>
+    <tr><td><code>CapabilityBoundingSet</code></td><td><span class="badge high">Missing</span></td><td></td></tr>
+    <tr><td><code>SystemCallFilter</code></td><td><span class="badge high">Missing</span></td><td></td></tr>
+    <tr><td><code>MemoryMax</code></td><td><span class="badge high">Missing</span></td><td></td></tr>
+  </table>
+  <div class="recommendation-box">
+    For a long-lived process holding GCS OAuth tokens and mounting PHI-adjacent storage, this is below community baseline. Roughly a 30-min hardening pass.
+  </div>
+
+  <h3 id="gcsfuse-flags"><a class="anchor-link" href="#gcsfuse-flags">§</a> gcsfuse flags</h3>
+  <p>Identical between manual script and systemd unit:</p>
+  <ul>
+    <li><code>--implicit-dirs</code> — required because the bucket has no placeholder objects</li>
+    <li><code>--file-mode=0644</code> / <code>--dir-mode=0755</code> — readable but not world-writable</li>
+    <li><code>--stat-cache-ttl=10m</code> / <code>--type-cache-ttl=10m</code> — <strong>this is the cross-session memory propagation lag ceiling</strong>. A new memory written by Session A becomes visible to Session B no sooner than the cache TTL expires.</li>
+    <li>No write caching, no atomic-write mode, no <code>--max-conns-per-host</code> tuning.</li>
+  </ul>
+
+  <h3 id="bench"><a class="anchor-link" href="#bench">§</a> Benchmark methodology</h3>
+  <p><code>scripts/bench-sandbox.py</code> runs 6 timed steps via <code>time.perf_counter()</code>: cold hydrate, warm hydrate, single-artifact checkpoint, 100-bulk checkpoint, transcript checkpoint, idempotent re-checkpoint.</p>
+  <ul>
+    <li><strong>No repeats, no median/p95, no warm/cold separation in real mode, no GCS-roundtrip isolation, no concurrency.</strong></li>
+    <li>Budgets in the docstring are aspirational — script doesn't assert them.</li>
+    <li><code>--fake</code> mode uses an in-process dict (zero IO), so its numbers don't predict real-mode behavior.</li>
+    <li><strong>No actual measured numbers in the runbook.</strong></li>
+  </ul>
+
+  <h3 id="hipaa"><a class="anchor-link" href="#hipaa">§</a> HIPAA / security posture</h3>
+  <table>
+    <tr><th>Control</th><th>Status</th></tr>
+    <tr><td>UBLA + public-access-prevention</td><td><span class="badge do">Yes</span></td></tr>
+    <tr><td>Versioning</td><td><span class="badge defer">Yes (but no lifecycle)</span></td></tr>
+    <tr><td>File modes (0644/0755)</td><td><span class="badge do">Yes</span></td></tr>
+    <tr><td>Per-org prefix</td><td><span class="badge do">Yes</span> <code>memories/&lt;org_id&gt;/</code></td></tr>
+    <tr><td>CMEK</td><td><span class="badge dont">No</span></td></tr>
+    <tr><td>Audit logs</td><td><span class="badge dont">No</span> Inherits project default</td></tr>
+    <tr><td>Retention policy</td><td><span class="badge dont">No</span></td></tr>
+    <tr><td>IAM service account</td><td><span class="badge high">No</span> ADC user identity only</td></tr>
+    <tr><td>systemd hardening</td><td><span class="badge high">None</span></td></tr>
+    <tr><td>Cross-org isolation</td><td><span class="badge medium">Prefix-only</span> Misconfigured <code>sandbox_org_id</code> writes to wrong tenant</td></tr>
+    <tr><td>IaC</td><td><span class="badge high">None</span></td></tr>
+  </table>
+
+  <h3 id="cloudrun"><a class="anchor-link" href="#cloudrun">§</a> Cloud Run readiness</h3>
+  <p><strong>Verdict: NOT ready.</strong></p>
+  <ul>
+    <li>systemd can't run on Cloud Run.</li>
+    <li><code>/mnt/...</code> is hardcoded.</li>
+    <li>ADC user creds aren't workload identity.</li>
+    <li>Sweeper expects long-lived VM.</li>
+    <li>Per-instance <code>/tmp</code> won't survive instance recycle.</li>
+  </ul>
+  <p>The runbook explicitly defers Cloud Run (<code>agent-sandbox-runbook.md:351-353</code>).</p>
+</section>
+
+<!-- ============================================================ ALIGNMENT -->
+<section class="panel" data-panel="alignment">
+  <h2>3-Way alignment</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph</div>
+    <p>We compared three branches: the FUSE branch (this analysis target), the sibling branch it builds on, and our current production-track branch. The FUSE branch's library is markedly ahead of where we are on 10 design primitives. It's incompatible on 4 axes (mostly fixable with a single path-builder refactor). The carelink-agi/ consumer half conflicts with our locked decision and should not be cherry-picked.</p>
+  </div>
+
+  <h3 id="matrix"><a class="anchor-link" href="#matrix">§</a> Per-axis comparison matrix</h3>
+
+  <div class="compare-row header">
+    <div class="cmp-axis">Axis</div>
+    <div>Current (<code>feature/ai-orch...</code>)</div>
+    <div>Sibling (<code>openaiagentssdk</code>)</div>
+    <div>FUSE (<code>b0bb495</code>)</div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">Workspace creation</div>
+    <div><code>tempfile.mkdtemp(prefix="agi_")</code> per session</div>
+    <div>Same</div>
+    <div><code>&lt;local_root&gt;/&lt;session_id&gt;/</code> deterministic</div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">FS path</div>
+    <div>Non-deterministic; cold-revive uses <code>extra_data-&gt;&gt;'workspace'</code> stash</div>
+    <div>Same; no cold-revive</div>
+    <div>Deterministic; stash unnecessary</div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">GCS path</div>
+    <div>None for workspace</div>
+    <div>None</div>
+    <div><code>gs://arelink-agent-workspaces/{templates,memories,sessions}/...</code></div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">Scoping</div>
+    <div>Per-session FS only</div>
+    <div>Same</div>
+    <div>Per-session FS + per-session GCS prefix + per-org GCS memories prefix</div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">Mount</div>
+    <div>None</div>
+    <div>None</div>
+    <div>gcsfuse READ at <code>/mnt/...</code>; falls back to GCS API per-call</div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">Lease</div>
+    <div>Process-local <code>cl._agi_clients</code> dict</div>
+    <div>Same</div>
+    <div>Process-local <code>asyncio.Lock</code> per session_id; <strong>no distributed primitive</strong></div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">Cold-revive</div>
+    <div>Implemented but pinned-to-machine</div>
+    <div>None</div>
+    <div>Not addressed at lease layer; deterministic paths help but don't solve cross-machine</div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">Skills delivery</div>
+    <div>Eager <code>shutil.copytree</code> from Python package (~141 file copies/session)</div>
+    <div>Same</div>
+    <div>From <code>gs://.../templates/skills/</code> via FUSE+GCS-API; SHA256 idempotent</div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">Memory persistence</div>
+    <div>Local dirs created but <code>rmtree</code> at session end → aspirational</div>
+    <div>None</div>
+    <div>Persists; per-org prefix; checkpointed every turn; hydrated on resume</div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">Cleanup / TTL</div>
+    <div><code>rmtree</code> at session end</div>
+    <div>Same</div>
+    <div>TTL sweeper (1h interval, 24h cutoff); bucket untouched</div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">Tests</div>
+    <div>Cold-revive + per-expert hermetic</div>
+    <div>Same minus cold-revive</div>
+    <div>23-test fake-GCS hermetic suite; <code>FakeGCSClient</code> pattern</div>
+  </div>
+  <div class="compare-row">
+    <div class="cmp-axis">Production readiness</div>
+    <div>2/5</div>
+    <div>2/5</div>
+    <div>3/5 (v2 service path); PMS path still 2/5</div>
+  </div>
+
+  <h3 id="ahead"><a class="anchor-link" href="#ahead">§</a> Where FUSE is AHEAD of current branch</h3>
+  <p>10 design primitives PR 5 wants but doesn't have:</p>
+  <ol>
+    <li>Deterministic per-session paths</li>
+    <li>Typed <code>SandboxLayout</code> (replaces ~12 ad-hoc string concats in <code>service.py</code>)</li>
+    <li><code>WorkspaceManifest</code> JSON format</li>
+    <li>Hash-diff incremental checkpoint</li>
+    <li>Bucket-write idempotency tolerant of dev ADC permission gaps</li>
+    <li>TTL-driven cold sweep with pluggable activity predicate</li>
+    <li>GCS-FUSE-or-GCS-API per-directory fallback</li>
+    <li>Static path constants in one module</li>
+    <li>23-test fake-GCS hermetic suite</li>
+    <li><strong>Explicit transcript-snapshot path that fixes the SDK's cwd-slug-encoding bug</strong> — directly addresses the handoff §5 issue "workspace is per-machine /tmp; cold-revive only works if Inngest event lands on the original machine"</li>
+  </ol>
+
+  <h3 id="incompat"><a class="anchor-link" href="#incompat">§</a> Where FUSE is INCOMPATIBLE</h3>
+  <table>
+    <tr><th>Locked decision</th><th>FUSE contradiction</th><th>Severity</th></tr>
+    <tr>
+      <td>5-scope hierarchy (Platform→Org→Pharmacy→User→Session)</td>
+      <td>Only 2 scopes (<code>memories/&lt;org_id&gt;/</code>, <code>sessions/&lt;sid&gt;/</code>)</td>
+      <td><span class="badge medium">Medium</span> Pure path-builder change; replace constant with <code>MemoryScope</code> resolver</td>
+    </tr>
+    <tr>
+      <td><code>org_id</code> ≠ <code>pharmacy_id</code>; pharmacy stays on <code>extra_data</code> JSON</td>
+      <td>FUSE has no pharmacy concept at all</td>
+      <td><span class="badge medium">Medium</span> Covered by the MemoryScope refactor</td>
+    </tr>
+    <tr>
+      <td>Bucket-per-org GCS (Decision 3, recommended)</td>
+      <td>One bucket + prefix-per-org</td>
+      <td><span class="badge medium">Medium</span> Decision 3 not formally locked</td>
+    </tr>
+    <tr>
+      <td>Append-only memory with 14d TTL</td>
+      <td>FUSE memory is upsert-overwrite; no TTL on memory files</td>
+      <td><span class="badge high">High</span> Fundamental conflict; PR 6 must add merger layer</td>
+    </tr>
+    <tr>
+      <td>PMS uses <code>claude_agent_sdk</code> (current; migrated)</td>
+      <td>FUSE PMS <code>service.py</code> still uses <code>claude_code_sdk</code></td>
+      <td><span class="badge low">Low</span> Sibling-branch DNA showing through; FUSE didn't touch PMS service</td>
+    </tr>
+    <tr>
+      <td>Native <code>agents=</code> is DORMANT and infeasible to retrofit</td>
+      <td>FUSE's carelink-agi v2 service uses native <code>agents=</code> end-to-end</td>
+      <td><span class="badge inverted">Inverted</span> Phase D's verdict is about <em>retrofitting</em>; v2 was started fresh</td>
+    </tr>
+    <tr>
+      <td>Cardinality "1 sandbox = 1 session = N agents"</td>
+      <td><strong>MATCH</strong> — explicit in <code>__init__.py:5-7</code> and tested at <code>:650</code></td>
+      <td><span class="badge match">Compatible</span></td>
+    </tr>
+  </table>
+
+  <h3 id="dna"><a class="anchor-link" href="#dna">§</a> Sibling-branch DNA</h3>
+  <p>PMS service.py is byte-for-byte identical between sibling and FUSE — <code>git diff 91c1039 b0bb495 -- carelink-pms/carelink/agi/service.py</code> is empty. The "native SDK" pattern lives entirely in <code>carelink-agi/</code>.</p>
+  <div class="recommendation-box">
+    <strong>Implication:</strong> cherry-picking <code>workspaces/</code> is clean; cherry-picking the v2 service drags an entire parallel runtime that conflicts with Decision 1.
+  </div>
+</section>
+
+<!-- ============================================================ EDGES -->
+<section class="panel" data-panel="edges">
+  <h2>Sharp edges <span class="badge dataloss" style="margin-left: 8px;">10 findings</span></h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph</div>
+    <p>Ten distinct issues, ranked by data-loss risk. The top four (S1–S4) must be fixed before any production use of the cherry-picked library; the remaining six (S5–S10) are operability/security concerns that can be follow-ups. Each card has a click-to-expand fix sketch.</p>
+  </div>
+
+  <div class="filter-bar">
+    <div class="filter-label">Filter:</div>
+    <button class="filter-chip active" data-sev="all">All (10)</button>
+    <button class="filter-chip" data-sev="dataloss">Data loss</button>
+    <button class="filter-chip" data-sev="high">High</button>
+    <button class="filter-chip" data-sev="medium">Medium</button>
+    <button class="filter-chip" data-sev="low">Low</button>
+    <input type="text" id="edge-search" placeholder="Search title or description...">
+  </div>
+
+  <div id="edge-list">
+
+    <details class="edge-card" data-sev="dataloss" data-text="load_manifest swallow empty exception transient gcs">
+      <summary>
+        <span class="edge-id">S1</span>
+        <span class="edge-title"><code>_load_manifest</code> swallow-and-empty over real manifest</span>
+        <span class="badge dataloss">Data loss</span>
+      </summary>
+      <div class="edge-body">
+        <p><code>workspaces/manager.py:644-652</code>. A bare <code>except Exception → empty()</code> cannot distinguish 404 (legit empty) from 503 (transient → should retry, not nuke). A transient GCS read failure during <code>_checkpoint</code> will produce an empty manifest, which is then <em>uploaded over the real one</em> via the unconditional manifest write (<code>manager.py:537-542</code>).</p>
+        <p>Recoverable only if GCS object versioning is enabled — which the bucket setup script does enable, but with no lifecycle, so the recovery is "go find the noncurrent version".</p>
+        <div class="edge-fix"><strong>Fix:</strong> Distinguish 404 from 5xx in <code>_load_manifest</code>; on 5xx, raise + log + abort the checkpoint (let the next checkpoint retry).</div>
+      </div>
+    </details>
+
+    <details class="edge-card" data-sev="dataloss" data-text="generation match concurrent pod replica manifest write">
+      <summary>
+        <span class="edge-id">S2</span>
+        <span class="edge-title">No <code>if-generation-match</code> on manifest upload</span>
+        <span class="badge dataloss">Data loss</span>
+      </summary>
+      <div class="edge-body">
+        <p><code>manager.py:537-542</code>. Two concurrent checkpoints from different pods/replicas both download the same manifest, both bump to v(N+1), both upload. Last writer wins on <code>files</code>; the other's blob uploads remain orphaned in the bucket. The per-session <code>asyncio.Lock</code> does NOT span processes.</p>
+        <div class="edge-fix"><strong>Fix:</strong> Pass <code>if_generation_match=existing.generation</code> on <code>upload_blob</code>; on precondition-failed, re-load and retry-with-merge or fail loudly.</div>
+      </div>
+    </details>
+
+    <details class="edge-card" data-sev="dataloss" data-text="finalize lock release rmtree race hydrate">
+      <summary>
+        <span class="edge-id">S3</span>
+        <span class="edge-title"><code>finalize()</code> race window</span>
+        <span class="badge dataloss">Data loss</span>
+      </summary>
+      <div class="edge-body">
+        <p><code>manager.py:251-256</code>. Lock released between <code>checkpoint</code> (which acquires/releases internally) and <code>rmtree</code>. A concurrent <code>hydrate(session_id="X")</code> could land between, creating a sandbox that gets <code>rmtree</code>'d.</p>
+        <div class="edge-fix"><strong>Fix:</strong> Hold the lock continuously across both operations; or have <code>finalize</code> re-check <code>session_exists_locally</code> before <code>rmtree</code>.</div>
+      </div>
+    </details>
+
+    <details class="edge-card" data-sev="high" data-text="org_id baked one-org-per-process construction multi-tenant">
+      <summary>
+        <span class="edge-id">S4</span>
+        <span class="edge-title"><code>WorkspaceManager</code> is one-org-per-process</span>
+        <span class="badge high">High</span>
+      </summary>
+      <div class="edge-body">
+        <p><code>manager.py:147</code>, <code>carelink-agi/app/main.py:67</code>. <code>org_id</code> is baked at construction time. <strong>Cannot serve multiple orgs from one carelink-agi process today.</strong> Incompatible with the locked 5-scope hierarchy (Platform→Org→Pharmacy→User→Session).</p>
+        <div class="edge-fix"><strong>Fix (for cherry-pick):</strong> Replace <code>org_id: str</code> constructor param with a <code>scope_resolver: Callable[[Session], MemoryScope]</code> that produces the path bundle dynamically. ~4 hours.</div>
+      </div>
+    </details>
+
+    <details class="edge-card" data-sev="medium" data-text="gcsfuse cache ttl propagation lag stat memory">
+      <summary>
+        <span class="edge-id">S5</span>
+        <span class="edge-title">Memory cross-session propagation depends on gcsfuse cache TTL</span>
+        <span class="badge medium">Medium</span>
+      </summary>
+      <div class="edge-body">
+        <p>Test at <code>test_workspace_manager.py:621-647</code> simulates this manually by writing the GCS blob into <code>fuse_root</code> after checkpoint. Production uses <code>--stat-cache-ttl=10m</code> (<code>mount-sandbox-fuse.sh:53-54</code>). <strong>Real cross-session memory propagation can lag up to 10 minutes.</strong> Not covered by tests; not flagged in the runbook.</p>
+        <div class="edge-fix"><strong>Fix:</strong> Document the cache TTL in the runbook; for memory-merger logic in PR 6, prefer the GCS API path over FUSE for read-after-write within a single session boundary; consider lower TTL for memory paths specifically.</div>
+      </div>
+    </details>
+
+    <details class="edge-card" data-sev="medium" data-text="skills agent edit silently dropped checkpoint walker">
+      <summary>
+        <span class="edge-id">S6</span>
+        <span class="edge-title">Skills written by an agent are silently dropped</span>
+        <span class="badge medium">Medium</span>
+      </summary>
+      <div class="edge-body">
+        <p><code>manager.py:634-637</code> — <code>_classify</code> returns <code>(None, "")</code> for <code>.claude/skills/**</code> and <code>.claude/agents/**</code>. An agent that edits a skill via <code>Bash</code> inside its sandbox sees the write succeed; the content vanishes on next hydrate.</p>
+        <div class="edge-fix"><strong>Fix:</strong> This is intentional (skills must go through <code>SkillsRegistry</code>). Document for agent authors. Consider a checkpoint-time WARNING log when checkpoint sees touched files in those paths.</div>
+      </div>
+    </details>
+
+    <details class="edge-card" data-sev="medium" data-text="startup health gate gcs adc probe boot">
+      <summary>
+        <span class="edge-id">S7</span>
+        <span class="edge-title">No startup health gate</span>
+        <span class="badge medium">Medium</span>
+      </summary>
+      <div class="edge-body">
+        <p><code>carelink-agi/app/main.py:54</code> constructs <code>GCSClient(settings.sandbox_bucket)</code> without probing. <code>skills_registry.ensure_root()</code> is now a no-op. First failure surfaces at first request.</p>
+        <div class="edge-fix"><strong>Fix:</strong> Probe a <code>healthcheck/probe.txt</code> upload+delete during lifespan startup (mirroring what <code>setup-sandbox-bucket.sh:18-30</code> already does in shell). Fail fast with a clear log line.</div>
+      </div>
+    </details>
+
+    <details class="edge-card" data-sev="medium" data-text="sweeper jobmanager chat session ttl">
+      <summary>
+        <span class="edge-id">S8</span>
+        <span class="edge-title">Sweeper is JobManager-only; chat sessions protected only by 24h TTL</span>
+        <span class="badge medium">Medium</span>
+      </summary>
+      <div class="edge-body">
+        <p><code>sweeper.py:36-53</code>. <code>_build_active_predicate</code> checks <code>JobManager.list()</code>; chat sessions aren't tracked there. A long-running chat with reduced TTL (e.g. for tests) could in principle be reaped mid-stream.</p>
+        <div class="edge-fix"><strong>Fix:</strong> Register live chat sessions in a process-wide registry that the sweeper consults; or update <code>mtime</code> continuously during a chat turn so the TTL effectively follows liveness.</div>
+      </div>
+    </details>
+
+    <details class="edge-card" data-sev="high" data-text="systemd hardening user sangeet hardcoded iac terraform">
+      <summary>
+        <span class="edge-id">S9</span>
+        <span class="edge-title">systemd unit + IaC gaps</span>
+        <span class="badge high">High</span>
+      </summary>
+      <div class="edge-body">
+        <p><code>scripts/sandbox-fuse.service</code>. No hardening; hardcoded <code>User=sangeet</code> + <code>HOME=/home/sangeet</code>; bucket creation, IAM, gcsfuse install, kernel module, VM provisioning all out-of-band; manual ADC user-credential rotation = service degradation until human re-auths.</p>
+        <div class="edge-fix"><strong>Fix:</strong> ~30-min hardening pass (<code>PrivateTmp</code>, <code>NoNewPrivileges</code>, <code>ProtectSystem=strict</code>, <code>ProtectHome=tmpfs</code>, capability bounds). Templated user/HOME via <code>Environment=</code>. Service-account migration via workload identity for any non-dev environment. Terraform/Pulumi modules for bucket + IAM + lifecycle policy.</div>
+      </div>
+    </details>
+
+    <details class="edge-card" data-sev="medium" data-text="versioning lifecycle cost growth bucket">
+      <summary>
+        <span class="edge-id">S10</span>
+        <span class="edge-title">Versioning on + no lifecycle = unbounded cost growth</span>
+        <span class="badge medium">Medium</span>
+      </summary>
+      <div class="edge-body">
+        <p><code>scripts/setup-sandbox-bucket.sh:35</code>. No max-versions, no age cap. Likely the dominant long-term cost driver.</p>
+        <div class="edge-fix"><strong>Fix:</strong> GCS object lifecycle policy: <code>NumNewerVersions=N</code> (e.g. 10) for memory and transcript paths; explicit retention only on session manifests if needed for audit.</div>
+      </div>
+    </details>
+
+  </div>
+</section>
+
+<!-- ============================================================ RECOMMENDATIONS -->
+<section class="panel" data-panel="recommendations">
+  <h2>Recommendations</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph</div>
+    <p>Take the library, leave the consumer. The core recommendation is a cherry-pick of <code>workspaces/{manifest,schemas,manager}.py</code> + 23 tests into PR 5 with a single <code>org_id → MemoryScope</code> refactor. About 2–3 days of work. Take the gcsfuse mount script as-is but defer enabling FUSE in production (it's a read-side optimization, not blocking). Patch the four data-loss-class bugs first. Adopt the manifest format BEFORE writing PR 6's memory store so PR 6 doesn't reinvent it.</p>
+  </div>
+
+  <h3 id="cherry-pick"><a class="anchor-link" href="#cherry-pick">§</a> Cherry-pick plan for PR 5</h3>
+
+  <table>
+    <tr><th>Module</th><th>Action</th><th>Effort</th><th>Notes</th></tr>
+    <tr><td><code>workspaces/manifest.py</code></td><td><span class="badge do">Drop in verbatim</span></td><td>30 min</td><td>Pure dataclass + JSON serde; zero CareLink coupling</td></tr>
+    <tr><td><code>workspaces/schemas.py</code></td><td><span class="badge do">Drop in with rename</span></td><td>1–2 hr</td><td>Replace <code>BUCKET_MEMORIES</code> with <code>MemoryScope</code> builder (5-scope path resolver)</td></tr>
+    <tr><td><code>workspaces/manager.py</code></td><td><span class="badge do">Drop in with refactor</span></td><td>1 day</td><td><code>__init__(org_id=…)</code> → <code>__init__(scope_resolver=…)</code>; ~4 references updated</td></tr>
+    <tr><td><code>tests/.../test_workspace_manager.py</code></td><td><span class="badge do">Drop in with rename</span></td><td>2–3 hr</td><td>Fixture <code>org_id="test-org"</code> → <code>scope=test_scope</code>; 3 memory-scoping tests need new path assertions</td></tr>
+    <tr><td><code>scripts/bench-sandbox.py</code></td><td><span class="badge do">Drop in</span></td><td>1 hr</td><td>Add p50/p95 + repeats before relying on numbers</td></tr>
+    <tr><td><code>scripts/{mount-sandbox-fuse.sh, sandbox-fuse.service, setup-sandbox-bucket.sh}</code></td><td><span class="badge do">Drop in + harden</span></td><td>1 day</td><td>Add systemd hardening + IaC discipline before any non-dev use</td></tr>
+    <tr><td><code>carelink-agi/app/sweeper.py</code></td><td><span class="badge defer">Adapt</span></td><td>1 hr</td><td>Move into <code>carelink-pms/carelink/agi/sessions/sweeper.py</code>; depend on <code>cl.agi.sessions</code></td></tr>
+    <tr><td><code>docs/{sandbox-walkthrough, agent-sandbox-runbook}.md</code></td><td><span class="badge do">Drop in</span></td><td>0 min</td><td>Rebrand bucket/service names; ~926 LoC of operator content</td></tr>
+  </table>
+
+  <p><strong>Total cherry-pickable: ~2,100 LoC implementation + 666 LoC tests + ~500 LoC scripts/docs.</strong> Estimated 2–3 day port including the org→MemoryScope refactor and merging with current branch's existing <code>_prepare_workspace</code>/<code>_copy_skills</code>/<code>_copy_agents</code>/<code>_write_restish_config</code> callers.</p>
+
+  <h3 id="dont-pick"><a class="anchor-link" href="#dont-pick">§</a> Files NOT to cherry-pick</h3>
+
+  <div class="pick-card">
+    <div class="pick-header">
+      <span class="badge dont">Don't pick</span>
+      <span class="pick-title">Anything under <code>carelink-agi/app/</code></span>
+    </div>
+    <p>Parallel runtime, conflicts with Decision 1 (<code>BackendAGIService</code> + <code>WorkerAGIService</code> split, not <code>BackendAGIService</code> + V2 split). The carelink-agi/ service can stay where it is on its own branch as a reference implementation.</p>
+  </div>
+
+  <div class="pick-card">
+    <div class="pick-header">
+      <span class="badge dont">Don't pick</span>
+      <span class="pick-title">Voice tooling files</span>
+    </div>
+    <p>Out of scope per task instructions. <code>carelink-backend/app/routers/calls.py</code>, <code>voice_tools.py</code>, <code>voice_tools_auth.py</code>, IVR work, voice-tunnel scripts.</p>
+  </div>
+
+  <h3 id="bug-fixes"><a class="anchor-link" href="#bug-fixes">§</a> Bug fixes that must land before merge</h3>
+  <p>The 10 sharp edges with <code>Fix:</code> lines are concrete patches. Sequenced:</p>
+  <ol>
+    <li><strong>S1–S4 (data-loss class)</strong> — 2–3 days. Block any production use.</li>
+    <li><strong>S5–S8 (operability)</strong> — 1–2 days. Block any production use beyond a single dev VM.</li>
+    <li><strong>S9–S10 (deployment)</strong> — 2 days. Block any non-dev environment.</li>
+  </ol>
+
+  <h3 id="sequencing"><a class="anchor-link" href="#sequencing">§</a> Sequencing within the multi-tenancy plan</h3>
+  <ol>
+    <li><strong>Manifest-first in PR 6 (memory store).</strong> PR 6 plans <code>agi/memory/{store,selector,merger}.py</code>. The FUSE <code>WorkspaceManifest</code> already gives PR 6 a content-addressable file index for free. Adopt the manifest format BEFORE writing the merger; otherwise PR 6 reinvents one and PR 5 has to be rewritten to use it. <strong>Critical sequencing.</strong></li>
+    <li><strong>Retire <code>extra_data->>'workspace'</code> cold-revive stash.</strong> Once paths are deterministic (<code>&lt;local_root&gt;/&lt;session_id&gt;/</code>), the stash is dead code (<code>service.py:702, 902-916</code>). Cold-revive just re-derives the path from <code>session_id</code>.</li>
+    <li><strong>Defer enabling the FUSE mount in production.</strong> Land the gcsfuse scripts and configs but keep the mount opt-in via env var until the bucket-as-system-of-record is stable. PR 5's value comes mostly from deterministic-paths + manifest + hash-diff checkpoint, not from FUSE specifically.</li>
+    <li><strong>Add concurrency, failure-injection, and lease tests.</strong> The 23-test suite establishes <code>FakeGCSClient</code> but doesn't cover concurrency, <code>_load_manifest</code> 5xx, manifest upload failure, finalize race, gcsfuse cache TTL effects.</li>
+  </ol>
+</section>
+
+<!-- ============================================================ QUESTIONS -->
+<section class="panel" data-panel="questions">
+  <h2>Open questions for stakeholder</h2>
+
+  <div class="plain-frame">
+    <div class="plain-label">In one paragraph</div>
+    <p>Eight questions block a final decision on the cherry-pick. Most can be answered in 5–15 minutes; #1 (authorship) and #6 (sibling worktree retirement) are the most load-bearing for moving forward.</p>
+  </div>
+
+  <ol style="line-height: 1.85;">
+    <li><span class="badge followup">Q1</span> Is the cherry-pick of <code>workspaces/{manifest,schemas,manager}.py</code> + tests acceptable given the authorship is Arjun Walia (different engineer's branch)?</li>
+    <li><span class="badge followup">Q2</span> Should bucket-per-org be locked before the cherry-pick, or after?</li>
+    <li><span class="badge followup">Q3</span> Is the FUSE mount worth enabling in v1, or defer to a later PR? <em>Recommendation: defer.</em></li>
+    <li><span class="badge followup">Q4</span> Should the cherry-picked workspaces module replace OR coexist with the existing <code>_prepare_workspace</code> flow during a transition? <em>Recommendation: replace.</em></li>
+    <li><span class="badge followup">Q5</span> Should <code>finalize()</code> be wired to a real "session done" event (browser closed, job archived) as part of the cherry-pick, or stay TTL-only? <em>Recommendation: stay TTL-only for v1.</em></li>
+    <li><span class="badge followup">Q6</span> Is the sibling worktree (<code>openaiagentssdk-review</code>) retirement permanent? If yes, the persistent memory file should be updated; if no, restore the worktree before the next cross-branch comparison agent runs.</li>
+    <li><span class="badge followup">Q7</span> Should the carelink-agi/ v2 service continue to exist on its own branch as a reference, or be retired now that the workspaces/ library is moving to the production track? <em>Recommendation: keep as a reference until PR 5 + PR 6 land in main.</em></li>
+    <li><span class="badge followup">Q8</span> Should this analysis output land in <code>feature/ai-orchestration-with-domain-agents/docs/</code>, in this worktree only, or be published to the mock-ui repo?</li>
+  </ol>
+</section>
+
+<!-- ============================================================ REFERENCE -->
+<section class="panel" data-panel="reference">
+  <h2>Engineering reference</h2>
+
+  <h3 id="files"><a class="anchor-link" href="#files">§</a> Files touched by <code>b0bb495</code> (FUSE/storage scope only)</h3>
+
+  <h4>NEW</h4>
+  <pre>carelink-pms/carelink/agi/workspaces/__init__.py        45
+carelink-pms/carelink/agi/workspaces/manager.py         712
+carelink-pms/carelink/agi/workspaces/manifest.py        110
+carelink-pms/carelink/agi/workspaces/schemas.py         155
+carelink-pms/tests/section1_unit/test_workspace_manager.py  666
+carelink-agi/app/sweeper.py                             99
+docs/agent-sandbox-runbook.md                           362
+docs/sandbox-walkthrough.md                             564
+scripts/bench-sandbox.py                                244
+scripts/mount-sandbox-fuse.sh                           59
+scripts/sandbox-fuse.service                            35
+scripts/setup-sandbox-bucket.sh                         45</pre>
+
+  <h4>MODIFIED</h4>
+  <pre>carelink-agi/app/agent.py                               +117
+carelink-agi/app/jobs.py                                +200
+carelink-agi/app/main.py                                +58
+carelink-agi/app/routers/chat.py                        +185
+carelink-agi/app/routers/jobs.py                        +70
+carelink-agi/app/routers/skills.py                      +14
+carelink-agi/app/skills.py                              +296
+carelink-agi/app/storage.py                             +14
+carelink-agi/app/config.py                              +41</pre>
+
+  <h4>EXCLUDED FROM THIS ANALYSIS (voice tooling)</h4>
+  <pre>carelink-backend/app/routers/{calls,voice_tools}.py
+carelink-backend/app/voice_tools_auth.py
+carelink-pms/carelink/integrations/asepha_voice/client.py
+carelink-pms/carelink/ivr/{models,schemas,service,voice_tools_*}.py
+carelink-frontend/src/components/workspace/tabs/{Call,InboundCalls}*.tsx
+docs/{inbound-voice-agent-handoff,inbound-voice-testing,voice-tools-v2-architecture}.md
+scripts/update-voice-tunnel.sh</pre>
+
+  <h3 id="scratch"><a class="anchor-link" href="#scratch">§</a> Source scratch artifacts</h3>
+  <p>Each agent's raw output is preserved at:</p>
+  <ul>
+    <li><code>.claude/worktrees/inbound-voice-fuse-sandbox/.analysis-scratch/01-fuse-primitives.md</code> — Agent A (~325 lines)</li>
+    <li><code>.claude/worktrees/inbound-voice-fuse-sandbox/.analysis-scratch/02-app-integration.md</code> — Agent B (~340 lines)</li>
+    <li><code>.claude/worktrees/inbound-voice-fuse-sandbox/.analysis-scratch/03-deployment-perf.md</code> — Agent C (~256 lines)</li>
+    <li><code>.claude/worktrees/inbound-voice-fuse-sandbox/.analysis-scratch/04-alignment.md</code> — Agent D (~130 lines)</li>
+  </ul>
+
+  <h3 id="related"><a class="anchor-link" href="#related">§</a> Related architecture documents</h3>
+  <ul>
+    <li><code>docs/rx-flow-handoff-2026-05-01-implementation-plan.md</code> — the 8-PR shipping plan this analysis feeds into</li>
+    <li><code>docs/agi-implementation-plan.html</code> — interactive version of the above</li>
+    <li><code>docs/agi-architecture-overview.html</code> — multi-tenancy + 5-scope hierarchy</li>
+    <li><code>docs/agi-sandbox-memory-architecture.html</code> — sandbox cardinality decisions</li>
+    <li><code>docs/agi-storage-architecture.html</code> — storage tiers + Cloud Run worker pools</li>
+  </ul>
+
+  <h3 id="commit"><a class="anchor-link" href="#commit">§</a> Commit metadata</h3>
+  <pre>commit b0bb49546c62fbedbb45a85d91c6af3caa0343c3
+Author: Arjun Walia &lt;arjun@asepha.ai&gt;
+Date:   Thu Apr 30 17:16:12 2026 +0000
+
+    per-session sandbox for carelink-agi backed by gcs + gcsfuse
+
+    Made-with: Cursor
+
+ 21 files changed, 3864 insertions(+), 227 deletions(-)</pre>
+
+  <h3 id="how-run"><a class="anchor-link" href="#how-run">§</a> How to read the source</h3>
+  <pre># From monorepo root
+git worktree add .claude/worktrees/inbound-voice-fuse-sandbox origin/inbound-voice-fuse-sandbox
+cd .claude/worktrees/inbound-voice-fuse-sandbox
+
+# The library
+ls carelink-pms/carelink/agi/workspaces/
+cat carelink-pms/carelink/agi/workspaces/__init__.py
+
+# The tests
+cat carelink-pms/tests/section1_unit/test_workspace_manager.py
+
+# Cross-branch diffs
+git diff origin/openaiagentssdk..HEAD -- carelink-pms/carelink/agi/service.py   # empty!
+git diff origin/openaiagentssdk..HEAD --stat                                     # full surface area</pre>
+</section>
+
+</main>
+
+<div class="footer-note">
+  <strong>Document state</strong>: synthesis of 4 parallel Opus subagent reads. No code changes proposed in this document; cherry-pick recommendations are advisory, awaiting stakeholder input.<br>
+  <strong>Next step</strong>: see Open Questions tab for the 8 questions that block a final cherry-pick decision.<br>
+  <strong>Sources</strong>: <code>.analysis-scratch/01-fuse-primitives.md</code>, <code>02-app-integration.md</code>, <code>03-deployment-perf.md</code>, <code>04-alignment.md</code> in the worktree. The Markdown synthesis is at <code>docs/fuse-sandbox-deep-dive-2026-05-01.md</code>.
+</div>
+
+<script>
+  // Tab switching
+  const tabs = document.querySelectorAll('nav.tabs button');
+  const panels = document.querySelectorAll('section.panel');
+
+  function activate(target) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === target));
+    panels.forEach(p => p.classList.toggle('active', p.dataset.panel === target));
+    if (location.hash !== '#' + target) {
+      history.replaceState(null, '', '#' + target);
+    }
+  }
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      activate(tab.dataset.tab);
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+
+  // Activate tab from URL hash on load (deep-linkable)
+  const initial = location.hash.replace(/^#/, '');
+  if (initial) {
+    const match = Array.from(tabs).find(t => t.dataset.tab === initial);
+    if (match) activate(initial);
+    else {
+      // It might be an in-tab anchor — find a panel that contains an element with this id
+      const target = document.getElementById(initial);
+      if (target) {
+        const panel = target.closest('section.panel');
+        if (panel) {
+          activate(panel.dataset.panel);
+          setTimeout(() => target.scrollIntoView({ behavior: 'instant', block: 'start' }), 50);
+        }
+      }
+    }
+  }
+
+  // In-tab anchor links: follow the link, switching to the right panel if needed
+  document.querySelectorAll('a.anchor-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      const id = link.getAttribute('href').replace(/^#/, '');
+      const target = document.getElementById(id);
+      if (!target) return;
+      const panel = target.closest('section.panel');
+      if (panel && !panel.classList.contains('active')) {
+        e.preventDefault();
+        activate(panel.dataset.panel);
+        setTimeout(() => target.scrollIntoView({ behavior: 'instant', block: 'start' }), 50);
+      }
+    });
+  });
+
+  // Sharp-edge filter
+  const chips = document.querySelectorAll('.filter-chip');
+  const search = document.getElementById('edge-search');
+  const edges = document.querySelectorAll('#edge-list .edge-card');
+
+  function applyFilter() {
+    const activeChip = document.querySelector('.filter-chip.active');
+    const sev = activeChip ? activeChip.dataset.sev : 'all';
+    const q = (search.value || '').toLowerCase().trim();
+    edges.forEach(card => {
+      const cardSev = card.dataset.sev;
+      const cardText = (card.dataset.text || '') + ' ' + card.textContent.toLowerCase();
+      const sevMatch = sev === 'all' || cardSev === sev;
+      const textMatch = !q || cardText.includes(q);
+      card.classList.toggle('hidden', !(sevMatch && textMatch));
+    });
+  }
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.classList.toggle('active', c === chip));
+      applyFilter();
+    });
+  });
+  search.addEventListener('input', applyFilter);
+</script>
+
+</body>
+</html>
