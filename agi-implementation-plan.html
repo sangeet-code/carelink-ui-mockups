@@ -373,6 +373,196 @@
   .scope-pill.red { background: var(--danger); }
   .scope-pill.purple { background: var(--primary); }
   .scope-pill.gray { background: var(--neutral); }
+
+  /* ===== Detailed PR cards + checklists (added 2026-05-01) ===== */
+  .pr-card-detailed {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0;
+    margin: 18px 0;
+    background: white;
+    overflow: hidden;
+  }
+  .pr-card-detailed > .pr-detail-header {
+    background: linear-gradient(to right, var(--bg-alt), var(--bg));
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .pr-card-detailed > .pr-detail-header .pr-num-large {
+    background: var(--primary);
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .pr-card-detailed .pr-title-block { flex: 1; min-width: 0; }
+  .pr-card-detailed .pr-title-block .pr-title-text {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .pr-card-detailed .pr-detail-body { padding: 18px 20px; }
+  .pr-card-detailed h4 { margin-top: 18px; margin-bottom: 8px; }
+  .pr-card-detailed h4:first-child { margin-top: 0; }
+
+  .pr-status {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  .pr-status.not-started { background: var(--bg-alt); color: var(--text-muted); border: 1px solid var(--border); }
+  .pr-status.in-progress { background: #fff8c5; color: #4d2d00; border: 1px solid var(--warn); }
+  .pr-status.in-review { background: #ddf4ff; color: #033780; border: 1px solid var(--info); }
+  .pr-status.merged { background: #dafbe1; color: #0a3622; border: 1px solid var(--success); }
+  .pr-status.blocked { background: #ffebe9; color: #82071e; border: 1px solid var(--danger); }
+
+  /* Checklist */
+  ul.checklist {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0;
+  }
+  ul.checklist li {
+    padding: 7px 0 7px 30px;
+    position: relative;
+    font-size: 13.5px;
+    line-height: 1.55;
+    border-bottom: 1px dashed var(--border);
+  }
+  ul.checklist li:last-child { border-bottom: 0; }
+  ul.checklist li::before {
+    content: "☐";
+    position: absolute;
+    left: 4px;
+    top: 6px;
+    color: var(--text-muted);
+    font-size: 16px;
+    line-height: 1;
+  }
+  ul.checklist li.done::before { content: "☑"; color: var(--success); }
+  ul.checklist li.in-progress::before { content: "◐"; color: var(--warn); }
+  ul.checklist li.blocked::before { content: "✗"; color: var(--danger); }
+  ul.checklist li.done > span { text-decoration: line-through; color: var(--text-muted); }
+
+  .checklist-legend {
+    display: flex;
+    gap: 16px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    padding: 6px 0 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+  .checklist-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .checklist-legend .ico { font-size: 14px; line-height: 1; }
+  .checklist-legend .ico.pending { color: var(--text-muted); }
+  .checklist-legend .ico.progress { color: var(--warn); }
+  .checklist-legend .ico.done { color: var(--success); }
+  .checklist-legend .ico.blocked { color: var(--danger); }
+
+  /* PR-card subsections */
+  .pr-prompt {
+    background: #f7f3ff;
+    border-left: 4px solid var(--primary);
+    padding: 12px 16px;
+    margin: 0 0 14px;
+    border-radius: 0 6px 6px 0;
+  }
+  .pr-prompt .label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .pr-prompt p { margin: 4px 0; }
+
+  .pr-not-section {
+    background: #fafafa;
+    border-left: 3px solid var(--neutral);
+    padding: 10px 14px;
+    margin: 10px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 13px;
+  }
+  .pr-not-section .label {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--neutral);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .pr-not-section ul { margin: 4px 0; padding-left: 22px; }
+  .pr-not-section ul li { margin: 2px 0; }
+
+  .file-table { font-size: 13px; margin: 8px 0; }
+  .file-table code { font-size: 12px; }
+  .file-table th, .file-table td { padding: 8px 10px; }
+
+  /* Status banner */
+  .status-banner {
+    background: linear-gradient(to right, #dafbe1, #f6f8fa);
+    border: 1px solid var(--success);
+    border-left: 5px solid var(--success);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 13.5px;
+    line-height: 1.7;
+  }
+  .status-banner strong { color: var(--success); }
+
+  /* Resolution box (replaces recommendation-box for decided items) */
+  .resolution-box {
+    background: #dafbe1;
+    border-left: 4px solid var(--success);
+    padding: 10px 14px;
+    margin: 10px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 14px;
+  }
+  .resolution-box strong { color: var(--success); }
+
+  /* Anchor link helper (used inside status-banner) */
+  a.anchor-link {
+    color: var(--info);
+    text-decoration: none;
+  }
+  a.anchor-link:hover { text-decoration: underline; }
+
+  hr.pr-section-divider {
+    border: 0;
+    border-top: 1px dashed var(--border-strong);
+    margin: 28px 0 18px;
+  }
+
+  .answer-box {
+    background: #ddf4ff;
+    border-left: 4px solid var(--info);
+    padding: 10px 14px;
+    margin: 8px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 13.5px;
+  }
+  .answer-box strong { color: var(--info); }
 </style>
 </head>
 
@@ -729,65 +919,405 @@
     <p>Each of these is a self-contained pull request that can ship independently behind a feature flag. The first ones don't change behavior at all — they just add new capabilities. The big behavior change happens in PR 7. Each PR has a size estimate, a risk level, and what it depends on.</p>
   </div>
 
-  <div class="pr-card">
-    <span class="pr-num">1</span><span class="pr-title">Lease columns + Alembic migration</span>
-    <div class="pr-pills">
-      <span class="pr-pill size-s">Size: Small</span>
-      <span class="pr-pill risk-low">Risk: Low</span>
-      <span class="pr-pill">Depends on: nothing</span>
+  <div class="status-banner">
+    <strong>Plan status (2026-05-01):</strong>
+    All 7 open decisions <strong>Decided</strong> — see <a class="anchor-link" href="#decisions">Open Decisions</a>.
+    All 9 follow-up questions + 8 FUSE-specific questions <strong>Resolved</strong> — see <a class="anchor-link" href="#questions">Follow-Up Questions</a>.
+    PRs 1-5 detailed below with prompts + acceptance checklists; PRs 6-8 outlined; multi-tenant track unchanged.
+    Living document — checklists update as work progresses.
+  </div>
+
+  <div class="checklist-legend">
+    <span><span class="ico pending">☐</span> Not started</span>
+    <span><span class="ico progress">◐</span> In progress</span>
+    <span><span class="ico done">☑</span> Done</span>
+    <span><span class="ico blocked">✗</span> Blocked</span>
+    <span style="margin-left: auto; font-style: italic;">Edit HTML markup to update canonical state.</span>
+  </div>
+
+  <h3>PRs 1-5 — detailed (current focus)</h3>
+
+  <!-- ============== PR 1 ============== -->
+  <div class="pr-card-detailed" data-pr="1">
+    <div class="pr-detail-header">
+      <span class="pr-num-large">1</span>
+      <div class="pr-title-block">
+        <div class="pr-title-text">Lease columns + Alembic migration</div>
+        <div class="pr-pills">
+          <span class="pr-pill size-s">Size: Small</span>
+          <span class="pr-pill risk-low">Risk: Low</span>
+          <span class="pr-pill">Layer 1</span>
+          <span class="pr-pill">Depends on: nothing</span>
+        </div>
+      </div>
+      <span class="pr-status not-started">Not started</span>
     </div>
-    <div class="pr-body">
-      <p>Add 6 columns to <code>agi_sessions</code>: <code>lease_holder_instance_id</code>, <code>lease_holder_machine_id</code>, <code>lease_acquired_at</code>, <code>lease_expires_at</code>, <code>worker_base_url</code>, <code>pharmacy_id</code>. Schema-only; nothing reads or writes them yet. Unblocks Layer 3.</p>
+    <div class="pr-detail-body">
+      <div class="pr-prompt">
+        <div class="label">Prompt — what this PR accomplishes</div>
+        <p>Adds the database columns we need to track session leases — who's holding which session, when their lease expires, and which Cloud Run worker URL to route traffic to. <strong>Schema only — no behavior change yet.</strong> Nothing reads or writes these columns until PR 3.</p>
+      </div>
+
+      <h4>Files changed</h4>
+      <table class="file-table">
+        <tr><th>Path</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>carelink-pms/carelink/migrations/versions/&lt;auto-rev&gt;_add_agi_session_lease_columns.py</code></td><td>NEW</td><td>Single Alembic migration; <code>down_revision = 'c4d6e8f0a2b3'</code> (current head)</td></tr>
+      </table>
+
+      <h4>Schema additions</h4>
+      <table>
+        <tr><th>Column</th><th>Type</th><th>Nullable</th><th>Purpose</th></tr>
+        <tr><td><code>lease_holder_instance_id</code></td><td>TEXT</td><td>Yes</td><td>Cloud Run instance ID currently driving the session</td></tr>
+        <tr><td><code>lease_holder_machine_id</code></td><td>TEXT</td><td>Yes</td><td>Coarser-grained identifier for observability</td></tr>
+        <tr><td><code>lease_acquired_at</code></td><td>TIMESTAMP WITH TIME ZONE</td><td>Yes</td><td>When the current lease was issued</td></tr>
+        <tr><td><code>lease_expires_at</code></td><td>TIMESTAMP WITH TIME ZONE</td><td>Yes</td><td>Lease deadline (Decision 2 = 5-min TTL)</td></tr>
+        <tr><td><code>worker_base_url</code></td><td>TEXT</td><td>Yes</td><td>URL the dispatcher routes RPCs to</td></tr>
+        <tr><td><code>pharmacy_id</code></td><td>UUID</td><td>Yes</td><td>HITL queue scoping (Axis 11b)</td></tr>
+      </table>
+
+      <h4>Indexes</h4>
+      <table>
+        <tr><th>Name</th><th>Columns</th><th>Purpose</th></tr>
+        <tr><td><code>ix_agi_sessions_lease_holder_expires</code></td><td><code>(lease_holder_instance_id, lease_expires_at)</code></td><td>Find expired leases held by a specific instance during recovery</td></tr>
+        <tr><td><code>ix_agi_sessions_pharmacy_id</code></td><td><code>(pharmacy_id)</code></td><td>Pharmacy-scoped HITL queue queries</td></tr>
+      </table>
+
+      <h4>Acceptance criteria</h4>
+      <ul class="checklist">
+        <li><span>Migration applies cleanly on local Postgres (<code>alembic upgrade head</code>)</span></li>
+        <li><span>Migration reverts cleanly (<code>alembic downgrade -1</code> returns to <code>c4d6e8f0a2b3</code>)</span></li>
+        <li><span><code>\d agi_sessions</code> shows the 6 new columns and 2 indexes after upgrade</span></li>
+        <li><span><code>\d agi_sessions</code> returns to baseline after downgrade</span></li>
+        <li><span>Full pytest suite passes (<code>pytest carelink-pms/tests/</code>)</span></li>
+        <li><span>No frontend changes</span></li>
+        <li><span>No new Python dependencies</span></li>
+      </ul>
+
+      <h4>Test plan</h4>
+      <ul class="checklist">
+        <li><span>Run <code>alembic upgrade head</code> on a fresh local DB; verify schema with <code>\d agi_sessions</code></span></li>
+        <li><span>Run <code>alembic downgrade -1</code>; verify schema reverts</span></li>
+        <li><span>Run an existing AGI session creation flow end-to-end as a sanity check</span></li>
+      </ul>
+
+      <div class="pr-not-section">
+        <div class="label">What this PR is NOT</div>
+        <ul>
+          <li>Not introducing any code that uses these columns (PR 3)</li>
+          <li>Not touching any router (PR 7)</li>
+          <li>Not touching staging or production database (local PG only — Question H)</li>
+        </ul>
+      </div>
+
+      <h4>Decisions referenced</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>Decision 2:</strong> 5-min TTL → drives <code>lease_expires_at</code> default usage in PR 3</li>
+        <li><strong>Axis 11b:</strong> pharmacy stays on session row → <code>pharmacy_id</code> column</li>
+        <li><strong>Question H:</strong> apply only against local Postgres for testing</li>
+      </ul>
     </div>
   </div>
 
-  <div class="pr-card">
-    <span class="pr-num">2</span><span class="pr-title">JWT org_id extraction + auth.py refactor</span>
-    <div class="pr-pills">
-      <span class="pr-pill size-s">Size: Small</span>
-      <span class="pr-pill risk-low">Risk: Low</span>
-      <span class="pr-pill">Depends on: PR 1</span>
+  <!-- ============== PR 2 ============== -->
+  <div class="pr-card-detailed" data-pr="2">
+    <div class="pr-detail-header">
+      <span class="pr-num-large">2</span>
+      <div class="pr-title-block">
+        <div class="pr-title-text">JWT org_id extraction + auth.py refactor</div>
+        <div class="pr-pills">
+          <span class="pr-pill size-s">Size: Small</span>
+          <span class="pr-pill risk-low">Risk: Low</span>
+          <span class="pr-pill">Layer 1</span>
+          <span class="pr-pill">Depends on: PR 1</span>
+        </div>
+      </div>
+      <span class="pr-status not-started">Not started</span>
     </div>
-    <div class="pr-body">
-      <p>JWT auth dependency returns <code>AuthClaims(sub, org_id, claims)</code> instead of just <code>sub</code>. Internal HS256 token (<code>create_internal_token</code>) accepts and embeds <code>org_id</code>. Behavior change is small — claims propagate; downstream can ignore <code>org_id</code> until they need it.</p>
+    <div class="pr-detail-body">
+      <div class="pr-prompt">
+        <div class="label">Prompt — what this PR accomplishes</div>
+        <p>Today's JWT validation only reads the <code>sub</code> claim. This PR makes the dependency return a structured <code>AuthClaims(sub, org_id, claims)</code> so downstream code can read <code>org_id</code> at the request boundary. Internal HS256 tokens (<code>create_internal_token</code>) accept and embed <code>org_id</code> for round-trip propagation.</p>
+        <p><strong>Backward compatible</strong> — callers that don't read <code>org_id</code> are unaffected.</p>
+      </div>
+
+      <h4>Files changed</h4>
+      <table class="file-table">
+        <tr><th>Path</th><th>Type</th><th>What changes</th></tr>
+        <tr><td><code>carelink-backend/app/auth.py</code></td><td>Edit</td><td>Add <code>AuthClaims</code> dataclass; line 148 extracts <code>org_id</code> from WorkOS claim; lines 50-58 round-trip <code>org_id</code> through internal HS256 tokens</td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_auth.py</code></td><td>NEW or extend</td><td>Cases for missing/valid/malformed <code>org_id</code> + token round-trip</td></tr>
+        <tr><td>(callers)</td><td>Edit</td><td>Update FastAPI dependency type annotations where <code>str</code> was returned previously</td></tr>
+      </table>
+
+      <h4>Acceptance criteria</h4>
+      <ul class="checklist">
+        <li><span>WorkOS JWT validation extracts <code>org_id</code> from claim (or returns <code>None</code> if absent)</span></li>
+        <li><span>Internal token round-trip preserves <code>org_id</code> (issue with <code>org_id=X</code>, validate, recover <code>X</code>)</span></li>
+        <li><span>All existing auth-using endpoints still pass their tests</span></li>
+        <li><span>New unit tests cover: missing <code>org_id</code>, valid <code>org_id</code>, malformed <code>org_id</code>, internal token round-trip</span></li>
+        <li><span>No frontend changes</span></li>
+        <li><span>No new dependencies</span></li>
+      </ul>
+
+      <h4>Test plan</h4>
+      <ul class="checklist">
+        <li><span>Run <code>pytest carelink-pms/tests/</code> + any backend test suites; 0 failures</span></li>
+        <li><span>Manual: hit a protected endpoint with a real WorkOS JWT containing <code>org_id</code>; verify the dependency returns the claim</span></li>
+        <li><span>Manual: <code>create_internal_token(sub="x", org_id="y")</code> → validate → both fields recovered</span></li>
+      </ul>
+
+      <div class="pr-not-section">
+        <div class="label">What this PR is NOT</div>
+        <ul>
+          <li>Not enforcing <code>org_id</code> presence anywhere (still backward-compatible)</li>
+          <li>Not changing tenant-routing logic (PR T2)</li>
+          <li>Not touching <code>cl._agi_clients</code> or any router (PR 7)</li>
+        </ul>
+      </div>
     </div>
   </div>
 
-  <div class="pr-card">
-    <span class="pr-num">3</span><span class="pr-title">sessions/lease.py + tests</span>
-    <div class="pr-pills">
-      <span class="pr-pill size-s">Size: Small</span>
-      <span class="pr-pill risk-low">Risk: Low</span>
-      <span class="pr-pill">Depends on: PR 1</span>
+  <!-- ============== PR 3 ============== -->
+  <div class="pr-card-detailed" data-pr="3">
+    <div class="pr-detail-header">
+      <span class="pr-num-large">3</span>
+      <div class="pr-title-block">
+        <div class="pr-title-text">sessions/lease.py + tests</div>
+        <div class="pr-pills">
+          <span class="pr-pill size-s">Size: Small</span>
+          <span class="pr-pill risk-low">Risk: Low</span>
+          <span class="pr-pill">Layer 3</span>
+          <span class="pr-pill">Depends on: PR 1 (parallel with PR 2)</span>
+        </div>
+      </div>
+      <span class="pr-status not-started">Not started</span>
     </div>
-    <div class="pr-body">
-      <p>NEW module with <code>SessionLease</code> class — 4 methods. Pure DB operations. Unit-tested in isolation. Doesn't touch anything else.</p>
+    <div class="pr-detail-body">
+      <div class="pr-prompt">
+        <div class="label">Prompt — what this PR accomplishes</div>
+        <p>NEW module providing a <code>SessionLease</code> class with 4 methods (<code>acquire</code>, <code>refresh</code>, <code>release</code>, <code>lookup</code>) that operates on the lease columns added in PR 1. Distributed-aware: uses SQL atomicity (<code>UPDATE...WHERE expires_at &lt; NOW()</code>) to handle multi-replica races correctly. Pure DB operations — no router changes, no behavior change. This is the primitive that PRs 4, 7, 8 will use to route traffic to the worker holding the lease.</p>
+      </div>
+
+      <h4>Files changed</h4>
+      <table class="file-table">
+        <tr><th>Path</th><th>Type</th><th>Purpose</th></tr>
+        <tr><td><code>carelink-pms/carelink/agi/sessions/__init__.py</code></td><td>NEW</td><td>Package marker; re-exports <code>SessionLease</code></td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/sessions/lease.py</code></td><td>NEW</td><td>4 methods: acquire / refresh / release / lookup</td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_session_lease.py</code></td><td>NEW</td><td>9 unit tests including a real-PG concurrency test</td></tr>
+      </table>
+
+      <h4>Method signatures</h4>
+      <pre>class SessionLease:
+    @classmethod
+    async def acquire(
+        cls,
+        session_id: UUID,
+        instance_id: str,
+        machine_id: str,
+        worker_base_url: str,
+        ttl_seconds: int = 300,  # Decision 2 = 5 min
+    ) -&gt; SessionLease | None: ...
+
+    async def refresh(self, ttl_seconds: int = 300) -&gt; bool: ...
+    async def release(self) -&gt; None: ...
+
+    @classmethod
+    async def lookup(cls, session_id: UUID) -&gt; SessionLease | None: ...</pre>
+
+      <h4>Acceptance criteria</h4>
+      <ul class="checklist">
+        <li><span>9 unit tests pass against local Postgres</span></li>
+        <li><span><code>acquire</code> on unleased session succeeds atomically (<code>UPDATE...RETURNING</code> pattern)</span></li>
+        <li><span><code>acquire</code> on already-leased session returns <code>None</code></span></li>
+        <li><span><code>acquire</code> on expired lease succeeds for new holder</span></li>
+        <li><span><code>refresh</code> by current holder succeeds; by non-holder returns <code>False</code></span></li>
+        <li><span><code>release</code> by holder clears columns; by non-holder is no-op</span></li>
+        <li><span>Concurrent acquire test: two threads, exactly one wins (uses real PG, not mock)</span></li>
+        <li><span><code>mypy</code> clean for the new module</span></li>
+        <li><span>No router changes; no frontend changes; no new dependencies</span></li>
+      </ul>
+
+      <h4>Test plan</h4>
+      <ul class="checklist">
+        <li><span><code>pytest carelink-pms/tests/section1_unit/test_session_lease.py -v</code></span></li>
+        <li><span>Concurrency test uses real PG (not mock) to verify SQL atomicity guarantees</span></li>
+        <li><span>Manual: open psql, watch lease columns mutate as tests run</span></li>
+      </ul>
+
+      <div class="pr-not-section">
+        <div class="label">What this PR is NOT</div>
+        <ul>
+          <li>Not wiring lease into any router or dispatcher (PR 4 / PR 7)</li>
+          <li>Not touching <code>cl._agi_clients</code> (PR 7)</li>
+          <li>Not adding heartbeat/refresh ticker (PR 4 — drain-scoped per Decision 2)</li>
+        </ul>
+      </div>
     </div>
   </div>
 
-  <div class="pr-card">
-    <span class="pr-num">4</span><span class="pr-title">worker/dispatcher.py + worker/entrypoint.py + compute_mode flag</span>
-    <div class="pr-pills">
-      <span class="pr-pill size-m">Size: Medium</span>
-      <span class="pr-pill risk-low">Risk: Low</span>
-      <span class="pr-pill">Depends on: PRs 1-3</span>
+  <!-- ============== PR 4 ============== -->
+  <div class="pr-card-detailed" data-pr="4">
+    <div class="pr-detail-header">
+      <span class="pr-num-large">4</span>
+      <div class="pr-title-block">
+        <div class="pr-title-text">worker/dispatcher.py + worker/entrypoint.py + AGIService split + compute_mode</div>
+        <div class="pr-pills">
+          <span class="pr-pill size-m">Size: Medium</span>
+          <span class="pr-pill risk-low">Risk: Low</span>
+          <span class="pr-pill">Layer 3</span>
+          <span class="pr-pill">Depends on: PRs 1-3</span>
+        </div>
+      </div>
+      <span class="pr-status not-started">Not started</span>
     </div>
-    <div class="pr-body">
-      <p>NEW backend dispatcher (looks up lease, RPCs to worker). NEW worker entrypoint FastAPI app. <code>compute_mode</code> defaults to <code>"in_process"</code> so existing behavior is untouched. Deployable but unused until PR 7 toggles it.</p>
+    <div class="pr-detail-body">
+      <div class="pr-prompt">
+        <div class="label">Prompt — what this PR accomplishes</div>
+        <p>Adds the worker-pool architecture as opt-in code. Splits the 2,011 LoC <code>AGIService</code> god class into <code>BackendAGIService</code> (dispatcher-shaped, no SDK installed) and <code>WorkerAGIService</code> (SDK-aware) per Decision 1. Adds a <code>compute_mode</code> config flag. <strong>Defaults to <code>compute_mode="in_process"</code></strong> — existing behavior preserved; new code is deployable but unused until PR 7 toggles it.</p>
+      </div>
+
+      <h4>Files changed</h4>
+      <table class="file-table">
+        <tr><th>Path</th><th>Type</th><th>Purpose</th></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/__init__.py</code></td><td>NEW</td><td>Package marker</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/dispatcher.py</code></td><td>NEW</td><td>Looks up lease, RPCs to worker. Backend-side.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/entrypoint.py</code></td><td>NEW</td><td>FastAPI app entrypoint for the worker container</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/service.py</code></td><td>Edit (split)</td><td>Decompose into <code>BackendAGIService</code> + <code>WorkerAGIService</code> per Decision 1</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/config.py</code></td><td>Edit</td><td>Add <code>compute_mode: Literal["in_process", "worker_pool"] = "in_process"</code></td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/drain.py</code></td><td>Edit</td><td>Add lease-refresh ticker (drain-scoped, 4-min interval per Decision 2)</td></tr>
+        <tr><td><code>carelink-pms/tests/section3_integrations/test_worker_dispatcher.py</code></td><td>NEW</td><td>Dispatcher RPC tests with fake worker</td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_agi_service_split.py</code></td><td>NEW</td><td>Backend vs Worker class boundary tests</td></tr>
+      </table>
+
+      <h4>Acceptance criteria</h4>
+      <ul class="checklist">
+        <li><span><code>BackendAGIService</code> imports without requiring <code>claude_agent_sdk</code> installed</span></li>
+        <li><span><code>WorkerAGIService</code> wraps the SDK; tests use <code>make_fake_spawn</code></span></li>
+        <li><span><code>compute_mode="in_process"</code> default preserves all existing behavior (regression suite passes)</span></li>
+        <li><span><code>compute_mode="worker_pool"</code> activates dispatcher path (covered by new tests, not by callers yet)</span></li>
+        <li><span>Lease ticker fires every 4 min (under 5-min TTL); cancellation clean on session end</span></li>
+        <li><span>Dispatcher RPC dispatches expert calls cross-process via fake worker; SSE response shape preserved</span></li>
+        <li><span>No frontend changes; no router changes</span></li>
+      </ul>
+
+      <h4>Test plan</h4>
+      <ul class="checklist">
+        <li><span>Existing per-expert hermetic tests pass under both <code>compute_mode</code> values</span></li>
+        <li><span>Full <code>pytest</code> with <code>compute_mode="in_process"</code> (default)</span></li>
+        <li><span>Full <code>pytest</code> with <code>compute_mode="worker_pool"</code> in CI</span></li>
+        <li><span>Manual: spin up worker entrypoint locally; backend dispatcher RPCs to it; verify a single expert call round-trips</span></li>
+      </ul>
+
+      <div class="pr-not-section">
+        <div class="label">What this PR is NOT</div>
+        <ul>
+          <li>Not switching any production traffic — <code>compute_mode</code> stays at <code>"in_process"</code> by default (PR 7)</li>
+          <li>Not adding cold-revive worker path (PR 8)</li>
+          <li>Not deploying the worker container to production (separate ops PR after PR 7)</li>
+        </ul>
+      </div>
+
+      <h4>Decisions referenced</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>Decision 1:</strong> Two AGIService classes (Option A; spike skipped per Question G)</li>
+        <li><strong>Decision 2:</strong> 5-min TTL with drain-scoped ticker (4-min refresh interval)</li>
+      </ul>
     </div>
   </div>
 
-  <div class="pr-card">
-    <span class="pr-num">5</span><span class="pr-title">_prepare_workspace deterministic paths + Skills GCS-FUSE</span>
-    <div class="pr-pills">
-      <span class="pr-pill size-m">Size: Medium</span>
-      <span class="pr-pill risk-low">Risk: Low</span>
-      <span class="pr-pill">Depends on: PRs 1-4</span>
+  <!-- ============== PR 5 ============== -->
+  <div class="pr-card-detailed" data-pr="5">
+    <div class="pr-detail-header">
+      <span class="pr-num-large">5</span>
+      <div class="pr-title-block">
+        <div class="pr-title-text">workspaces/ cherry-pick + Skills GCS-FUSE (deferred enable)</div>
+        <div class="pr-pills">
+          <span class="pr-pill size-m">Size: Medium</span>
+          <span class="pr-pill risk-low">Risk: Low</span>
+          <span class="pr-pill">Layer 4</span>
+          <span class="pr-pill">Depends on: PRs 1-4</span>
+        </div>
+      </div>
+      <span class="pr-status not-started">Not started</span>
     </div>
-    <div class="pr-body">
-      <p>Workspace path becomes <code>${FILESTORE_ROOT}/${org_id}/${session_id}</code>. Skills mounted from GCS FUSE instead of copied. Activates only when env vars set; dev still uses /tmp.</p>
+    <div class="pr-detail-body">
+      <div class="pr-prompt">
+        <div class="label">Prompt — what this PR accomplishes</div>
+        <p>Replaces the per-call <code>tempfile.mkdtemp</code> workspace creation with a structured <code>WorkspaceManager</code> cherry-picked (with refactor) from the FUSE branch (<code>b0bb495</code>, Arjun Walia). Workspaces become deterministic-path (<code>${SANDBOX_LOCAL_ROOT}/${session_id}/</code>); skills + memories + transcripts persist in GCS via a <code>WorkspaceManifest</code>.</p>
+        <p><strong>FUSE mount config ships but stays disabled in v1</strong> (per F3 final answer); enabling FUSE is a post-v1 follow-up.</p>
+        <p><strong>Architecture:</strong> split-bucket (Item 2 = Option a) — shared <code>gs://carelink-skills-templates/</code> for templates (FUSE-mountable later) + per-org <code>gs://carelink-{org_id}-canonical/</code> for memories/sessions (GCS API only).</p>
+        <p>See: <a class="anchor-link" href="https://sangeet-code.github.io/carelink-ui-mockups/fuse-sandbox-deep-dive-2026-05-01.html">FUSE deep-dive analysis</a></p>
+      </div>
+
+      <h4>Files changed</h4>
+      <table class="file-table">
+        <tr><th>Path</th><th>Type</th><th>Source</th></tr>
+        <tr><td><code>carelink-pms/carelink/agi/workspaces/{__init__,manifest,schemas,manager}.py</code></td><td>NEW (4 files)</td><td>Cherry-pick from FUSE branch + <code>org_id → MemoryScope</code> refactor</td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_workspace_manager.py</code></td><td>NEW</td><td>23 tests cherry-picked + 4 NEW (concurrency, S1-S3 fixes)</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/service.py</code></td><td>Edit</td><td>Replace <code>_prepare_workspace</code>/<code>_copy_skills</code>/<code>_copy_agents</code>/<code>_write_restish_config</code> + retire <code>extra_data-&gt;&gt;'workspace'</code> stash</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/sessions/sweeper.py</code></td><td>NEW</td><td>Adapted from FUSE branch's <code>carelink-agi/app/sweeper.py</code></td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/sessions/finalize.py</code></td><td>NEW</td><td>Hybrid <code>finalize()</code> wiring (Item 1): event-driven for jobs/scheduled, TTL-only for chat</td></tr>
+        <tr><td><code>scripts/setup-sandbox-bucket.sh</code></td><td>NEW</td><td>Cherry-pick + lifecycle policy (<code>NumNewerVersions=10</code>); rebrand for split-bucket</td></tr>
+        <tr><td><code>scripts/mount-sandbox-fuse.sh</code></td><td>NEW</td><td>Cherry-pick; templated user via <code>${USER:?}</code>; <strong>not enabled by default</strong></td></tr>
+        <tr><td><code>scripts/sandbox-fuse.service</code></td><td>NEW</td><td>Cherry-pick + hardening: <code>PrivateTmp</code>, <code>NoNewPrivileges</code>, <code>ProtectSystem=strict</code>, <code>ProtectHome=tmpfs</code></td></tr>
+        <tr><td><code>scripts/bench-sandbox.py</code></td><td>NEW</td><td>Cherry-pick + add p50/p95 + 10× repeats</td></tr>
+        <tr><td><code>docs/agi-sandbox-walkthrough.md</code> + <code>docs/agi-sandbox-runbook.md</code></td><td>NEW</td><td>Rebranded from FUSE branch's docs</td></tr>
+      </table>
+
+      <h4>Pre-merge bug fixes (FUSE deep-dive sharp edges S1-S4)</h4>
+      <ul class="checklist">
+        <li><span><strong>S1:</strong> <code>_load_manifest</code> distinguishes 404 (legit empty) from 5xx (raise + abort checkpoint)</span></li>
+        <li><span><strong>S2:</strong> Manifest upload uses <code>if_generation_match=existing.generation</code> with retry-on-precondition-failed</span></li>
+        <li><span><strong>S3:</strong> <code>finalize()</code> holds the lock continuously across checkpoint + rmtree</span></li>
+        <li><span><strong>S4:</strong> <code>WorkspaceManager.__init__</code> takes a <code>MemoryScope</code> resolver (5-scope hierarchy) instead of baked <code>org_id</code></span></li>
+      </ul>
+
+      <h4>Acceptance criteria</h4>
+      <ul class="checklist">
+        <li><span>Deterministic <code>${SANDBOX_LOCAL_ROOT}/${session_id}/</code> path</span></li>
+        <li><span><code>extra_data-&gt;&gt;'workspace'</code> cold-revive stash retired (<code>service.py:702, 902-916</code> dead code removed)</span></li>
+        <li><span>23 cherry-picked tests pass (fixture renamed: <code>org_id="test-org"</code> → <code>scope=test_scope</code>)</span></li>
+        <li><span>4 NEW tests pass: concurrency, <code>_load_manifest</code> 5xx, manifest precondition, <code>finalize</code> race</span></li>
+        <li><span>Hybrid <code>finalize()</code> wired: jobs/scheduled tasks fire event-driven; chat stays TTL-only</span></li>
+        <li><span>Split-bucket architecture: shared templates bucket + per-org canonical buckets</span></li>
+        <li><span><code>SANDBOX_FUSE_ROOT</code> unset by default; GCS API path works (FUSE deferred)</span></li>
+        <li><span><code>pytest carelink-pms/tests/</code> 0 failures</span></li>
+        <li><span>Bench script runs in <code>--fake</code> mode and reports numbers</span></li>
+        <li><span>No regression in cold-revive flow</span></li>
+      </ul>
+
+      <h4>Test plan</h4>
+      <ul class="checklist">
+        <li><span>Hot-path: fresh chat → workspace created, hydrated, turn runs, checkpoint to GCS, finalized</span></li>
+        <li><span>Cold-revive: kill backend mid-turn → restart → verify resume from GCS</span></li>
+        <li><span>Two concurrent sessions: confirm sandbox isolation</span></li>
+        <li><span>Cross-session memory: A writes → checkpoint → B hydrates → sees A's memory file</span></li>
+        <li><span>FUSE-disabled fallback: <code>SANDBOX_FUSE_ROOT=</code> unset, confirm GCS API still works</span></li>
+      </ul>
+
+      <div class="pr-not-section">
+        <div class="label">What this PR is NOT</div>
+        <ul>
+          <li>Not cherry-picking the <code>carelink-agi/</code> v2 service (conflicts with Decision 1)</li>
+          <li>Not enabling FUSE in production by default (deferred per F3)</li>
+          <li>Not adding the memory merger layer (PR 6)</li>
+          <li>Not adding workload identity / Cloud Run port for the FUSE mount (post-v1)</li>
+        </ul>
+      </div>
+
+      <h4>Decisions referenced</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>Decision 3:</strong> Bucket-per-org → split-bucket architecture</li>
+        <li><strong>F1 (FUSE Q1):</strong> Authorship confirmed → cherry-pick acceptable</li>
+        <li><strong>Item 2:</strong> Split-bucket (shared templates + per-org canonical)</li>
+        <li><strong>Item 3:</strong> FUSE deferred to post-v1; scripts ship disabled</li>
+        <li><strong>Item 1:</strong> Hybrid <code>finalize()</code> wiring</li>
+      </ul>
     </div>
   </div>
+
+  <hr class="pr-section-divider">
+
+  <h3>PRs 6-8 — outline (detailed scoping after PR 5 lands)</h3>
 
   <div class="pr-card">
     <span class="pr-num">6</span><span class="pr-title">Memory store + selector + merger</span>
@@ -797,7 +1327,7 @@
       <span class="pr-pill">Depends on: PRs 4-5</span>
     </div>
     <div class="pr-body">
-      <p>The actual canonical learning tier. NEW files in <code>agi/memory/</code>. Hooks into <code>create_session</code> (read snapshot at start) and <code>finalize_session</code> (merge writes at end). This is the feature that "memories actually persist" depends on.</p>
+      <p>The actual canonical learning tier. NEW files in <code>agi/memory/</code>. Hooks into <code>create_session</code> (read snapshot at start) and <code>finalize_session</code> (merge writes at end). This is the feature that "memories actually persist" depends on. <strong>Builds on</strong> the <code>WorkspaceManifest</code> from PR 5 — the manifest is the file index the memory selector reads.</p>
     </div>
   </div>
 
@@ -809,7 +1339,7 @@
       <span class="pr-pill">Depends on: PRs 1-6</span>
     </div>
     <div class="pr-body">
-      <p>The conversion. Every dispatch endpoint branches on <code>compute_mode</code>. SSE proxy (backend → worker → browser). Redis pub/sub for stats events. Touches ~30% of <code>agi.py</code>. This is where today's behavior actually changes for users on the new path. Heavy testing required.</p>
+      <p>The conversion. Every dispatch endpoint branches on <code>compute_mode</code>. SSE proxy (backend → worker → browser). <strong>No Redis pub/sub yet</strong> per Decision 5 — single-replica acceptable for v1. Touches ~30% of <code>agi.py</code>. This is where today's behavior actually changes for users on the new path. Heavy testing required.</p>
     </div>
   </div>
 
@@ -833,7 +1363,7 @@
     <tr><td>T3</td><td>AuthorizationService method-arg refactor</td><td>L</td><td>Med</td><td>Touches every <code>_authz.require/check</code> callsite</td></tr>
     <tr><td>T4</td><td>PermitClient cache fix (tenant, role) keying</td><td>S</td><td>Low</td><td>Fixes a real cross-tenant bug</td></tr>
     <tr><td>T5</td><td>Workflow engine globals → factories</td><td>XL</td><td>Med</td><td>The biggest tenancy refactor</td></tr>
-    <tr><td>T6</td><td>Org provisioning workflow + admin router</td><td>XL</td><td>High</td><td>Greenfield — no admin tooling exists today</td></tr>
+    <tr><td>T6</td><td>Org provisioning workflow + admin router</td><td>XL</td><td>High</td><td>Greenfield — no admin tooling exists today (Question C)</td></tr>
   </table>
 
   <h3>Suggested parallel timeline</h3>
@@ -843,9 +1373,9 @@
   Week 5-6:   PR 6          |   T3, T4
   Week 7-8:   PR 7  &lt;&lt; the big one         |   T5
   Week 9-10:  PR 8                          |   T6
-  Week 11+:   production hardening, observability, scaling validation
+  Week 11+:   production hardening, observability, scaling validation, FUSE enable (post-v1)
   </pre>
-  <p style="color: var(--text-muted); font-size: 13px;"><em>Engineer-month estimate: ~2-3 engineer-months for the worker-pool track, ~3-4 for the multi-tenant track. Parallelizable but coordination-heavy at PR 7 / T2 boundary.</em></p>
+  <p style="color: var(--text-muted); font-size: 13px;"><em>Engineer-month estimate: ~2-3 engineer-months for the worker-pool track, ~3-4 for the multi-tenant track. Parallelizable but coordination-heavy at PR 7 / T2 boundary. Per Question E, capacity is not a constraint we're sizing against.</em></p>
 </section>
 
 <!-- =========================================================== SURPRISES -->
@@ -905,11 +1435,11 @@
 
 <!-- =========================================================== DECISIONS -->
 <section class="panel" data-panel="decisions">
-  <h2>Open decisions — 7 questions where we have options</h2>
+  <h2>Open decisions — all 7 decided (2026-05-01)</h2>
 
   <div class="plain-frame">
     <div class="plain-label">In plain English</div>
-    <p>These are decisions where we have multiple valid options. Each card shows the question, why it matters, the options with trade-offs, my recommendation, and current status. Stakeholders can review and weigh in on any of them.</p>
+    <p>All 7 decisions are now <strong>locked</strong>. Each card preserves the original options + recommendation, and adds a green Resolution box showing the chosen option. As work progresses, these become the canonical reference for "what we agreed to and why".</p>
   </div>
 
   <!-- Decision 1 -->
@@ -917,16 +1447,16 @@
     <div class="decision-header">
       <span class="decision-num">1</span>
       <span class="decision-title">Two AGIService classes, or one with a dispatcher decorator?</span>
-      <span class="status-badge pending">Pending</span>
+      <span class="status-badge decided">Decided</span>
     </div>
     <div class="decision-body">
       <p class="why"><strong>Why it matters:</strong> the AGIService class today does many things — orchestrator session management, cold-revive, finalization. With the worker pool, half its responsibilities run on the worker (where the SDK client lives) and half run on the backend (where dispatch lives). Need to decide how to split this cleanly.</p>
       <ul class="decision-options">
-        <li class="recommended"><span class="opt-label">Option A:</span> Two distinct classes — <code>BackendAGIService</code> (dispatcher) and <code>WorkerAGIService</code> (SDK-aware). Cleaner separation; backend container doesn't need SDK installed. <strong>← Recommended</strong></li>
+        <li class="recommended"><span class="opt-label">Option A:</span> Two distinct classes — <code>BackendAGIService</code> (dispatcher) and <code>WorkerAGIService</code> (SDK-aware). Cleaner separation; backend container doesn't need SDK installed. <strong>← Chosen</strong></li>
         <li><span class="opt-label">Option B:</span> One class with a <code>@dispatch_or_execute</code> decorator on each method that branches on <code>compute_mode</code>. Caller code unchanged; harder to test cleanly.</li>
       </ul>
-      <div class="recommendation-box">
-        <strong>My recommendation:</strong> Option A. 2-hour spike to validate; ship in PR 4. Smaller backend container image is a bonus.
+      <div class="resolution-box">
+        <strong>Resolution (2026-05-01):</strong> Option A. The 2-hour validation spike was skipped (Question G); split lands directly in PR 4.
       </div>
     </div>
   </div>
@@ -936,16 +1466,16 @@
     <div class="decision-header">
       <span class="decision-num">2</span>
       <span class="decision-title">Lease TTL: 60 seconds (with session-scoped ticker) or 5 minutes (with drain-scoped ticker)?</span>
-      <span class="status-badge pending">Pending</span>
+      <span class="status-badge decided">Decided</span>
     </div>
     <div class="decision-body">
       <p class="why"><strong>Why it matters:</strong> long-running expert calls could exceed a 60-second lease TTL with a drain-scoped ticker. Two ways to fix.</p>
       <ul class="decision-options">
-        <li class="recommended"><span class="opt-label">Option A:</span> Raise TTL to 5 minutes. Simple. Ticker stays drain-scoped. Risk: a server crash means 5 min before another server can pick up the session. <strong>← Recommended for v1</strong></li>
+        <li class="recommended"><span class="opt-label">Option A:</span> Raise TTL to 5 minutes. Simple. Ticker stays drain-scoped. Risk: a server crash means 5 min before another server can pick up the session. <strong>← Chosen for v1</strong></li>
         <li><span class="opt-label">Option B:</span> Keep TTL at 60s. Move ticker to session-scoped daemon (refreshes regardless of what the orchestrator is doing). More complex; cleaner failover.</li>
       </ul>
-      <div class="recommendation-box">
-        <strong>My recommendation:</strong> Option A for v1 (simpler), revisit if any expert routinely exceeds 5min in practice.
+      <div class="resolution-box">
+        <strong>Resolution (2026-05-01):</strong> Option A. 5-min TTL with drain-scoped ticker (4-min refresh interval). Revisit if any expert routinely exceeds 5min in practice. Implementation: PR 1 (column) + PR 4 (ticker).
       </div>
     </div>
   </div>
@@ -955,16 +1485,16 @@
     <div class="decision-header">
       <span class="decision-num">3</span>
       <span class="decision-title">GCS bucket-per-org or shared bucket with prefix-per-org?</span>
-      <span class="status-badge pending">Pending</span>
+      <span class="status-badge decided">Decided</span>
     </div>
     <div class="decision-body">
       <p class="why"><strong>Why it matters:</strong> for canonical memory, transcripts, etc. — one bucket with paths like <code>gs://shared/{org_id}/...</code>, OR one bucket per customer like <code>gs://carelink-orgX-canonical/</code>?</p>
       <ul class="decision-options">
-        <li class="recommended"><span class="opt-label">Option A:</span> Bucket-per-org. Cleaner IAM auditability. Per-bucket quotas prevent noisy neighbor. Per-customer backup/restore is one <code>gsutil</code> command. <strong>← Recommended</strong></li>
+        <li class="recommended"><span class="opt-label">Option A:</span> Bucket-per-org. Cleaner IAM auditability. Per-bucket quotas prevent noisy neighbor. Per-customer backup/restore is one <code>gsutil</code> command. <strong>← Chosen</strong></li>
         <li><span class="opt-label">Option B:</span> Shared bucket with prefix-per-org. Fewer buckets to manage. Risk: misconfigured policy on one bucket leaks across customers.</li>
       </ul>
-      <div class="recommendation-box">
-        <strong>My recommendation:</strong> Option A for production. Option B acceptable for dev/staging where speed of provisioning matters.
+      <div class="resolution-box">
+        <strong>Resolution (2026-05-01):</strong> Option A — bucket-per-org. Combined with FUSE deferred (F3): split-bucket model = shared <code>gs://carelink-skills-templates/</code> for templates (FUSE-mountable later) + per-org <code>gs://carelink-{org_id}-canonical/</code> for memories/sessions (GCS API only). Implementation: PR 5.
       </div>
     </div>
   </div>
@@ -974,16 +1504,16 @@
     <div class="decision-header">
       <span class="decision-num">4</span>
       <span class="decision-title">Connection pool: deploy PgBouncer or accept connection limits?</span>
-      <span class="status-badge pending">Pending</span>
+      <span class="status-badge decided">Decided</span>
     </div>
     <div class="decision-body">
       <p class="why"><strong>Why it matters:</strong> N orgs × per-org pool × M replicas can exhaust Cloud SQL connection limits at ~20 customers. PgBouncer fixes this but adds an ops surface.</p>
       <ul class="decision-options">
-        <li class="recommended"><span class="opt-label">Option A:</span> Deploy PgBouncer (Cloud SQL Auth Proxy includes it; or a sidecar). Worth the ops surface; mandatory at scale. <strong>← Recommended</strong></li>
+        <li class="recommended"><span class="opt-label">Option A:</span> Deploy PgBouncer (Cloud SQL Auth Proxy includes it; or a sidecar). Worth the ops surface; mandatory at scale. <strong>← Chosen</strong></li>
         <li><span class="opt-label">Option B:</span> Drop pool size per org to 1-2; skip PgBouncer for v1; revisit when we hit ~10 customers.</li>
       </ul>
-      <div class="recommendation-box">
-        <strong>My recommendation:</strong> Option A. Cloud SQL Auth Proxy includes PgBouncer functionality and is the standard GCP pattern.
+      <div class="resolution-box">
+        <strong>Resolution (2026-05-01):</strong> Option A. Cloud SQL Auth Proxy includes PgBouncer functionality and is the standard GCP pattern. Even at v1 scale (Question B = 5 orgs × 3 pharmacies in Y1), the standard pattern is worth the small ops cost. Implementation: ops follow-up after PR 7.
       </div>
     </div>
   </div>
@@ -993,16 +1523,16 @@
     <div class="decision-header">
       <span class="decision-num">5</span>
       <span class="decision-title">Redis for pub/sub: deploy now or defer?</span>
-      <span class="status-badge pending">Pending</span>
+      <span class="status-badge decided">Decided</span>
     </div>
     <div class="decision-body">
       <p class="why"><strong>Why it matters:</strong> session stats events and the live trace panel use in-process pub/sub today. Multi-replica needs Redis (or alternative). If we defer, the live trace panel won't work cross-replica until later.</p>
       <ul class="decision-options">
         <li><span class="opt-label">Option A:</span> Deploy Cloud Memorystore Redis as part of this work. Adds ops surface, $50-100/mo. Live trace panel works correctly cross-replica from day one.</li>
-        <li class="recommended"><span class="opt-label">Option B:</span> Defer. Single-replica deploy is acceptable for v1. Live trace shows partial data when scaling beyond one replica until Redis ships in v2. <strong>← Recommended for v1</strong></li>
+        <li class="recommended"><span class="opt-label">Option B:</span> Defer. Single-replica deploy is acceptable for v1. Live trace shows partial data when scaling beyond one replica until Redis ships in v2. <strong>← Chosen for v1</strong></li>
       </ul>
-      <div class="recommendation-box">
-        <strong>My recommendation:</strong> Option B. Single-replica is fine for first ~5-10 customers. Redis lands as part of the multi-replica scale-out work later.
+      <div class="resolution-box">
+        <strong>Resolution (2026-05-01):</strong> Option B — defer. Single-replica is fine for first ~5-10 customers. Redis lands as part of the multi-replica scale-out work later. PR 7 ships without Redis pub/sub.
       </div>
     </div>
   </div>
@@ -1012,16 +1542,16 @@
     <div class="decision-header">
       <span class="decision-num">6</span>
       <span class="decision-title">Demo router: delete or wrap with auth?</span>
-      <span class="status-badge pending">Pending</span>
+      <span class="status-badge decided">Decided</span>
     </div>
     <div class="decision-body">
       <p class="why"><strong>Why it matters:</strong> <code>carelink-backend/app/routers/demos.py:35-43</code> is unauthenticated and explicitly says it's a single-tenant choice. For multi-tenant, we can't ship this as-is.</p>
       <ul class="decision-options">
-        <li class="recommended"><span class="opt-label">Option A:</span> Delete. Demos can be authenticated like everything else. <strong>← Recommended</strong></li>
+        <li class="recommended"><span class="opt-label">Option A:</span> Delete. Demos can be authenticated like everything else. <strong>← Chosen</strong></li>
         <li><span class="opt-label">Option B:</span> Wrap with auth + tenant filtering. Keeps the demo flow but adds auth.</li>
       </ul>
-      <div class="recommendation-box">
-        <strong>My recommendation:</strong> Option A unless there's an active business reason for unauthenticated demos. Quick to delete; can be reintroduced if needed.
+      <div class="resolution-box">
+        <strong>Resolution (2026-05-01):</strong> Option A — delete. Quick to delete; can be reintroduced if needed. Implementation: separate small PR alongside PR 7 (router refactor) timing.
       </div>
     </div>
   </div>
@@ -1031,17 +1561,17 @@
     <div class="decision-header">
       <span class="decision-num">7</span>
       <span class="decision-title">First customer rollout strategy: parallel deploys or shared deploy?</span>
-      <span class="status-badge pending">Pending</span>
+      <span class="status-badge decided">Decided</span>
     </div>
     <div class="decision-body">
       <p class="why"><strong>Why it matters:</strong> after Layers 1-6 land, we have the worker-pool architecture. Before Layers 7-9 (full multi-tenant), each customer still needs their own deploy. Phased rollout strategy matters.</p>
       <ul class="decision-options">
-        <li class="recommended"><span class="opt-label">Option A:</span> Phase 0 — first customer ships on the worker-pool architecture as a single-tenant deploy. Layers 1-6. ~2 months. <strong>← Recommended order</strong></li>
+        <li class="recommended"><span class="opt-label">Option A:</span> Phase 0 — first customer ships on the worker-pool architecture as a single-tenant deploy. Layers 1-6. ~2 months. <strong>← Chosen</strong></li>
         <li><span class="opt-label">Phase 1:</span> Second customer = second deploy (still single-tenant per deploy). Validates duplication is manageable.</li>
         <li><span class="opt-label">Phase 2:</span> Layers 7-9 ship. All customers move to one shared deploy with control plane routing. ~2-3 more months.</li>
       </ul>
-      <div class="recommendation-box">
-        <strong>My recommendation:</strong> Phase 0 → Phase 1 → Phase 2. We'd never have to choose between "ship the worker pool" and "ship multi-tenancy" — they layer cleanly.
+      <div class="resolution-box">
+        <strong>Resolution (2026-05-01):</strong> Phase 0 → Phase 1 → Phase 2 sequencing agreed. The worker-pool track and multi-tenant track layer cleanly — no big-bang cutover.
       </div>
     </div>
   </div>
@@ -1049,22 +1579,26 @@
 
 <!-- =========================================================== QUESTIONS -->
 <section class="panel" data-panel="questions">
-  <h2>Follow-up questions for stakeholders</h2>
+  <h2>Follow-up questions — all resolved (2026-05-01)</h2>
 
   <div class="plain-frame">
     <div class="plain-label">In plain English</div>
-    <p>These are questions I (the AI agent doing this analysis) need answered to refine the plan further. Some are about current production reality; others are about preferences and constraints we haven't surfaced yet.</p>
+    <p>The original 9 follow-up questions (A–I) are now <strong>all answered</strong>. An additional 8 questions (F1–F8) surfaced from the FUSE deep-dive analysis are also resolved. Each card preserves the question and adds a blue Answer box with the resolution and downstream impact.</p>
   </div>
+
+  <h3>Original 9 follow-up questions (A–I)</h3>
 
   <div class="decision-card">
     <div class="decision-header">
       <span class="decision-num">A</span>
       <span class="decision-title">Is production really already one-DB-per-deployment?</span>
-      <span class="status-badge followup">Need verification</span>
+      <span class="status-badge decided">Resolved</span>
     </div>
     <div class="decision-body">
       <p class="why">Agent B's biggest reframe was that today's deployment is already one-DB-per-deployment (each running CareLink instance serves one customer because <code>Settings.database_url</code> is baked at startup). If this is true, the migration story is much cleaner. If it's false (multiple customers in one DB), the migration is significantly more complex (data split + cutover).</p>
-      <p><strong>What I need:</strong> confirm or correct this. If multiple orgs share one DB anywhere, list the affected deploys.</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Yes</strong> — confirmed. Each CareLink prod instance serves one customer; no shared-DB legacy. The migration story remains "build the routing layer that turns N independent deployments into one routed deployment," not "split a shared database." This makes the multi-tenant track significantly cleaner.
+      </div>
     </div>
   </div>
 
@@ -1072,11 +1606,13 @@
     <div class="decision-header">
       <span class="decision-num">B</span>
       <span class="decision-title">How many customers do we expect at year 1, year 3?</span>
-      <span class="status-badge followup">Need information</span>
+      <span class="status-badge decided">Resolved</span>
     </div>
     <div class="decision-body">
       <p class="why">Sizes the control plane and influences PgBouncer / Redis decisions. 5 customers is fundamentally different from 50.</p>
-      <p><strong>What I need:</strong> rough order-of-magnitude. Year 1 = ?, Year 3 = ?</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Year 1 = 5 organizations × 3 pharmacies each = 15 pharmacies.</strong> Year 3 unknown. At Y1 scale, PgBouncer is conservative-but-acceptable; Redis defer (Decision 5) is the right call.
+      </div>
     </div>
   </div>
 
@@ -1084,11 +1620,13 @@
     <div class="decision-header">
       <span class="decision-num">C</span>
       <span class="decision-title">Are there existing admin tools or is everything via direct DB access today?</span>
-      <span class="status-badge followup">Need information</span>
+      <span class="status-badge decided">Resolved</span>
     </div>
     <div class="decision-body">
       <p class="why">Agent B couldn't find any admin router or provisioning tooling. If it doesn't exist, Layer 8 is fully greenfield. If you've got something built, we extend it.</p>
-      <p><strong>What I need:</strong> confirm "no admin tooling" or point at what exists.</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>No admin tooling exists</strong> — all access is via direct DB access today. Layer 8 (T6: Org provisioning workflow + admin router) is fully greenfield.
+      </div>
     </div>
   </div>
 
@@ -1096,11 +1634,13 @@
     <div class="decision-header">
       <span class="decision-num">D</span>
       <span class="decision-title">Are there any HIPAA tier or compliance constraints we haven't surfaced?</span>
-      <span class="status-badge followup">Need information</span>
+      <span class="status-badge decided">Resolved</span>
     </div>
     <div class="decision-body">
       <p class="why">The control plane DB has a <code>hipaa_tier</code> column placeholder. If different customers have different compliance needs (e.g., DoD-strict, single-tenant compute), the tier flag matters from day one. Otherwise it's noise.</p>
-      <p><strong>What I need:</strong> are there customers we anticipate needing Option B (per-org compute pool)? Any specific compliance certifications beyond HIPAA?</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>No compliance constraints to size against right now.</strong> The <code>hipaa_tier</code> placeholder stays in the schema as forward-compat, but no customer requires Option B (per-org compute pool) at v1. Single shared compute pool is fine.
+      </div>
     </div>
   </div>
 
@@ -1108,11 +1648,13 @@
     <div class="decision-header">
       <span class="decision-num">E</span>
       <span class="decision-title">Engineering capacity & timeline — when do you want this live?</span>
-      <span class="status-badge followup">Need information</span>
+      <span class="status-badge decided">Resolved</span>
     </div>
     <div class="decision-body">
       <p class="why">My estimates assume 1-2 engineers on the worker-pool track and 1-2 on the multi-tenant track. Less capacity = serialize, longer total. More = parallelize harder.</p>
-      <p><strong>What I need:</strong> rough engineering team size and target shipping date for Phase 0 (first customer on worker pool).</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Don't size against engineering capacity.</strong> The plan is sequenced; ship as ready. Timeline emerges from the sequence, not from a fixed deadline.
+      </div>
     </div>
   </div>
 
@@ -1120,11 +1662,13 @@
     <div class="decision-header">
       <span class="decision-num">F</span>
       <span class="decision-title">Local development story — what's acceptable?</span>
-      <span class="status-badge followup">Need information</span>
+      <span class="status-badge decided">Resolved</span>
     </div>
     <div class="decision-body">
       <p class="why">Devs need to test the worker pool flow before pushing. Two flavors: (1) docker-compose with fake-gcs-server + local NFS, or (2) "every dev gets a personal GCP project." Cost / friction trade-off.</p>
-      <p><strong>What I need:</strong> preference. Is docker-compose acceptable, or is the team comfortable with personal cloud projects?</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Either is acceptable.</strong> Pick whichever is easier to set up. Both docker-compose-with-fake-gcs and per-dev GCP projects are fine; PR 4 will support both via env vars.
+      </div>
     </div>
   </div>
 
@@ -1132,11 +1676,13 @@
     <div class="decision-header">
       <span class="decision-num">G</span>
       <span class="decision-title">Do you want me to do the AGIService split spike?</span>
-      <span class="status-badge followup">Awaiting decision</span>
+      <span class="status-badge decided">Resolved</span>
     </div>
     <div class="decision-body">
       <p class="why">Decision 1 above (two classes vs decorator). I recommended Option A. A 2-hour spike to validate would produce concrete code sketches showing how the split looks. Useful before committing to the approach.</p>
-      <p><strong>What I need:</strong> green light for me to spawn an agent to do the spike, or "skip the spike, just do Option A in PR 4."</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Skip the spike</strong> — go directly to Option A in PR 4. Confidence is high enough; a spike adds no signal.
+      </div>
     </div>
   </div>
 
@@ -1144,11 +1690,13 @@
     <div class="decision-header">
       <span class="decision-num">H</span>
       <span class="decision-title">Should I draft the schema migration as actual Alembic Python code?</span>
-      <span class="status-badge followup">Awaiting decision</span>
+      <span class="status-badge decided">Resolved</span>
     </div>
     <div class="decision-body">
       <p class="why">PR 1 (lease columns) is small and well-defined. I could draft the actual Alembic migration file as a starting point — saves engineering time and gives you something concrete to review.</p>
-      <p><strong>What I need:</strong> green light for me to draft the migration code, or "we'll write that ourselves."</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Yes — draft the migration now.</strong> Apply only against the local Postgres instance; that's our testing ground. Do not touch staging or production. Drafted code is in the PR 1 card on the PR plan tab.
+      </div>
     </div>
   </div>
 
@@ -1156,11 +1704,130 @@
     <div class="decision-header">
       <span class="decision-num">I</span>
       <span class="decision-title">Where should this implementation plan live long-term?</span>
-      <span class="status-badge followup">Awaiting decision</span>
+      <span class="status-badge decided">Resolved</span>
     </div>
     <div class="decision-body">
       <p class="why">This HTML doc is in the mock-ui repo. As work proceeds, decisions get made and statuses change. Should this doc become a living artifact (updated as PRs land), or is it a one-shot snapshot and we'll create new docs as we iterate?</p>
-      <p><strong>What I need:</strong> preference on doc lifecycle. If "living," I'd recommend reviewing the open decisions tab quarterly and updating statuses.</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Living document.</strong> Update statuses as PRs land. Each PR card has a status badge (Not started / In progress / In review / Merged / Blocked) and a checklist that gets ticked off as work progresses. Re-publish to GitHub Pages on each meaningful update.
+      </div>
+    </div>
+  </div>
+
+  <hr class="pr-section-divider">
+
+  <h3>FUSE deep-dive questions (F1–F8)</h3>
+  <p style="color: var(--text-muted); font-size: 13.5px;">Surfaced in the <a class="anchor-link" href="https://sangeet-code.github.io/carelink-ui-mockups/fuse-sandbox-deep-dive-2026-05-01.html">FUSE deep-dive analysis</a> when assessing whether/how to incorporate <code>b0bb495</code> into PR 5.</p>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">F1</span>
+      <span class="decision-title">Cherry-pick acceptable given Arjun Walia authorship?</span>
+      <span class="status-badge decided">Resolved</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">The FUSE branch's <code>workspaces/</code> library is high-quality and drops cleanly into PR 5. But authorship attribution + license posture matters before lifting code into the production track.</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Yes — authorship confirmed.</strong> Cherry-pick is acceptable. PR 5 will reference the source commit (<code>b0bb495</code>) in the description.
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">F2</span>
+      <span class="decision-title">Lock bucket-per-org BEFORE the cherry-pick, or after?</span>
+      <span class="status-badge decided">Resolved</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">Decision 3 (bucket-per-org) affects the WorkspaceManager constructor signature. Locking it before the cherry-pick avoids paying the refactor twice.</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Lock before</strong> — Decision 3 = Option A (bucket-per-org). Combined with F3 (FUSE deferred): <strong>split-bucket model</strong> = shared <code>gs://carelink-skills-templates/</code> for templates (FUSE-mountable later) + per-org <code>gs://carelink-{org_id}-canonical/</code> for memories/sessions (GCS API only). PR 5's <code>WorkspaceManager.__init__</code> takes a <code>MemoryScope</code> resolver.
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">F3</span>
+      <span class="decision-title">Enable FUSE mount in v1, or defer?</span>
+      <span class="status-badge decided">Resolved</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">FUSE is a read-side accelerator for skills hydration. Enabling in v1 means systemd hardening + workload identity + Cloud Run port become PR 5 blockers (heavier scope). Deferring keeps PR 5 small.</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Defer until v1 ships.</strong> PR 5 ships the mount scripts (so they're ready) but keeps the mount disabled by default (<code>SANDBOX_FUSE_ROOT</code> unset → GCS API path). Enabling FUSE in production is a post-v1 follow-up PR with proper Cloud Run / workload identity / hardening.
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">F4</span>
+      <span class="decision-title">Cherry-picked workspaces module replaces or coexists with existing <code>_prepare_workspace</code>?</span>
+      <span class="status-badge decided">Resolved</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">During PR 5 transition: rip-and-replace, or temporarily run both code paths under a flag?</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Replace.</strong> The deterministic-path + manifest model fully supersedes <code>_prepare_workspace</code>/<code>_copy_skills</code>/<code>_copy_agents</code>/<code>_write_restish_config</code>. Retire <code>extra_data-&gt;&gt;'workspace'</code> stash as part of the same PR (dead code at <code>service.py:702, 902-916</code>).
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">F5</span>
+      <span class="decision-title">Wire <code>finalize()</code> to a "session done" event in v1, or stay TTL-only?</span>
+      <span class="status-badge decided">Resolved</span>
+    </div>
+    <div class="decision-body">
+      <p class="why"><code>finalize(session_id)</code> does a final checkpoint to GCS, then <code>shutil.rmtree</code>'s the local sandbox. Question is what triggers the call — TTL-only (sweeper handles it) vs event-driven (clean signal at session end).</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Hybrid.</strong> Wire event-driven for jobs (job-completion signal exists) and scheduled tasks (task-finish signal exists). Stay TTL-only for chat in v1 (no clean "browser closed" signal without WebSocket teardown handling). Implementation lives in <code>carelink-pms/carelink/agi/sessions/finalize.py</code> (PR 5).
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">F6</span>
+      <span class="decision-title">Sibling worktree retirement — permanent?</span>
+      <span class="status-badge decided">Resolved</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">The original <code>openaiagentssdk-review</code> worktree disappeared mid-session. Question was whether to restore it or treat it as retired.</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Replace with the FUSE branch.</strong> Going forward, <code>inbound-voice-fuse-sandbox</code> (worktree at <code>.claude/worktrees/inbound-voice-fuse-sandbox/</code>) is our active sibling reference. The old <code>openaiagentssdk-review</code> retirement is permanent. Memory file updated.
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">F7</span>
+      <span class="decision-title">Keep <code>carelink-agi/</code> v2 service as reference, or retire?</span>
+      <span class="status-badge decided">Resolved</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">The FUSE branch's parallel <code>carelink-agi/</code> service is a different runtime that conflicts with Decision 1 (BackendAGIService + WorkerAGIService split). It's not part of PR 5. Question: keep on its branch as reference, or actively retire?</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Keep for now.</strong> Stays on its own branch as a reference implementation until PR 5 + PR 6 land in main; then re-evaluate. Don't actively retire.
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-header">
+      <span class="decision-num">F8</span>
+      <span class="decision-title">Where should the FUSE deep-dive analysis live long-term?</span>
+      <span class="status-badge decided">Resolved</span>
+    </div>
+    <div class="decision-body">
+      <p class="why">The deep-dive output is durable design analysis. Should it be archived alongside the impl plan, or kept inline in the worktree?</p>
+      <div class="answer-box">
+        <strong>Answer (2026-05-01):</strong> <strong>Mock-ui repo</strong> (already done). Live at <a class="anchor-link" href="https://sangeet-code.github.io/carelink-ui-mockups/fuse-sandbox-deep-dive-2026-05-01.html">fuse-sandbox-deep-dive-2026-05-01.html</a>. Pinned alongside this plan as part of the doc family.
+      </div>
     </div>
   </div>
 </section>
