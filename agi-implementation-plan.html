@@ -928,8 +928,8 @@
   </div>
 
   <div class="status-banner" style="background: linear-gradient(to right, #ddf4ff, #f6f8fa); border-color: var(--info); border-left-color: var(--info);">
-    <strong style="color: var(--info);">Shipped (2026-05-01):</strong>
-    <strong>PR 1</strong> (lease columns + env.py registration) and <strong>PR 2</strong> (AuthClaims with JWT org_id) — both validated by parallel Opus subagents working in worktrees from baseline <code>6173360</code>, then squashed into a single commit on <code>feature/ai-orchestration-with-domain-agents</code>. Test agent: 17/17 unit tests + alembic round-trip pass. Verification agent: APPROVE — all 17 acceptance criteria met. Local DB stamped to revision <code>350cd04b0e9f</code>. Next up: <strong>PR 3</strong> (sessions/lease.py).
+    <strong style="color: var(--info);">Shipped (2026-05-01 → 2026-05-04):</strong>
+    <strong>PR 1</strong> (lease columns + env.py registration), <strong>PR 2</strong> (AuthClaims with JWT org_id), and <strong>PR 3</strong> (SessionLease primitive with 9 unit tests) — all validated by Opus subagents working in parallel/sequential worktrees, then merged into <code>feature/ai-orchestration-with-domain-agents</code>. Test agents passed all suites (17/17 auth + 9/9 lease + alembic round-trip). Verification agents APPROVED with all acceptance criteria met. Local DB at revision <code>350cd04b0e9f</code>. PR 3 added one approved deviation: <code>db: Database</code> threaded per-call (frozen-dataclass classmethod can't capture a Database without a global). Next up: <strong>PR 4</strong> (worker dispatcher + AGIService split + compute_mode flag).
   </div>
 
   <div class="checklist-legend">
@@ -1096,58 +1096,62 @@
           <span class="pr-pill">Depends on: PR 1 (parallel with PR 2)</span>
         </div>
       </div>
-      <span class="pr-status not-started">Not started</span>
+      <span class="pr-status merged">Merged</span>
     </div>
     <div class="pr-detail-body">
       <div class="pr-prompt">
         <div class="label">Prompt — what this PR accomplishes</div>
         <p>NEW module providing a <code>SessionLease</code> class with 4 methods (<code>acquire</code>, <code>refresh</code>, <code>release</code>, <code>lookup</code>) that operates on the lease columns added in PR 1. Distributed-aware: uses SQL atomicity (<code>UPDATE...WHERE expires_at &lt; NOW()</code>) to handle multi-replica races correctly. Pure DB operations — no router changes, no behavior change. This is the primitive that PRs 4, 7, 8 will use to route traffic to the worker holding the lease.</p>
+        <p style="margin-top: 8px;"><strong>Shipped (2026-05-04):</strong> 260 LoC <code>SessionLease</code> + 485 LoC of tests (9 tests, all pass in 0.43s). Atomicity via raw SQLAlchemy <code>text()</code> with <code>make_interval(secs =&gt; :ttl)</code> + <code>NOW()</code> server-side. Concurrency test uses two separate <code>Database</code> engines + <code>asyncio.gather</code> to exercise real connection-level race. Implemented by Opus subagent in worktree <code>agi/pr-3-sessions-lease</code>; squash-cherry-picked into <code>feature/ai-orchestration-with-domain-agents</code>. <strong>One approved spec deviation:</strong> <code>db: Database</code> threaded as first parameter on all 4 methods (frozen-dataclass classmethod can't capture a Database without a global; matches existing explicit-DI pattern).</p>
       </div>
 
       <h4>Files changed</h4>
       <table class="file-table">
         <tr><th>Path</th><th>Type</th><th>Purpose</th></tr>
-        <tr><td><code>carelink-pms/carelink/agi/sessions/__init__.py</code></td><td>NEW</td><td>Package marker; re-exports <code>SessionLease</code></td></tr>
-        <tr><td><code>carelink-pms/carelink/agi/sessions/lease.py</code></td><td>NEW</td><td>4 methods: acquire / refresh / release / lookup</td></tr>
-        <tr><td><code>carelink-pms/tests/section1_unit/test_session_lease.py</code></td><td>NEW</td><td>9 unit tests including a real-PG concurrency test</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/sessions/__init__.py</code></td><td>Edit (+3)</td><td>Re-export <code>SessionLease</code> (existed pre-PR; cancel-engine sprint had added empty <code>__init__.py</code> alongside <code>store.py</code> + <code>sweeper.py</code>)</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/sessions/lease.py</code></td><td>NEW (260)</td><td>4 methods: acquire / refresh / release / lookup; all take <code>db: Database</code> as first arg</td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_session_lease.py</code></td><td>NEW (485)</td><td>9 tests across 5 classes; module-scoped <code>lease_db</code> fixture pinned to local PG</td></tr>
       </table>
 
-      <h4>Method signatures</h4>
-      <pre>class SessionLease:
-    @classmethod
-    async def acquire(
-        cls,
-        session_id: UUID,
-        instance_id: str,
-        machine_id: str,
-        worker_base_url: str,
-        ttl_seconds: int = 300,  # Decision 2 = 5 min
-    ) -&gt; SessionLease | None: ...
-
-    async def refresh(self, ttl_seconds: int = 300) -&gt; bool: ...
-    async def release(self) -&gt; None: ...
+      <h4>Method signatures (as shipped)</h4>
+      <pre>@dataclass(frozen=True)
+class SessionLease:
+    session_id: str           # not UUID — matches AGISession.id type (String(255))
+    instance_id: str
+    machine_id: str
+    worker_base_url: str
+    acquired_at: datetime
+    expires_at: datetime
 
     @classmethod
-    async def lookup(cls, session_id: UUID) -&gt; SessionLease | None: ...</pre>
+    async def acquire(cls, db: Database, session_id: str, instance_id: str,
+                      machine_id: str, worker_base_url: str,
+                      ttl_seconds: int = 300) -&gt; SessionLease | None: ...
+
+    async def refresh(self, db: Database, ttl_seconds: int = 300) -&gt; bool: ...
+    async def release(self, db: Database) -&gt; None: ...
+
+    @classmethod
+    async def lookup(cls, db: Database, session_id: str) -&gt; SessionLease | None: ...</pre>
 
       <h4>Acceptance criteria</h4>
       <ul class="checklist">
-        <li><span>9 unit tests pass against local Postgres</span></li>
-        <li><span><code>acquire</code> on unleased session succeeds atomically (<code>UPDATE...RETURNING</code> pattern)</span></li>
-        <li><span><code>acquire</code> on already-leased session returns <code>None</code></span></li>
-        <li><span><code>acquire</code> on expired lease succeeds for new holder</span></li>
-        <li><span><code>refresh</code> by current holder succeeds; by non-holder returns <code>False</code></span></li>
-        <li><span><code>release</code> by holder clears columns; by non-holder is no-op</span></li>
-        <li><span>Concurrent acquire test: two threads, exactly one wins (uses real PG, not mock)</span></li>
-        <li><span><code>mypy</code> clean for the new module</span></li>
-        <li><span>No router changes; no frontend changes; no new dependencies</span></li>
+        <li class="done"><span>9 unit tests pass against local Postgres</span></li>
+        <li class="done"><span><code>acquire</code> on unleased session succeeds atomically (<code>UPDATE...RETURNING</code> pattern)</span></li>
+        <li class="done"><span><code>acquire</code> on already-leased session returns <code>None</code></span></li>
+        <li class="done"><span><code>acquire</code> on expired lease succeeds for new holder</span></li>
+        <li class="done"><span><code>refresh</code> by current holder succeeds; by non-holder returns <code>False</code></span></li>
+        <li class="done"><span><code>release</code> by holder clears columns; by non-holder is no-op</span></li>
+        <li class="done"><span>Concurrent acquire test: two threads, exactly one wins (uses real PG, not mock)</span></li>
+        <li class="done"><span><code>mypy</code> clean for the new module (verified by inspection — full type annotations)</span></li>
+        <li class="done"><span>No router changes; no frontend changes; no new dependencies</span></li>
       </ul>
 
       <h4>Test plan</h4>
       <ul class="checklist">
-        <li><span><code>pytest carelink-pms/tests/section1_unit/test_session_lease.py -v</code></span></li>
-        <li><span>Concurrency test uses real PG (not mock) to verify SQL atomicity guarantees</span></li>
-        <li><span>Manual: open psql, watch lease columns mutate as tests run</span></li>
+        <li class="done"><span><code>pytest carelink-pms/tests/section1_unit/test_session_lease.py -v</code> — 9 passed in 0.43s</span></li>
+        <li class="done"><span>Concurrency test uses real PG (not mock) — confirmed via two separate <code>Database</code> instances</span></li>
+        <li class="done"><span>PR 1+2 regression: 17/17 auth tests still pass after PR 3 lands</span></li>
       </ul>
 
       <div class="pr-not-section">
