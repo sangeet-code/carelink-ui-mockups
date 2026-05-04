@@ -212,6 +212,11 @@
     <button data-target="m9"><span class="n">09</span>Cross-domain</button>
     <button data-target="m10"><span class="n">10</span>Traceability</button>
     <button data-target="m11"><span class="n">11</span>Explore · exploit</button>
+    <button data-target="m12"><span class="n">12</span>Subagents</button>
+    <button data-target="m13"><span class="n">13</span>Refactor live</button>
+    <button data-target="m14"><span class="n">14</span>Living plans</button>
+    <button data-target="m15"><span class="n">15</span>Pre-flight</button>
+    <button data-target="m16"><span class="n">16</span>Reading code</button>
     <button data-target="m8"><span class="n">08</span>Apply</button>
   </div>
 </nav>
@@ -2731,6 +2736,1170 @@
 
   <hr>
   <p class="meta"><em>Built as a learning artifact for the rx-flow Option B migration, 2026-04-21. Not a spec. Meant to be edited, marked up, argued with.</em></p>
+</section>
+
+<!-- ======================================================== -->
+<!-- M12 SUBAGENT ORCHESTRATION                               -->
+<!-- ======================================================== -->
+<section class="module" id="m12">
+  <div class="eyebrow">12 · Dispatch</div>
+  <h2>Subagent orchestration as engineering practice</h2>
+  <div class="glyphs">
+    <span class="chip">Map-reduce</span>
+    <span class="chip">Fork-join</span>
+    <span class="chip accent">Parallel dispatch</span>
+    <span class="chip accent">Cold-start contracts</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> when a problem decomposes into slices that each fit one worker's working memory, parallel dispatch wins on wall-clock and on cost compared to sequential work. The discipline is at the seam — picking what's genuinely independent, packaging the cold-start context, and designing the integration step before you fan out.
+  </div>
+
+  <h3>The principle</h3>
+  <p>Not every task should be done by the agent in front of you. Three questions, in order: <em>what slices are genuinely independent?</em> <em>what does each slice need as cold-start context?</em> <em>what does integration look like?</em> If you can't answer all three before dispatching, you'll spend more time stitching outputs back together than you saved by parallelizing them. The pattern is older than LLMs — it's <mark>fork-join</mark> with humans as the workers and a senior engineer as the dispatcher. The novelty is that you can now fork-join over agents that each carry their own context window.</p>
+
+  <h3>CareLink instance</h3>
+  <p>Three concrete dispatches in this cycle:</p>
+  <ul>
+    <li><strong>PR 1 + PR 2 in parallel.</strong> Both worktrees branched from <code>6173360</code>. PR 1 added 6 columns to <code>agi_sessions</code>; PR 2 added <code>AuthClaims</code> with org_id extraction. Zero shared files. Zero shared imports. The integration step was <code>git cherry-pick</code> in commit order, no merge logic. Two agents finished in roughly the time one would have, and neither had to know the other existed.</li>
+    <li><strong>FUSE deep-dive — 4 parallel Opus reads.</strong> One commit (<code>b0bb495</code>, 3,864 LoC + 926 LoC of design docs) was sliced four ways by directory: implementation, tests, infrastructure scripts, design narrative. Each slice was small enough for one agent. Synthesis happened in a single fifth pass that produced the final <code>fuse-sandbox-deep-dive-2026-05-01.html</code>. The slicing was deliberate — sliced by <em>vocabulary</em>, not by file count, so each agent's context held a coherent surface.</li>
+    <li><strong>Test agent + verification agent post-staging.</strong> Two agents with deliberately different objectives. Test agent ran the suite; verification agent audited the staged diff against acceptance criteria. They have <em>complementary failure modes</em>: the test agent caught the cold-revive monkeypatch regressions in PR 4a (the verification agent missed them because it focused on the diff); the verification agent caught the spec deviation around <code>db: Database</code> threading in PR 3 (the test agent missed it because the new behavior passed its tests). Always dispatch both. They fail in different directions.</li>
+  </ul>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · PR 1 + PR 2 parallel dispatch</div>
+      <div class="title">No shared files, same baseline, mechanical merge</div>
+      <div class="body">Both PRs grounded on commit <code>6173360</code>. The cherry-pick into main was a 30-second operation per PR. The orchestrator never had to mediate a conflict — that's the signature of a real seam.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Code reads larger than one window</div>
+      <div class="title">3,864 LoC sliced 4 ways</div>
+      <div class="body">Whole-commit context wouldn't fit in one Opus invocation; sliced by vocabulary it fit four. The synthesis pass was the only one that needed to see all four reads — a much smaller surface than the original code.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Complementary auditors</div>
+      <div class="title">Test runner + diff auditor in parallel</div>
+      <div class="body">Each catches what the other misses. Both ran the same input; their <em>questions</em> differed. Dispatching one and trusting it would have shipped a regression.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · "Independent" with hidden state at the seam</div>
+      <div class="title">PR 1 created a column; PR 3 consumed it</div>
+      <div class="body">PR 3 needed the lease columns from PR 1 to compile. Dispatching them in parallel would have forced PR 3 to mock the column or fail — neither produces useful work. Sequential, no choice. <em>Test for independence is "would either compile if the other had not run?" — if no, you don't have parallelism, you have ordering.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Integration cost &gt; parallelism win</div>
+      <div class="title">4 agents × 1,000 LoC ≠ 1 agent × 4,000 LoC</div>
+      <div class="body">Four independently-authored 1,000-line diffs may pull in conflicting style choices, redundant helpers, mismatched assumptions. The integration step costs more than the parallel speed-up bought. Dispatch to <em>read</em> in parallel; consider hard before dispatching to <em>write</em> in parallel.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Cold-start prompt isn't self-contained</div>
+      <div class="title">"Make the change like we did last time" sent to a fresh agent</div>
+      <div class="body">The agent has no "last time." Without file paths, repo state, baseline commit, and acceptance criteria spelled out, the agent will guess plausibly and ship something that misses the actual ask. <em>Cold-start is everything; assume amnesia, write to it.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Dispatcher hallucinates the seam</div>
+      <div class="title">Slicing by file count instead of by vocabulary</div>
+      <div class="body">"Each agent reads 7 files" sounds even. But if files 1-3 are infrastructure and 4-7 are application logic, neither slice has a coherent surface. Slice by what changes <em>together</em>, not by what's <em>convenient to count</em>. Same lesson as Module 01.</div>
+    </div>
+  </div>
+
+  <h3>Cold-start checklist for the dispatch prompt</h3>
+  <table class="matrix">
+    <thead><tr><th>Field</th><th>Why it matters</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Baseline commit</strong></td><td>"From <code>6173360</code>" — not "from latest." Baselines drift between dispatch and execution.</td></tr>
+      <tr><td><strong>Worktree path</strong></td><td>Absolute. The agent's cwd resets between calls; relative paths break.</td></tr>
+      <tr><td><strong>File map</strong></td><td>Every file the agent should read or write, by absolute path, with one-sentence purpose.</td></tr>
+      <tr><td><strong>Acceptance criteria</strong></td><td>Mechanical, not aspirational. "62/62 tests pass in &lt;5s" beats "tests should still pass."</td></tr>
+      <tr><td><strong>Forbidden zones</strong></td><td>"Don't touch <code>sessions/store.py</code> — pre-existing from cancel-engine sprint." Saves an agent from wiping work it can't see.</td></tr>
+      <tr><td><strong>Surface deviation</strong></td><td>Tell the agent: "if the spec is wrong for some real reason, name the deviation and stop — don't silently absorb it."</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Growth path</h3>
+  <p>Junior — knows when to dispatch one subagent for a clear sub-task. Senior — knows when NOT to (the parallel-first instinct fails on tightly coupled work; "I'll dispatch it" can be the answer it should not be). Architect — designs the dispatch boundary so the integration is mechanical: same baseline, no shared files, deterministic merge order. The seam in the codebase becomes the seam in the dispatch.</p>
+
+  <h3>Watch — Subagent orchestration in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Andy Pavlo</span> — <span class="tt">Parallel Query Processing</span> <span class="ctx">CMU 15-721 · ~1h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Andy+Pavlo+parallel+query+processing+CMU" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The classical version of this module's pattern. Map-reduce, fork-join, exchange operators — the same forces, decades older, made formal.</p>
+    </li>
+    <li>
+      <span class="spk">Frances Allen</span> — <span class="tt">The History of Compilers and Concurrency</span> <span class="ctx">ACM A.M. Turing · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Frances+Allen+compilers+concurrency+Turing" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">From a Turing laureate — what it actually takes to make independent work independent. The "loop carries no dependencies" framing transfers directly to subagent dispatch.</p>
+    </li>
+    <li>
+      <span class="spk">Joe Armstrong</span> — <span class="tt">The Mess We're In</span> <span class="ctx">Strange Loop · ~50min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Joe+Armstrong+The+Mess+We%27re+In+Strange+Loop" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Erlang's view of "many small independent processes that talk through messages." The conceptual ancestor of "many small agents that talk through typed prompts."</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Subagent dispatch, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: serial — one agent works through 4 slices">
+          <text x="380" y="28" text-anchor="middle" class="ttl">Serial — one agent, four slices</text>
+
+          <rect x="40" y="60" width="700" height="46" rx="6" fill="#131a22" class="sb-info"/>
+          <text x="60" y="88" class="lbl sb-info">slice 1 · 1,000 LoC · 12 min</text>
+          <rect x="40" y="116" width="700" height="46" rx="6" fill="#131a22" class="sb-info"/>
+          <text x="60" y="144" class="lbl sb-info">slice 2 · 1,000 LoC · 12 min</text>
+          <rect x="40" y="172" width="700" height="46" rx="6" fill="#131a22" class="sb-info"/>
+          <text x="60" y="200" class="lbl sb-info">slice 3 · 1,000 LoC · 12 min</text>
+          <rect x="40" y="228" width="540" height="22" rx="3" fill="#131a22" class="sb-info"/>
+          <text x="60" y="244" class="lbl sb-info">slice 4 · in progress…</text>
+
+          <text x="640" y="244" class="lbl sb-bad">wall-clock ≈ 48 min · context blown by slice 3</text>
+        </svg>
+        <div class="cap"><strong>1 · Serial.</strong> One agent reads four slices in sequence. By slice 3, earlier context is being summarized or discarded; by slice 4 the agent is reasoning over a compressed model of slices 1-3 instead of the real text. <em>Wall-clock cost AND quality cost — the worst quadrant.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: parallel — 4 agents, 1 synthesis">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-good">Parallel — four agents, one synthesis</text>
+
+          <g>
+            <rect x="40" y="50" width="160" height="40" rx="6" fill="#131a22" class="sb-good"/><text x="120" y="74" text-anchor="middle" class="ttl">slice 1 agent</text>
+            <rect x="40" y="100" width="160" height="40" rx="6" fill="#131a22" class="sb-good"/><text x="120" y="124" text-anchor="middle" class="ttl">slice 2 agent</text>
+            <rect x="40" y="150" width="160" height="40" rx="6" fill="#131a22" class="sb-good"/><text x="120" y="174" text-anchor="middle" class="ttl">slice 3 agent</text>
+            <rect x="40" y="200" width="160" height="40" rx="6" fill="#131a22" class="sb-good"/><text x="120" y="224" text-anchor="middle" class="ttl">slice 4 agent</text>
+          </g>
+
+          <path d="M200,70  L380,140" stroke="#6cc17b" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+          <path d="M200,120 L380,140" stroke="#6cc17b" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+          <path d="M200,170 L380,140" stroke="#6cc17b" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+          <path d="M200,220 L380,140" stroke="#6cc17b" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+
+          <rect x="380" y="115" width="180" height="50" rx="7" fill="#131a22" class="sb-acc" stroke-width="2"/>
+          <text x="470" y="138" text-anchor="middle" class="ttl sb-acc">synthesis pass</text>
+          <text x="470" y="156" text-anchor="middle" class="lbl">reads 4 summaries</text>
+
+          <path d="M560,140 L640,140" stroke="#f2a65a" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+          <rect x="640" y="118" width="100" height="44" rx="6" fill="#131a22" class="sb-good"/>
+          <text x="690" y="138" text-anchor="middle" class="ttl">final report</text>
+          <text x="690" y="154" text-anchor="middle" class="lbl">1 doc</text>
+
+          <text x="380" y="252" text-anchor="middle" class="lbl sb-good">wall-clock ≈ 12 min slices + 6 min synthesis · each agent's context fits</text>
+        </svg>
+        <div class="cap"><strong>2 · Parallel + synthesize.</strong> Four agents read four vocabulary-coherent slices simultaneously; a fifth pass reads the four summaries (much smaller surface than the original). Wall-clock ≈ slowest slice + synthesis. <em>The synthesis prompt is where the dispatcher's design judgment shows.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: false parallelism — hidden dependency at the seam">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-bad">False parallelism — PR 1 creates the column PR 3 reads</text>
+
+          <rect x="40" y="60" width="220" height="60" rx="7" fill="#131a22" class="sb-good"/>
+          <text x="150" y="86" text-anchor="middle" class="ttl">PR 1 agent</text>
+          <text x="150" y="104" text-anchor="middle" class="lbl">adds lease columns</text>
+
+          <rect x="290" y="60" width="220" height="60" rx="7" fill="#131a22" class="sb-bad" stroke-width="2"/>
+          <text x="400" y="86" text-anchor="middle" class="ttl sb-bad">PR 3 agent · same time</text>
+          <text x="400" y="104" text-anchor="middle" class="lbl sb-bad">reads columns that don't exist yet</text>
+
+          <path d="M260,90 L290,90" class="sb-bad" stroke-width="2" stroke-dasharray="4,3" fill="none" marker-end="url(#arr)"/>
+          <text x="275" y="78" text-anchor="middle" class="lbl sb-bad">hidden dep</text>
+
+          <rect x="40" y="150" width="680" height="80" rx="7" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="380" y="176" text-anchor="middle" class="ttl sb-bad">"why does PR 3 keep failing in CI?"</text>
+          <text x="60" y="200" class="lbl">— no error names the seam · the test compiles against an old SQL schema</text>
+          <text x="60" y="220" class="lbl sb-bad">— the dispatch decision was wrong; sequential was the only valid order</text>
+        </svg>
+        <div class="cap"><strong>3 · The seam that wasn't independent.</strong> PR 1 and PR 3 looked unrelated by file path. They weren't. PR 3 needed PR 1's columns to compile. Forcing them parallel would have sent PR 3 into a state it couldn't reach legally. <em>The dispatcher's job is finding this BEFORE the fork — once both agents are running, the cost of being wrong is doubled.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — score the next dispatch decision</h4>
+    <p>Pick a task you're about to give a subagent. Before dispatching, write: (1) the slice boundary in one sentence, (2) the cold-start context the agent needs that you haven't written down yet, (3) what the integration step looks like. If any of three is fuzzy, you're not ready to fork — sharpen them first.</p>
+    <textarea placeholder="task · slice · cold-start gaps · integration step..."></textarea>
+    <div class="hint">If integration looks harder than the work itself, do the work yourself.</div>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M13 REFACTOR LIVE                                        -->
+<!-- ======================================================== -->
+<section class="module" id="m13">
+  <div class="eyebrow">13 · Refactor</div>
+  <h2>Refactoring under a live codebase</h2>
+  <div class="glyphs">
+    <span class="chip">Strangler fig (class scale)</span>
+    <span class="chip">Facade</span>
+    <span class="chip accent">Attribute lookup semantics</span>
+    <span class="chip accent">Pass-through proxies</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> when you split a god class into N classes behind a facade, callers and test fixtures depend on the <em>attribute lookup semantics</em> of the old surface — not just its method signatures. Preserving "<code>obj.method(...)</code> works" is easy; preserving "<code>monkeypatch.setattr(obj, '_method', ...)</code> still reaches the new internals" is the part that bites.
+  </div>
+
+  <h3>The principle</h3>
+  <p>A facade is more than method delegation. It must preserve the <em>shape</em> of the object as callers see it — including the dynamic shape (<code>setattr</code>, <code>getattr</code>, <code>hasattr</code>, monkeypatch, pickle). The cleanest split makes <code>__getattr__</code> route reads to the right inner class and <code>__setattr__</code> route writes to the inner class that owns that attribute. Without the write side, a caller that mutates the facade silently mutates the wrong object — and the failure surfaces three function calls deep, far from the seam.</p>
+
+  <h3>CareLink instance</h3>
+  <p>PR 4a split <code>AGIService</code> (2,223 LoC) into:</p>
+  <ul>
+    <li><code>service.py</code> — facade, 444 LoC. Holds no logic; routes to backend or worker.</li>
+    <li><code>backend.py</code> — <code>BackendAGIService</code>, 858 LoC. Zero <code>claude_agent_sdk</code> imports (verified by a test that grep-asserts).</li>
+    <li><code>worker/service.py</code> — <code>WorkerAGIService</code>, 1,531 LoC. Owns all SDK calls.</li>
+  </ul>
+  <p>Method delegation was straightforward. Two failure modes surfaced during verification:</p>
+  <ol>
+    <li><strong>Cold-revive monkeypatch on <code>_build_options</code> didn't reach the worker.</strong> The test does <code>monkeypatch.setattr(agi, "_build_options", mock)</code>. The old method lived on <code>AGIService</code>, which was now a facade. The worker's body still calls <code>self._build_options(...)</code>, where <code>self</code> is the worker — not the facade the test had patched. Two objects, two attribute lookups, no sharing.</li>
+    <li><strong>Module-bound import of <code>_import_sdk</code> didn't reach the worker callsite.</strong> The worker had <code>from carelink.agi.service import _import_sdk</code>. <code>monkeypatch.setattr("carelink.agi.service._import_sdk", ...)</code> updated <code>service</code>'s namespace — but the worker's local binding was frozen at import time. The patch reached one module's name; the worker held a stale pointer.</li>
+  </ol>
+  <p>The fixes are general enough to be worth memorizing.</p>
+
+  <h3>Pattern 1 — facade <code>__setattr__</code> pass-through</h3>
+  <p>The facade's <code>__setattr__</code> checks: does the worker have a class-level attribute by this name? If yes, write to the worker. If no, write locally on the facade. Read-through (<code>__getattr__</code>) alone <em>doesn't suffice</em> because read-through fires only on missing attributes — once the test sets the attribute on the facade itself, the worker's body still reads its own <code>self.</code> and never sees the facade.</p>
+
+<pre>class AGIService:
+    """Facade. Routes to worker or backend; preserves attribute lookup semantics."""
+
+    def __init__(self, ...):
+        self._worker = WorkerAGIService(...)
+        self._backend = BackendAGIService(...)
+
+    def __getattr__(self, name):
+        # Called ONLY when normal lookup fails — i.e. the attribute
+        # isn't on the facade. Bail on internals to avoid recursion.
+        if name in ("_worker", "_backend"):
+            raise AttributeError(name)
+        if hasattr(self._worker, name):
+            return getattr(self._worker, name)
+        raise AttributeError(name)
+
+    def __setattr__(self, name, value):
+        # Internals set normally on the facade.
+        if name.startswith("_") and name in ("_worker", "_backend"):
+            object.__setattr__(self, name, value)
+            return
+        # If the worker class has this attribute, propagate the write.
+        # This is what makes monkeypatch.setattr(facade, "_build_options", mock)
+        # reach the worker's self._build_options(...) callsite.
+        worker = self.__dict__.get("_worker")
+        if worker is not None and hasattr(type(worker), name):
+            setattr(worker, name, value)
+            return
+        object.__setattr__(self, name, value)</pre>
+
+  <p class="meta">The trick is "if the worker class has this attribute" — written before the instance attribute is set, so we look at the class, not the instance. This makes the pass-through stable against the worker's own <code>__init__</code> ordering.</p>
+
+  <h3>Pattern 2 — module-attribute lookup for monkeypatch transparency</h3>
+  <p><code>from x import y</code> creates a local binding that's a snapshot of <code>x.y</code> at import time. <code>monkeypatch.setattr("x.y", new)</code> rebinds <code>x.y</code> but doesn't reach the consumer's local <code>y</code>. The fix: import the <em>module</em>, call attributes off it at runtime.</p>
+
+  <div class="toggle-row" data-pair="patch">
+    <button class="on" data-pane="frozen">Frozen binding (broken)</button>
+    <button data-pane="dynamic">Module attribute (fixed)</button>
+  </div>
+  <div class="pane on" data-pane="frozen">
+<pre># worker/service.py
+from carelink.agi.service import _import_sdk
+
+def _hydrate_session(...):
+    sdk = _import_sdk()       # local binding — frozen at import time
+    ...
+
+# test
+monkeypatch.setattr("carelink.agi.service._import_sdk", fake_sdk)
+# the worker's _import_sdk reference is the OLD function; patch missed it</pre>
+  </div>
+  <div class="pane" data-pane="dynamic">
+<pre># worker/service.py
+from carelink.agi import service as _service_module
+
+def _hydrate_session(...):
+    sdk = _service_module._import_sdk()   # runtime attribute lookup
+    ...
+
+# test
+monkeypatch.setattr("carelink.agi.service._import_sdk", fake_sdk)
+# the worker now resolves _import_sdk via _service_module at call time
+# the patch on service._import_sdk reaches it</pre>
+  </div>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · Django QuerySet refactor</div>
+      <div class="title">Multi-class internals behind a single attribute surface</div>
+      <div class="body">Django's <code>QuerySet</code> has been quietly composed of many helpers for a decade. Callers rarely notice because the attribute lookup semantics are preserved — every method appears on the QuerySet, even if its body lives elsewhere.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Strangler fig at class scale</div>
+      <div class="title">Same shape; can roll back to the monolith by removing the facade</div>
+      <div class="body">The facade is the bridge from Module 06. Until callers migrate to the inner classes, the facade is load-bearing. Once they do, you delete it. The pattern is reversible.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Read-through only</div>
+      <div class="title"><code>__getattr__</code> without <code>__setattr__</code></div>
+      <div class="body">Tests do <code>monkeypatch.setattr(facade, "_method", ...)</code>; the patch lands on the facade; the worker's body never sees it. The test passes when run in isolation (the stub is called directly) and fails when run as part of the flow. <em>The hardest kind of bug — green diff, red CI on integration.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · <code>__getattr__</code> recursion</div>
+      <div class="title">Forgot to bail on <code>_worker</code> in <code>__getattr__</code></div>
+      <div class="body">Python calls <code>__getattr__</code> when a normal lookup fails. <code>self._worker</code> in <code>__getattr__</code> calls <code>__getattr__</code> recursively if <code>_worker</code> hasn't been set yet — infinite loop, stack overflow before any test prints. <em>Always check <code>self.__dict__</code> for the well-known internals; bail on missing.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Hidden state coherence bugs</div>
+      <div class="title">Pass-through <em>masks</em> a write going to the wrong object</div>
+      <div class="body">If the facade and the worker both have a <code>_cache</code>, the pass-through routes the write to the worker — but the facade's <code>_cache</code> is the one that should have been updated. Pass-through is a tool, not an answer; if the inner classes share state, you still owe a coherent state model.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Facade lives forever</div>
+      <div class="title">Callers never migrate to the inner classes</div>
+      <div class="body">If the facade preserves the surface perfectly, there's no pressure to migrate off it. The "temporary" scaffolding becomes architecture. Pair the facade with a migration deadline (Module 06). <em>Pass-through is a bridge; bridges must die.</em></div>
+    </div>
+  </div>
+
+  <h3>Growth path</h3>
+  <p>Junior — knows method delegation: "<code>def foo(self, x): return self._inner.foo(x)</code>". Senior — knows the dynamic shape: <code>__getattr__</code>, <code>__setattr__</code>, module-attribute lookup, and the test fixtures that depend on each. Architect — designs the split so the pass-through is <em>scaffolding</em>, removable once callers migrate to the inner classes directly. <mark>Every <code>__getattr__</code> is a temporary patch; if it's still there a year later, the migration stalled.</mark></p>
+
+  <h3>Watch — Refactoring under a live codebase</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Michael Feathers</span> — <span class="tt">Working Effectively with Legacy Code</span> <span class="ctx">various · ~1h</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Michael+Feathers+Working+Effectively+Legacy+Code" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The book made into talks. The seams-and-characterization-tests framing is exactly the discipline this module needs — find the seam, sense it, then move it.</p>
+    </li>
+    <li>
+      <span class="spk">Sandi Metz</span> — <span class="tt">All the Little Things</span> <span class="ctx">RailsConf · ~35min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Sandi+Metz+All+the+Little+Things+RailsConf" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">A live class split where the test-fixture impact is visible. Watch the moment Sandi notices the tests dictate the shape of the refactor — same lesson as PR 4a's monkeypatch story.</p>
+    </li>
+    <li>
+      <span class="spk">Martin Fowler</span> — <span class="tt">Workflows of Refactoring</span> <span class="ctx">OOP · ~40min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Martin+Fowler+Workflows+of+Refactoring" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The cadence of small safe steps that keep callers working at every commit. The reason PR 4a's facade exists in the first place — to keep callers compiling while the internals move.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Live refactor, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: god class with monkeypatched test fixture">
+          <rect x="40" y="50" width="320" height="180" rx="8" fill="#131a22" class="sb-info" stroke-width="1.5"/>
+          <text x="200" y="78" text-anchor="middle" class="ttl">AGIService · 2,223 LoC</text>
+          <text x="60" y="108" class="lbl">def create_session(...)</text>
+          <text x="60" y="128" class="lbl">def _build_options(...)</text>
+          <text x="60" y="148" class="lbl">def _hydrate_session(...)</text>
+          <text x="60" y="168" class="lbl">def query(...)</text>
+          <text x="60" y="188" class="lbl">def _import_sdk(...)</text>
+          <text x="60" y="218" class="lbl sb-info">single class · monkeypatch lands here</text>
+
+          <rect x="420" y="100" width="280" height="80" rx="7" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="560" y="124" text-anchor="middle" class="ttl">test fixture</text>
+          <text x="440" y="148" class="lbl">monkeypatch.setattr(</text>
+          <text x="440" y="166" class="lbl sb-good">  agi, "_build_options", mock)</text>
+
+          <path d="M420,140 L360,140" class="sb-good" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <text x="380" y="246" text-anchor="middle" class="lbl">before split: patch reaches the only object that exists</text>
+        </svg>
+        <div class="cap"><strong>1 · Before the split.</strong> One class, one set of attributes. The monkeypatch lands on <code>agi</code>; <code>self._build_options</code> resolves to the patched mock. Test passes. <em>The fixture works because the world is one object.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: post-split, monkeypatch on facade misses worker">
+          <rect x="40" y="50" width="200" height="80" rx="7" fill="#131a22" class="sb-acc" stroke-width="2"/>
+          <text x="140" y="76" text-anchor="middle" class="ttl sb-acc">Facade · 444 LoC</text>
+          <text x="60" y="100" class="lbl">_worker = WorkerAGIService(…)</text>
+          <text x="60" y="116" class="lbl sb-bad">no _build_options here</text>
+
+          <rect x="40" y="150" width="200" height="80" rx="7" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="140" y="176" text-anchor="middle" class="ttl">Worker · 1,531 LoC</text>
+          <text x="60" y="200" class="lbl">def _build_options(self,…)</text>
+          <text x="60" y="216" class="lbl sb-good">self._build_options() resolves here</text>
+
+          <rect x="320" y="50" width="380" height="80" rx="7" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="510" y="76" text-anchor="middle" class="ttl sb-bad">test fixture · landing on facade</text>
+          <text x="340" y="100" class="lbl sb-bad">monkeypatch.setattr(facade, "_build_options", mock)</text>
+          <text x="340" y="118" class="lbl sb-bad">facade now has the mock; worker doesn't</text>
+
+          <path d="M320,90 L240,90"  class="sb-bad" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+          <path d="M510,130 Q510,160 240,190" stroke="#e07a7a" stroke-width="1" stroke-dasharray="4,3" fill="none"/>
+          <text x="510" y="170" text-anchor="middle" class="lbl sb-bad">would need to reach here · doesn't</text>
+
+          <text x="380" y="252" text-anchor="middle" class="lbl sb-bad">two objects · patch lands on the wrong one · test fails on integration</text>
+        </svg>
+        <div class="cap"><strong>2 · The split breaks the test.</strong> Worker's <code>self._build_options(...)</code> resolves on the worker, not the facade. The mock landed on the facade; the worker never sees it. <em>The diff is green; the integration is red. This is the failure mode you can't see in the diff alone.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: __setattr__ pass-through restores the test contract">
+          <rect x="40" y="50" width="200" height="80" rx="7" fill="#131a22" class="sb-acc" stroke-width="2"/>
+          <text x="140" y="76" text-anchor="middle" class="ttl sb-acc">Facade</text>
+          <text x="60" y="100" class="lbl sb-acc">__setattr__:</text>
+          <text x="60" y="118" class="lbl">if worker has it → setattr(worker, …)</text>
+
+          <rect x="40" y="150" width="200" height="80" rx="7" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="140" y="176" text-anchor="middle" class="ttl">Worker</text>
+          <text x="60" y="200" class="lbl">_build_options now mocked</text>
+          <text x="60" y="216" class="lbl sb-good">self._build_options() → mock</text>
+
+          <path d="M140,130 L140,150" class="sb-acc" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+          <text x="190" y="146" class="lbl sb-acc">propagate</text>
+
+          <rect x="320" y="50" width="380" height="80" rx="7" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="510" y="76" text-anchor="middle" class="ttl sb-good">test fixture — unchanged</text>
+          <text x="340" y="100" class="lbl">monkeypatch.setattr(facade, "_build_options", mock)</text>
+          <text x="340" y="118" class="lbl sb-good">facade routes the write to worker</text>
+
+          <path d="M320,90 L240,90"  class="sb-good" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+          <text x="380" y="252" text-anchor="middle" class="lbl sb-acc">surface preserved · internals split · test contract intact</text>
+        </svg>
+        <div class="cap"><strong>3 · Pass-through restores the contract.</strong> The facade's <code>__setattr__</code> checks "does the worker class have this attribute?" and routes the write. The test fixture didn't change. The internals did. <em>The discipline: preserve the dynamic surface, not just the static one.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — find a facade that lies</h4>
+    <p>Pick a class wrapped in a wrapper or facade in your codebase. List its <code>__getattr__</code>/<code>__setattr__</code> definitions (or note their absence). Trace one test that monkeypatches an attribute. Does the patch reach where the body actually reads it? If you can't tell, you have a latent bug. Read the lookups, then run the test.</p>
+    <textarea placeholder="facade · attribute lookup methods · monkeypatch trace · gap..."></textarea>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M14 LIVING PLANS                                         -->
+<!-- ======================================================== -->
+<section class="module" id="m14">
+  <div class="eyebrow">14 · Decision durability</div>
+  <h2>Living plan documents</h2>
+  <div class="glyphs">
+    <span class="chip">ADRs</span>
+    <span class="chip">RFCs</span>
+    <span class="chip accent">Status badges</span>
+    <span class="chip accent">Decision archaeology</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> architectural docs go stale within weeks of being "finished." A doc written once and never edited becomes confidently wrong — it tells future readers what was true at one moment, not what's true now. The only docs worth maintaining are the ones designed to be edited as decisions ratify, PRs ship, and understanding evolves.
+  </div>
+
+  <h3>The principle</h3>
+  <p>Treat the canonical plan as code: status badges, version control, machine-checkable acceptance criteria. When a decision is ratified, the doc flips from <em>Pending</em> to <em>Decided</em> with the chosen option highlighted and the runner-up archived in a fold-away. When a PR ships, its card flips to <em>Merged</em> with a Shipped paragraph capturing what actually landed (which often differs from what was planned). The doc's structure forces clarity — you can't claim "we're done" without flipping a status badge, and you can't flip a badge without writing what was decided.</p>
+
+  <h3>CareLink instance</h3>
+  <p><code>agi-implementation-plan.html</code> evolved across a multi-day session:</p>
+  <ul>
+    <li><strong>Day 1:</strong> 8-PR plan + 7 open decisions + 9 follow-up questions + 8 FUSE-specific questions. Status banner reads "All decisions Pending."</li>
+    <li><strong>Day 2:</strong> Decisions resolve one by one. Each "Pending" badge flips to "Decided" with a green Resolution box capturing the chosen option, the date, and the rationale. Runner-up options stay in the card but are no longer load-bearing.</li>
+    <li><strong>Day 3:</strong> PR 4 is realized to be too large for a single dispatch; the card splits into 4a/4b/4c. PR 4a ships and gets a "Merged" badge + Shipped paragraph noting two surface deviations (<code>__getattr__</code>/<code>__setattr__</code> pass-through, <code>_import_sdk</code> module-attribute indirection) that weren't in the original spec.</li>
+    <li><strong>Day 4:</strong> Decision 3 is <em>strengthened</em> mid-session — bucket-per-org → GCP project-per-org. The Resolution box gets edited in place (with a "(strengthened 2026-05-04)" date stamp), not replaced or duplicated. Future readers see the path the decision took.</li>
+  </ul>
+  <p>The status banner at the top of the doc tells a new reader, in 30 seconds, what's locked vs. in-flight. Without the banner, every reader reconstructs that state from the cards.</p>
+
+  <h3>Anatomy of a living plan card</h3>
+  <table class="matrix">
+    <thead><tr><th>Element</th><th>What it carries</th><th>Decay it fights</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Status badge</strong></td>
+        <td>One of <code>Pending</code> / <code>Recommended</code> / <code>Decided</code> / <code>Merged</code>. Color-coded.</td>
+        <td>"What's locked vs. in flight" gets re-litigated in chat instead of read off the doc.</td>
+      </tr>
+      <tr>
+        <td><strong>Options block</strong></td>
+        <td>The choices that were considered, with one-paragraph tradeoffs each.</td>
+        <td>"Why didn't we go with X?" gets rediscussed in 6 months because the runner-up wasn't archived.</td>
+      </tr>
+      <tr>
+        <td><strong>Resolution box</strong></td>
+        <td>Green box rendered ONLY when status is Decided. Names the chosen option, the date, the rationale.</td>
+        <td>"What did we agree to?" — answered without scrolling Slack history.</td>
+      </tr>
+      <tr>
+        <td><strong>Shipped paragraph</strong></td>
+        <td>Rendered when status is Merged. What actually landed; deviations from the spec; commit SHA.</td>
+        <td>"How is the live system different from the plan?" gets answered honestly instead of optimistically.</td>
+      </tr>
+      <tr>
+        <td><strong>Acceptance criteria</strong></td>
+        <td>Mechanical checks (test count, file count, line count) the next agent can run.</td>
+        <td>"Are we done?" becomes a yes/no question instead of a vibe check.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · Architecture Decision Records (Nygard, 2011)</div>
+      <div class="title">One file per decision; status: Proposed/Accepted/Superseded</div>
+      <div class="body">Pure-text version of this module's structure. ADRs work because they enforce the discipline at the file level — you can't merge an ADR-introducing PR without a status. The file IS the badge.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Rust RFC process</div>
+      <div class="title">Public, versioned, status-tagged</div>
+      <div class="body">Every Rust language change has an RFC with status, discussion thread, and final-comment-period dates. New contributors can read the whole language history in one pass — and notice when something was contentious.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Multi-day agentic sessions</div>
+      <div class="title">Cold-start map for the next agent</div>
+      <div class="body">When the next session reads "all 7 decisions Decided + PR 4a Merged" before doing anything else, it spends zero time rediscovering settled questions. The doc is the continuity that the chat history can't provide.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · No owner</div>
+      <div class="title">"Living" doc that nobody's job is to update</div>
+      <div class="body">Decisions get made in chat; nobody flips a badge; the doc rots faster than the code. Within a month the doc lies confidently. <em>Living docs need a designated editor — sometimes a tool, sometimes a person.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Permanent draft</div>
+      <div class="title">Every decision is "Recommended"; nothing is "Decided"</div>
+      <div class="body">If the discipline of flipping a badge is treated as optional, the doc becomes a wishlist instead of a record. The act of writing "Decided" forces the conversation that ratifies it. Skip the act, skip the ratification.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Decision archaeology breaks</div>
+      <div class="title">"What did we decide last month? Let me check Slack…"</div>
+      <div class="body">When ratifications happen in chat instead of being captured in the doc, anyone reading the system later has to reconstruct the decision tree from raw conversation. <em>The chat is the discussion; the doc is the record.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Status drift</div>
+      <div class="title">Card says "Merged"; the actual main branch says no</div>
+      <div class="body">If the doc and reality disagree, readers learn to trust neither. Tie status flips to objective signals — a Merged badge requires a commit SHA, an Accepted ADR requires a merged PR. Without the link, the badge is a hope.</div>
+    </div>
+  </div>
+
+  <h3>Growth path</h3>
+  <p>Junior — keeps a personal todo doc. Senior — keeps a team-shared plan that gets updated weekly with hand-edited statuses. Architect — designs the doc structure so the act of editing it forces clarity: a Resolution box only renders if a decision is locked, a Merged badge only shows if the PR commit SHA is recorded, status banners auto-summarize from card states. <mark>The best living docs make the wrong update painful enough that you do the right one.</mark></p>
+
+  <h3>What rx-flow's doc does that's worth copying</h3>
+  <ol>
+    <li><strong>Status banner at the top.</strong> 30-second orientation for any new reader. Updated every time a card flips.</li>
+    <li><strong>Resolution boxes are visually distinct.</strong> Green inset on decided cards. You can scan and see which decisions have settled.</li>
+    <li><strong>Date-stamped strengthenings.</strong> When Decision 3 went from "bucket-per-org" to "GCP project-per-org," the original wording stayed in the card with a "(strengthened 2026-05-04)" annotation. Decision history is preserved in the resolution box itself, not behind history.</li>
+    <li><strong>Shipped paragraphs name deviations.</strong> "What actually landed" can — and often does — differ from "what was planned." Write it down. The next reader needs to know which is which.</li>
+    <li><strong>Hyperlinked between docs.</strong> Plan links to deep-dive; deep-dive links back to the relevant decision card. Readers can move from "what?" to "why?" in one click.</li>
+  </ol>
+
+  <h3>Watch — Living plans in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Michael Nygard</span> — <span class="tt">Documenting Architecture Decisions</span> <span class="ctx">various · ~30min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Michael+Nygard+Architecture+Decision+Records" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The talk that named ADRs. Watch for the moment Nygard explains why "Superseded" matters as much as "Accepted" — the same insight that makes Resolution boxes carry forward instead of getting overwritten.</p>
+    </li>
+    <li>
+      <span class="spk">Stripe engineering</span> — <span class="tt">How We Write RFCs</span> <span class="ctx">various · ~25min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Stripe+engineering+RFC+process" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">A working production process for living technical docs. The discipline isn't the template — it's the cadence and the social contract that the doc gets updated when reality changes.</p>
+    </li>
+    <li>
+      <span class="spk">Will Larson</span> — <span class="tt">An Elegant Puzzle: Eng Strategy</span> <span class="ctx">various · ~40min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Will+Larson+An+Elegant+Puzzle+strategy" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">"Strategy is a living document, not a memo." Larson's framing for why writing once and walking away is the failure mode all interesting orgs default to.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — A decision card's three states</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: Pending — options listed, no resolution">
+          <rect x="40" y="40" width="680" height="200" rx="8" fill="#131a22" stroke="#2f3e50" stroke-width="1.5"/>
+          <rect x="600" y="50" width="100" height="22" rx="11" fill="rgba(127,180,228,.15)" stroke="#7fb4e4"/>
+          <text x="650" y="65" text-anchor="middle" class="lbl sb-info">Pending</text>
+
+          <text x="60" y="74" class="ttl">Decision 3 — Storage scope</text>
+          <text x="60" y="100" class="lbl">How do we isolate per-org data?</text>
+
+          <rect x="60" y="116" width="200" height="100" rx="6" fill="#131a22" stroke="#2f3e50"/>
+          <text x="160" y="138" text-anchor="middle" class="ttl">Option A</text>
+          <text x="80" y="158" class="lbl">bucket-per-org in</text>
+          <text x="80" y="174" class="lbl">a shared GCP project</text>
+          <text x="80" y="200" class="lbl sb-info">cost: low</text>
+
+          <rect x="280" y="116" width="200" height="100" rx="6" fill="#131a22" stroke="#2f3e50"/>
+          <text x="380" y="138" text-anchor="middle" class="ttl">Option B</text>
+          <text x="300" y="158" class="lbl">single shared bucket</text>
+          <text x="300" y="174" class="lbl">prefix-isolated</text>
+          <text x="300" y="200" class="lbl sb-info">cost: minimum</text>
+
+          <rect x="500" y="116" width="200" height="100" rx="6" fill="#131a22" stroke="#2f3e50"/>
+          <text x="600" y="138" text-anchor="middle" class="ttl">Option C</text>
+          <text x="520" y="158" class="lbl">project-per-org</text>
+          <text x="520" y="174" class="lbl">complete isolation</text>
+          <text x="520" y="200" class="lbl sb-info">cost: highest</text>
+        </svg>
+        <div class="cap"><strong>1 · Pending.</strong> Three options laid out with one-paragraph tradeoffs. No green box yet — the decision is open. The card invites a decision; it doesn't pretend one's been made.</div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: Recommended — one option highlighted, awaiting ratification">
+          <rect x="40" y="40" width="680" height="200" rx="8" fill="#131a22" stroke="#2f3e50" stroke-width="1.5"/>
+          <rect x="580" y="50" width="120" height="22" rx="11" fill="rgba(180,140,214,.18)" stroke="#b48cd6"/>
+          <text x="640" y="65" text-anchor="middle" class="lbl sb-purp">Recommended</text>
+
+          <text x="60" y="74" class="ttl">Decision 3 — Storage scope</text>
+
+          <rect x="60" y="116" width="200" height="100" rx="6" fill="#131a22" class="sb-acc" stroke-width="2"/>
+          <text x="160" y="138" text-anchor="middle" class="ttl sb-acc">Option A · recommended</text>
+          <text x="80" y="158" class="lbl">bucket-per-org in</text>
+          <text x="80" y="174" class="lbl">a shared GCP project</text>
+          <text x="80" y="200" class="lbl sb-acc">awaiting CTO sign-off</text>
+
+          <rect x="280" y="116" width="200" height="100" rx="6" fill="#131a22" stroke="#2f3e50" opacity="0.5"/>
+          <text x="380" y="138" text-anchor="middle" class="ttl">Option B</text>
+          <text x="300" y="200" class="lbl">runner-up</text>
+
+          <rect x="500" y="116" width="200" height="100" rx="6" fill="#131a22" stroke="#2f3e50" opacity="0.5"/>
+          <text x="600" y="138" text-anchor="middle" class="ttl">Option C</text>
+          <text x="520" y="200" class="lbl">runner-up</text>
+        </svg>
+        <div class="cap"><strong>2 · Recommended.</strong> Author marks a preferred option; runner-ups dim but stay visible (you can still read why they were declined). The status badge differs from "Decided" — the doc is honest that a human still has to ratify.</div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: Decided — green resolution box with date and rationale">
+          <rect x="40" y="40" width="680" height="200" rx="8" fill="#131a22" stroke="#2f3e50" stroke-width="1.5"/>
+          <rect x="610" y="50" width="90" height="22" rx="11" fill="rgba(108,193,123,.2)" stroke="#6cc17b"/>
+          <text x="655" y="65" text-anchor="middle" class="lbl sb-good">Decided</text>
+
+          <text x="60" y="74" class="ttl">Decision 3 — Storage scope</text>
+
+          <rect x="60" y="92" width="640" height="50" rx="6" fill="rgba(108,193,123,.08)" class="sb-good" stroke-width="1.5"/>
+          <text x="70" y="112" class="ttl sb-good">Resolution (2026-05-01, strengthened 2026-05-04):</text>
+          <text x="70" y="130" class="lbl">Option A — strengthened to GCP project-per-org. Cross-org leakage</text>
+          <text x="70" y="148" class="lbl">structurally impossible at GCP-project boundary, not just IAM-binding.</text>
+
+          <rect x="60" y="160" width="200" height="68" rx="6" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="160" y="180" text-anchor="middle" class="ttl sb-good">Option A · adopted</text>
+          <text x="80" y="200" class="lbl">bucket-per-org → project-per-org</text>
+
+          <rect x="280" y="160" width="200" height="68" rx="6" fill="#131a22" stroke="#2f3e50" opacity="0.4"/>
+          <text x="380" y="190" text-anchor="middle" class="lbl">Option B · archived</text>
+          <rect x="500" y="160" width="200" height="68" rx="6" fill="#131a22" stroke="#2f3e50" opacity="0.4"/>
+          <text x="600" y="190" text-anchor="middle" class="lbl">Option C · was preferred</text>
+          <text x="600" y="208" class="lbl">absorbed into A</text>
+        </svg>
+        <div class="cap"><strong>3 · Decided + strengthened.</strong> Green resolution box, date-stamped twice (original + strengthening). Runner-ups archived but visible. Future readers see WHEN the decision settled, what it actually said, and how it evolved. <em>Decision archaeology, in one card.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — date-stamp one decision</h4>
+    <p>Pick a decision your team made in the last 6 months that "everyone agrees on." Find or write it down: What were the options? Who chose? When? What was the rationale? If any answer requires Slack archaeology, you've found a candidate for a living-plan upgrade. Make the missing record now — better late than re-litigated.</p>
+    <textarea placeholder="decision · options · who · when · rationale..."></textarea>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M15 PRE-FLIGHT INVESTIGATION                             -->
+<!-- ======================================================== -->
+<section class="module" id="m15">
+  <div class="eyebrow">15 · Investigation</div>
+  <h2>Pre-flight investigation — don't assume</h2>
+  <div class="glyphs">
+    <span class="chip">Hypothesis check</span>
+    <span class="chip">State verification</span>
+    <span class="chip accent">Cheap before expensive</span>
+    <span class="chip accent">Forensic discipline</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> every operation rests on a premise about current state. When the premise is wrong, the operation produces output that's hard to attribute. Pre-flight investigation costs minutes; acting on a wrong premise costs hours. The discipline isn't being clever — it's reliably running the cheap check before the expensive action.
+  </div>
+
+  <h3>The principle</h3>
+  <p>Before any non-trivial change, verify the assumed starting state. <code>git rev-parse HEAD</code>, <code>alembic current</code>, <code>\d table</code>, <code>ls -la</code>, <code>git log --all -S 'mystery-string'</code>. The checks themselves are mechanical and cheap. The discipline is to actually run them — and to <em>read</em> what they say, instead of skimming for the answer you expected. Most disasters are preceded by a 30-second check that, run before the action, would have prevented them.</p>
+
+  <h3>CareLink instance — the orphan-revision saga</h3>
+  <p>At the start of the shipping cycle, the local DB was stamped at alembic revision <code>e1f3a5b7c9d2</code>. That revision didn't exist in any branch's migration files. A naive agent would have run <code>alembic upgrade head</code>, hit a confusing "revision not found" error, and either reported it as a blocker or — worse — destroyed local state trying to "fix" it.</p>
+  <p>What actually happened:</p>
+  <ol>
+    <li><code>git log --all -S 'e1f3a5b7c9d2'</code> — found the revision string in <em>a stash</em> from a prior agent. The stash had a note: "DDL is in place; fix with stamp."</li>
+    <li>Schema-diffed local DB against the model on a fresh DB. Confirmed equivalence — the columns exist, the indexes exist, the structure matches.</li>
+    <li><code>alembic stamp --purge c4d6e8f0a2b3</code> — moved the stamp to the closest valid ancestor without re-running the chain.</li>
+    <li>PR 1 then ran <code>alembic upgrade head</code> cleanly, applying the new lease-columns migration on top.</li>
+  </ol>
+  <p>Total investigation time: ~5 minutes. Time saved: hours. <mark>The "fix" was knowing what to read; the work itself was three commands.</mark></p>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · The orphan-revision saga</div>
+      <div class="title">Read the stash before running migrations</div>
+      <div class="body">A 30-second <code>git stash list</code> revealed a prior agent's deliberate workaround. Without that read, the next agent would have re-discovered the chain bug the hard way.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · "What baseline are you on?"</div>
+      <div class="title">PR 3 dispatch from <code>0c02964</code>, not <code>HEAD</code></div>
+      <div class="body">Naming the exact commit hash in the dispatch prompt avoided the agent picking up uncommitted local changes from a sibling worktree. <em>Worktrees and stashes hide state from each other; checking is free.</em></div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · Verifying staged blob materializes to working tree</div>
+      <div class="title">After <code>git reset --soft</code>, the index was right, the file wasn't</div>
+      <div class="body">A <code>wc -l</code> on the supposedly-edited file revealed the working tree had reverted to old content despite the index being staged correctly. <code>git cat-file -p &lt;blob&gt; &gt; file</code> rematerialized it. Caught by reading file size, not by trusting the operation reported success.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Investigation as ritual</div>
+      <div class="title">Running checks but not reading them</div>
+      <div class="body">If <code>git status</code> runs and the agent skims for the answer it expected, the unexpected lines (the 4 untracked docs, the staged file from a sibling) get ignored. <em>Investigation only works if you read what it tells you, even when boring.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Investigation as substitute for understanding</div>
+      <div class="title">Knowing what state is, not why</div>
+      <div class="body">Running <code>alembic current</code> tells you the revision. It doesn't tell you why the chain has a drop-before-create bug at <code>ix_tasks_authored_on</code>. The investigation is necessary, not sufficient — follow up with "what produced this state?" or you'll just defer the bug to next time.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Skipping when "obvious"</div>
+      <div class="title">"It's just a small change"</div>
+      <div class="body">The cheap check skipped is exactly the one that would have caught the dependent state. Pre-flight must be habit, not judgment — judgment is what produces the disaster you're trying to prevent.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Wrong working directory</div>
+      <div class="title"><code>cd /Users/sangeet/src/carelink-ui-mockups</code> followed by a monorepo command</div>
+      <div class="body">The Bash tool's cwd persists. A <code>cd</code> for one operation leaks into the next call. <code>git worktree remove</code> ran from the mock-ui directory and failed silently (or more often, found nothing to remove). <em>Use <code>git -C &lt;abs path&gt;</code> for cross-worktree operations; never trust the inherited cwd.</em></div>
+    </div>
+  </div>
+
+  <h3>Pre-flight checklists by operation</h3>
+  <table class="matrix">
+    <thead><tr><th>Operation</th><th>Cheap checks before you act</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>DB migration</strong></td>
+        <td><code>alembic current</code> · <code>alembic heads</code> · count migrations under <code>versions/</code> · schema-diff vs model on fresh DB · search stashes for the revision string if it's unrecognized</td>
+      </tr>
+      <tr>
+        <td><strong>Cherry-pick</strong></td>
+        <td><code>git status</code> on source AND target worktrees · <code>git rev-parse HEAD</code> on both · <code>git log --oneline &lt;commit&gt;^..&lt;commit&gt;</code> to confirm the SHA exists where you think it does</td>
+      </tr>
+      <tr>
+        <td><strong>Worktree creation</strong></td>
+        <td><code>git worktree list</code> first · check that the target directory doesn't already exist · check the source branch is up to date · verify the baseline commit is reachable</td>
+      </tr>
+      <tr>
+        <td><strong>Subagent dispatch</strong></td>
+        <td>Read the worktree's actual state <em>once</em> from the dispatcher's perspective: <code>git log --oneline -5</code>, <code>ls</code> on the file directories the agent will touch, confirm forbidden zones haven't been pre-modified</td>
+      </tr>
+      <tr>
+        <td><strong>Edit a file</strong></td>
+        <td><code>wc -l &lt;file&gt;</code> before and after · if the file has been touched recently by a different process (worktree, agent), verify your edit is editing the version you think it is</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Growth path</h3>
+  <p>Junior — runs <code>git status</code> before starting work. Senior — runs <code>git status</code> AND understands what each line means (untracked vs ignored vs modified vs staged). Architect — designs systems where the answer to "what state is this in?" is unambiguous: <code>alembic_version</code> table, status enums, well-named git branches, <code>HEAD</code> commits that summarize their content. <mark>The best systems make pre-flight investigation easy because their state is legible.</mark></p>
+
+  <h3>Watch — Pre-flight investigation in practice</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Brendan Gregg</span> — <span class="tt">Linux Performance Tools (60s checklist)</span> <span class="ctx">USENIX · ~50min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Brendan+Gregg+Linux+Performance+60+seconds+USENIX" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The most-cited example of "10 cheap commands beat one expensive guess." Gregg's "first 60 seconds" checklist is the operational version of this module's discipline.</p>
+    </li>
+    <li>
+      <span class="spk">Hillel Wayne</span> — <span class="tt">Why Don't We Just…?</span> <span class="ctx">various · ~35min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Hillel+Wayne+Why+Don%27t+We+Just" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The mental model for "your premise is probably wrong" — Wayne walks through how seemingly simple changes hit unstated assumptions about state. The pre-flight discipline is the response to the diagnosis.</p>
+    </li>
+    <li>
+      <span class="spk">Allspaw</span> — <span class="tt">How Complex Systems Fail</span> <span class="ctx">various · ~40min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=John+Allspaw+How+Complex+Systems+Fail" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Cook's classic on accidents being preceded by drift in latent conditions. Pre-flight investigation is the practice that turns latent drift into noticed drift.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — The orphan revision, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: alembic current shows orphan revision">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-bad">alembic stamp on a revision that doesn't exist</text>
+
+          <rect x="40" y="60" width="320" height="170" rx="7" fill="#131a22" class="sb-info" stroke-width="1.5"/>
+          <text x="200" y="84" text-anchor="middle" class="ttl sb-info">$ alembic current</text>
+          <text x="60" y="116" class="lbl">e1f3a5b7c9d2 (head)</text>
+          <text x="60" y="148" class="lbl sb-bad">↑</text>
+          <text x="60" y="168" class="lbl sb-bad">this revision is not in</text>
+          <text x="60" y="188" class="lbl sb-bad">migrations/versions/</text>
+          <text x="60" y="216" class="lbl">file count there: 47</text>
+
+          <rect x="400" y="60" width="320" height="170" rx="7" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="560" y="84" text-anchor="middle" class="ttl sb-bad">if you act on the assumption</text>
+          <text x="420" y="116" class="lbl">$ alembic upgrade head</text>
+          <text x="420" y="136" class="lbl sb-bad">→ KeyError: revision e1f3a5b7c9d2</text>
+          <text x="420" y="166" class="lbl">$ alembic stamp head  # try to "fix"</text>
+          <text x="420" y="186" class="lbl sb-bad">→ which head? we have parallel chains</text>
+          <text x="420" y="206" class="lbl sb-bad">→ now the DB is worse than before</text>
+        </svg>
+        <div class="cap"><strong>1 · The unexpected state.</strong> A check that takes 2 seconds reveals the local DB is stamped at a revision that doesn't exist in any branch. The wrong move: act on the hypothesis ("must be a chain bug, run upgrade") and produce a worse state. <em>Whatever's going on, "I don't know yet" is the right next thought.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: search stashes finds the prior agent's note">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-acc">5-minute investigation: read the stashes</text>
+
+          <rect x="40" y="60" width="680" height="58" rx="6" fill="#131a22" class="sb-acc" stroke-width="1.5"/>
+          <text x="60" y="84" class="lbl sb-acc">$ git stash list | head -5</text>
+          <text x="60" y="104" class="lbl">stash@{0}: WIP on main: e1f3a5b7c9d2 — "DDL is in place; fix with stamp"</text>
+
+          <rect x="40" y="130" width="680" height="40" rx="6" fill="#131a22" class="sb-acc" stroke-width="1.5"/>
+          <text x="60" y="154" class="lbl sb-acc">$ git stash show -p stash@{0} | head -30   # READ what it actually does</text>
+
+          <rect x="40" y="180" width="680" height="60" rx="7" fill="#131a22" class="sb-good" stroke-width="2"/>
+          <text x="60" y="204" class="ttl sb-good">premise corrected:</text>
+          <text x="60" y="224" class="lbl">e1f3a5b7c9d2 was a deliberate stamp-to-non-existent-rev workaround</text>
+          <text x="60" y="240" class="lbl">to skip a chain bug. The DDL is already correct. The stamp itself is the problem.</text>
+        </svg>
+        <div class="cap"><strong>2 · The investigation.</strong> <code>git stash list</code> takes 1 second. The stash note explains everything. The hypothesis flips: this isn't a missing migration — it's an intentional workaround to a known bug. <em>The discipline isn't running the command; it's reading the answer.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: confirmed equivalence, then act">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-good">confirm equivalence · then act</text>
+
+          <rect x="40" y="60" width="320" height="58" rx="6" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="60" y="84" class="ttl sb-good">schema-diff local DB vs fresh-DB model</text>
+          <text x="60" y="104" class="lbl sb-good">columns match · indexes match · constraints match</text>
+
+          <rect x="400" y="60" width="320" height="58" rx="6" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="420" y="84" class="ttl sb-good">$ alembic stamp --purge c4d6e8f0a2b3</text>
+          <text x="420" y="104" class="lbl sb-good">moved to closest valid ancestor</text>
+
+          <rect x="40" y="135" width="680" height="58" rx="6" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="60" y="159" class="ttl sb-good">$ alembic upgrade head   # now applies new migration cleanly</text>
+          <text x="60" y="179" class="lbl sb-good">PR 1 lease-columns migration applied · DDL state intact</text>
+
+          <text x="380" y="226" text-anchor="middle" class="lbl sb-acc">total investigation time: 5 min · time saved: hours</text>
+          <text x="380" y="244" text-anchor="middle" class="lbl">"the fix was knowing what to read"</text>
+        </svg>
+        <div class="cap"><strong>3 · Act with confidence.</strong> Two more cheap checks (schema-diff + ancestor lookup) before the action. The fix is one command. <em>Investigation isn't slow — acting on a wrong premise is. The cheap reads are the speed.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — list the cheap checks for one operation</h4>
+    <p>Pick one operation you do regularly that occasionally bites: deploy, migration, branch cutover, environment switch. List the 3-5 cheap checks that, run before, would catch the most common failures. Tape it to the wall above your desk. Run it the next 5 times you do that operation. After 5 runs, decide which checks to keep.</p>
+    <textarea placeholder="operation · cheap checks list · which ones caught a real issue..."></textarea>
+    <div class="hint">If a check has never caught anything, drop it. If you skipped one and got bit, promote it.</div>
+  </div>
+</section>
+
+<!-- ======================================================== -->
+<!-- M16 READING SOMEONE ELSE'S CODE                          -->
+<!-- ======================================================== -->
+<section class="module" id="m16">
+  <div class="eyebrow">16 · Audit</div>
+  <h2>Reading someone else's code</h2>
+  <div class="glyphs">
+    <span class="chip">Cherry-pick discipline</span>
+    <span class="chip">Severity rubrics</span>
+    <span class="chip accent">Sharp-edge auditing</span>
+    <span class="chip accent">Decision-ready output</span>
+  </div>
+
+  <div class="tldr">
+    <strong>The force:</strong> code you didn't write hides assumptions the author had and you don't. When you inherit a branch — to cherry-pick from, evaluate, or integrate — read it with structured suspicion. Capture every "this looks fragile" as a sharp edge with a severity rating. Without severity, "take everything" or "take nothing" are your only options. With severity, "take the library, fix S1-S4, defer S5-S10" is the right call.
+  </div>
+
+  <h3>The principle</h3>
+  <p>Auditing isn't reading harder; it's reading <em>differently</em>. You're not asking "do I understand?" — you're asking "what would fail, and how badly?" Each finding gets named, located (file:line), severity-tagged, and paired with a fix sketch. The discipline is in the <em>output shape</em>: a 10-item list with no severity is useless because it can't be acted on; a 3-item "data-loss class" list with fix sketches is decision-ready. Severity rubrics force calibration — you can't rate everything "high," because then "high" means nothing.</p>
+
+  <h3>CareLink instance — the FUSE deep-dive</h3>
+  <p>The cycle inherited a long-running branch (<code>inbound-voice-fuse-sandbox</code> @ <code>b0bb495</code>): 21 files, 3,864 LoC of implementation, 926 LoC of design docs, written by a different engineer over a different time period. Decision required: cherry-pick into PR 5? All of it? Some of it? Skip it?</p>
+  <p>4 parallel Opus subagents read non-overlapping slices (Module 12). Output synthesized into <code>fuse-sandbox-deep-dive-2026-05-01.html</code>: <strong>10 sharp edges, ranked S1-S10 by data-loss risk</strong>, each with file:line, fix sketch, and a click-to-expand body.</p>
+
+  <h3>Severity rubric — what each tier means</h3>
+  <table class="matrix">
+    <thead><tr><th>Tier</th><th>Definition</th><th>Sequencing</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Data loss</strong></td>
+        <td>A code path that can lose or corrupt user data. Requires recovery from backups or version history.</td>
+        <td>Block any production use. Fix before merge.</td>
+      </tr>
+      <tr>
+        <td><strong>High</strong></td>
+        <td>Operationally serious — security exposure, capacity exhaustion, irrecoverable state without manual intervention.</td>
+        <td>Block any non-dev environment. Fix before launch.</td>
+      </tr>
+      <tr>
+        <td><strong>Medium</strong></td>
+        <td>Quality/operability issue. Surfaces under load or specific scenarios. Workarounds exist.</td>
+        <td>Track as follow-up; don't block initial ship.</td>
+      </tr>
+      <tr>
+        <td><strong>Low</strong></td>
+        <td>Cleanup, polish, or nice-to-have. Not surfaced unless you go looking.</td>
+        <td>File as ticket; fix when the area is touched anyway.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Sample findings from the FUSE audit</h3>
+  <p>Each finding has a one-line title, location, severity, body, and fix. The form is the value — without it, an audit is a vibes report.</p>
+
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">S1 · Data loss</div>
+      <div class="title"><code>_load_manifest</code> swallow-and-empty</div>
+      <div class="body"><code>workspaces/manager.py:644-652</code>. Bare <code>except Exception → empty()</code> can't distinguish a 404 (legit empty) from a 503 (transient → should retry). A transient GCS read failure during <code>_checkpoint</code> produces an empty manifest, then unconditionally uploads it over the real one. <strong>Fix:</strong> distinguish 404 from 5xx; on 5xx, raise + log + abort the checkpoint.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">S2 · Data loss</div>
+      <div class="title">No <code>if-generation-match</code> on manifest upload</div>
+      <div class="body"><code>manager.py:537-542</code>. Two concurrent checkpoints from different pods both download v(N), both bump to v(N+1), both upload — last writer wins; the other's blob uploads orphan. Per-session <code>asyncio.Lock</code> doesn't span processes. <strong>Fix:</strong> pass <code>if_generation_match=existing.generation</code>; on precondition-failed, re-load and retry-with-merge.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">S4 · High</div>
+      <div class="title"><code>WorkspaceManager</code> is one-org-per-process</div>
+      <div class="body"><code>manager.py:147</code>. <code>org_id</code> baked at construction. Cannot serve multiple orgs from one process — incompatible with the locked 5-scope hierarchy. <strong>Fix:</strong> replace <code>org_id: str</code> with <code>scope_resolver: Callable[[Session], MemoryScope]</code>. ~4 hours.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">S9 · High</div>
+      <div class="title">systemd unit + IaC gaps</div>
+      <div class="body"><code>scripts/sandbox-fuse.service</code>. No hardening; hardcoded <code>User=sangeet</code>; bucket creation, IAM, gcsfuse install all out-of-band; manual ADC rotation = degradation until a human re-auths. <strong>Fix:</strong> 30-min hardening pass + workload identity migration + Terraform modules for any non-dev environment.</div>
+    </div>
+  </div>
+
+  <p style="margin-top: 14px;">The 10 findings are sequenced: S1-S4 (data-loss class) block any production use; S5-S8 (operability) block production beyond a single dev VM; S9-S10 (deployment) block any non-dev environment. <mark>Sequencing is the audit's value-add — without it, "10 problems" looks the same as "3 problems."</mark></p>
+
+  <h3>The cherry-pick decision, made <em>after</em> ranking</h3>
+  <p>With severity in hand, the cherry-pick decision is mechanical:</p>
+  <ul>
+    <li><strong>Take the library.</strong> <code>workspaces/{manifest,schemas,manager}.py</code> + tests. The data-loss class fixes (S1-S4) are concrete and small — patch them in the cherry-pick PR.</li>
+    <li><strong>Leave the consumer.</strong> <code>carelink-agi/app/</code> is a parallel runtime that conflicts with Decision 1 (the BackendAGIService + WorkerAGIService split). It's a different architectural commitment.</li>
+    <li><strong>Defer FUSE enable.</strong> The mount scripts ship in PR 5 disabled. S5 (cross-session memory propagation lag), S9 (systemd hardening), S10 (versioning lifecycle) are real but addressable separately.</li>
+  </ul>
+  <p>Without the audit, "take it" or "leave it" were the only options on the table — both wrong.</p>
+
+  <h3>Where it succeeds</h3>
+  <div class="grid grid-2">
+    <div class="case win">
+      <div class="co">Win · Linux kernel maintainership</div>
+      <div class="title">Patches reviewed with structured rubrics for decades</div>
+      <div class="body">Maintainers don't ad-hoc-evaluate patches; they apply known criteria (style, ABI compat, test coverage, security implications). Severity is implicit but consistent. The longest-lived audit culture in software.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · OWASP DREAD / STRIDE</div>
+      <div class="title">Threat models with named severity tiers</div>
+      <div class="body">"This vulnerability is a STRIDE-T at DREAD 6/10" produces decisions ("fix this sprint" vs "track in backlog") that "this looks bad" can't.</div>
+    </div>
+    <div class="case win">
+      <div class="co">Win · CVE numbering</div>
+      <div class="title">Industry-wide consistent severity vocabulary</div>
+      <div class="body">CVSS scoring isn't perfect, but it lets dozens of organizations triage thousands of vulnerabilities consistently. The reduction in coordination cost is the whole point.</div>
+    </div>
+  </div>
+
+  <h3>Where it fails</h3>
+  <div class="grid grid-2">
+    <div class="case loss">
+      <div class="co">Loss · Severity by gut feeling</div>
+      <div class="title">Everyone rates everything "high"</div>
+      <div class="body">When the rubric isn't calibrated, severity inflates. The data-loss tier becomes meaningless because all 20 findings are tagged "data loss." <em>Severity is a finite resource — spend it.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Findings without remediation</div>
+      <div class="title">"Concerns" with no fix sketch</div>
+      <div class="body">A bare list of concerns is a complaint. To act, the next reader needs "what to do about it" — even a one-line sketch is enough. <em>Audit output is decision-ready or it's noise.</em></div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Misattribution to the author</div>
+      <div class="title">Severity tagged on style preference, not data risk</div>
+      <div class="body">Auditing under-disciplines becomes a way to rate someone else's choices as "wrong." Severity should describe <em>what could happen</em>, not <em>how the author wrote it</em>. Aesthetics aren't S1.</div>
+    </div>
+    <div class="case loss">
+      <div class="co">Loss · Audit can't reproduce author's context</div>
+      <div class="title">"This is wrong" — actually a misunderstanding of the constraints</div>
+      <div class="body">Sometimes the author had context the audit can't reproduce (a deployment constraint, a dependency you can't see). When confidence is low, the right move is "ask the author" — not lower the severity, not raise it. <em>Audits work; they don't replace conversations with the author.</em></div>
+    </div>
+  </div>
+
+  <h3>Audit output shape — what makes it decision-ready</h3>
+  <ol>
+    <li><strong>Title.</strong> One line. Names the issue, not the file.</li>
+    <li><strong>Location.</strong> <code>file:line</code>. Concrete, copy-pasteable.</li>
+    <li><strong>Severity.</strong> One of {data-loss, high, medium, low}. Calibrated against the rubric, not against feelings.</li>
+    <li><strong>Body.</strong> 2-4 sentences. Names the failure mode, the trigger, and the consequence.</li>
+    <li><strong>Fix sketch.</strong> One line of "what to do." If you can't sketch a fix, you don't understand the issue yet.</li>
+    <li><strong>Sequencing.</strong> "Block before merge" / "Block before non-dev" / "Track as follow-up" — derived from severity, not added independently.</li>
+  </ol>
+
+  <h3>Growth path</h3>
+  <p>Junior — reads code linearly, end-to-end, hoping understanding emerges. Senior — reads with structured questions ("what assumptions does this make?", "what fails if X is null?"). Architect — designs the audit format so the output is decision-ready: sharp edges + severity + remediation + sequencing. <mark>The senior audit answers a question the dispatcher already asked; the architect's audit produces a question the dispatcher should be asking.</mark></p>
+
+  <h3>Watch — Reading code well</h3>
+  <ul class="watch">
+    <li>
+      <span class="spk">Greg Wilson</span> — <span class="tt">What We Actually Know About Software Development</span> <span class="ctx">CUSEC · ~50min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Greg+Wilson+What+We+Actually+Know+About+Software" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">The empirical case for why code review (and code reading) work — and the kinds of structure that make them work better than ad-hoc skimming. Calibrates expectations.</p>
+    </li>
+    <li>
+      <span class="spk">Linus Torvalds</span> — <span class="tt">On Tech Debt and Code Review</span> <span class="ctx">interviews · ~30min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Linus+Torvalds+code+review+tech+debt+kernel" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">A working maintainer's view of "what makes a patch unacceptable." Severity-by-default — Linus sees ABI breakage and data loss as different categories of comment, not a single ranking. Same pattern this module advocates.</p>
+    </li>
+    <li>
+      <span class="spk">Casey Muratori</span> — <span class="tt">The Twelve-Step Refactoring</span> <span class="ctx">Handmade · ~45min</span>
+      <a class="go" href="https://www.youtube.com/results?search_query=Casey+Muratori+twelve+step+refactoring+Handmade" target="_blank" rel="noopener">Search ↗</a>
+      <p class="why">Reading existing code with the intent to integrate it. The disciplined way to figure out what assumptions you'll inherit — and which you have to break.</p>
+    </li>
+  </ul>
+
+  <h3>Storyboard — Audit, three frames</h3>
+  <div class="storyboard">
+    <div class="stage">
+
+      <div class="frame active">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 1: unstructured concerns list">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-bad">Unstructured concerns — vibes report</text>
+
+          <rect x="40" y="60" width="680" height="180" rx="7" fill="#131a22" stroke="#2f3e50" stroke-width="1.5"/>
+          <text x="60" y="86" class="lbl">• "the manifest loading looks fragile"</text>
+          <text x="60" y="106" class="lbl">• "concurrent writes might be an issue"</text>
+          <text x="60" y="126" class="lbl">• "I'm not sure about the FUSE cache TTL"</text>
+          <text x="60" y="146" class="lbl">• "the systemd unit needs work"</text>
+          <text x="60" y="166" class="lbl">• "org_id baked in feels off"</text>
+          <text x="60" y="186" class="lbl">• "what about the bucket lifecycle?"</text>
+          <text x="60" y="206" class="lbl sb-bad">→ 6 items, no severity, no location, no fix</text>
+          <text x="60" y="226" class="lbl sb-bad">→ "should we cherry-pick this?" — unanswerable</text>
+        </svg>
+        <div class="cap"><strong>1 · Vibes report.</strong> Six concerns; no severity, no file:line, no fix. The reader can't act. The decision degenerates to "take everything" or "take nothing" — both wrong. <em>"Looks fragile" is the start of an audit, not the end.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 2: structured findings with severity">
+          <text x="380" y="26" text-anchor="middle" class="ttl sb-acc">Structured — title · location · severity · fix</text>
+
+          <rect x="40" y="46" width="680" height="36" rx="5" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <rect x="48" y="54" width="22" height="20" rx="3" fill="rgba(224,122,122,.25)"/>
+          <text x="59" y="68" text-anchor="middle" class="lbl sb-bad">S1</text>
+          <text x="80" y="60" class="ttl">_load_manifest swallow-and-empty</text>
+          <text x="80" y="76" class="lbl sb-bad">manager.py:644-652 · DATA LOSS · fix: distinguish 404 from 5xx</text>
+
+          <rect x="40" y="92" width="680" height="36" rx="5" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <rect x="48" y="100" width="22" height="20" rx="3" fill="rgba(224,122,122,.25)"/>
+          <text x="59" y="114" text-anchor="middle" class="lbl sb-bad">S2</text>
+          <text x="80" y="106" class="ttl">No if-generation-match on manifest upload</text>
+          <text x="80" y="122" class="lbl sb-bad">manager.py:537-542 · DATA LOSS · fix: precondition-failed retry</text>
+
+          <rect x="40" y="138" width="680" height="36" rx="5" fill="#131a22" class="sb-bad"/>
+          <rect x="48" y="146" width="22" height="20" rx="3" fill="rgba(224,122,122,.18)"/>
+          <text x="59" y="160" text-anchor="middle" class="lbl sb-bad">S4</text>
+          <text x="80" y="152" class="ttl">WorkspaceManager is one-org-per-process</text>
+          <text x="80" y="168" class="lbl">manager.py:147 · HIGH · fix: scope_resolver param (~4h)</text>
+
+          <rect x="40" y="184" width="680" height="36" rx="5" fill="#131a22" stroke="#2f3e50"/>
+          <rect x="48" y="192" width="22" height="20" rx="3" fill="rgba(127,180,228,.25)"/>
+          <text x="59" y="206" text-anchor="middle" class="lbl sb-info">S5</text>
+          <text x="80" y="198" class="ttl">FUSE cache TTL caps memory propagation</text>
+          <text x="80" y="214" class="lbl">--stat-cache-ttl=10m · MEDIUM · fix: doc + per-path TTL</text>
+
+          <text x="380" y="246" text-anchor="middle" class="lbl sb-acc">10 findings · severity-tagged · sequenced · ready to decide on</text>
+        </svg>
+        <div class="cap"><strong>2 · Structured findings.</strong> Same observations, different shape. Severity-tagged, located, sketched. The next reader can scan to S1-S2 and see "data loss class — fix before merge"; scan to S4 and see "the org_id refactor is a 4-hour task." <em>Decision-ready output is the audit's product.</em></div>
+      </div>
+
+      <div class="frame">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Frame 3: cherry-pick decision driven by severity">
+          <text x="380" y="28" text-anchor="middle" class="ttl sb-good">Severity-driven cherry-pick decision</text>
+
+          <rect x="40" y="50" width="200" height="80" rx="6" fill="#131a22" class="sb-good" stroke-width="1.5"/>
+          <text x="140" y="74" text-anchor="middle" class="ttl sb-good">TAKE</text>
+          <text x="60" y="98" class="lbl">workspaces/{manifest,</text>
+          <text x="60" y="114" class="lbl">schemas, manager}.py</text>
+
+          <rect x="280" y="50" width="200" height="80" rx="6" fill="#131a22" class="sb-bad" stroke-width="1.5"/>
+          <text x="380" y="74" text-anchor="middle" class="ttl sb-bad">LEAVE</text>
+          <text x="300" y="98" class="lbl">carelink-agi/app/</text>
+          <text x="300" y="114" class="lbl sb-bad">conflicts w/ Decision 1</text>
+
+          <rect x="520" y="50" width="200" height="80" rx="6" fill="#131a22" class="sb-info" stroke-width="1.5"/>
+          <text x="620" y="74" text-anchor="middle" class="ttl sb-info">DEFER</text>
+          <text x="540" y="98" class="lbl">FUSE mount enable</text>
+          <text x="540" y="114" class="lbl">scripts ship disabled</text>
+
+          <rect x="40" y="150" width="680" height="44" rx="6" fill="#131a22" class="sb-acc" stroke-width="1.5"/>
+          <text x="60" y="172" class="ttl sb-acc">action plan derived from severity sequencing</text>
+          <text x="60" y="188" class="lbl">fix S1-S4 in the cherry-pick PR · S5-S8 follow-up · S9-S10 pre-non-dev</text>
+
+          <text x="380" y="226" text-anchor="middle" class="lbl sb-acc">"take the library, leave the consumer, defer enable"</text>
+          <text x="380" y="244" text-anchor="middle" class="lbl">— a decision that without ranking would have been "all" or "none"</text>
+        </svg>
+        <div class="cap"><strong>3 · Decision time.</strong> Severity sequencing gives a third option to "take everything" / "take nothing": "take the library, fix the data-loss class, defer the operational items." The decision is mechanical because the audit did the calibration. <em>An audit's worth is what it lets the dispatcher do next.</em></div>
+      </div>
+
+    </div>
+    <div class="controls">
+      <button class="nav sb-prev">← Prev</button>
+      <div class="dots"><button class="dot" aria-label="Frame 1"></button><button class="dot" aria-label="Frame 2"></button><button class="dot" aria-label="Frame 3"></button></div>
+      <div class="counter">1 / 3</div>
+      <button class="nav sb-next">Next →</button>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <h4>Drill — audit one diff with the rubric</h4>
+    <p>Pick an open PR you didn't write — yours or a teammate's. Read it with the audit shape: title · location · severity · body · fix. Produce a list of 3-5 findings tagged at appropriate tiers. Note: if you find yourself wanting to tag everything "high," you haven't calibrated yet — re-read the rubric and downgrade until severity has meaning. The discipline is in the calibration.</p>
+    <textarea placeholder="PR · 3-5 findings · severity tier each · fix sketch each..."></textarea>
+    <div class="hint">A 3-finding audit with calibrated severity is more useful than a 30-finding list at the same tier.</div>
+  </div>
 </section>
 
 </main>
