@@ -932,6 +932,16 @@
     <strong>PR 1</strong> (lease columns), <strong>PR 2</strong> (AuthClaims), <strong>PR 3</strong> (SessionLease + 9 tests), and <strong>PR 4a</strong> (AGIService split into BackendAGIService + WorkerAGIService + <code>compute_mode</code> flag) — all validated by Opus subagents working in parallel/sequential worktrees, merged into <code>feature/ai-orchestration-with-domain-agents</code>. Total 62 tests pass across affected suites (15 split + 17 auth + 9 lease + 17 cold-revive + 4 clinical-checklist). PR 4 was electively split into <strong>4a/4b/4c</strong> for smaller landings; 4a shipped with facade <code>__getattr__</code>/<code>__setattr__</code> pass-through (preserves test monkeypatch ergonomics across the split) and <code>_import_sdk</code> indirection. Local DB at revision <code>350cd04b0e9f</code>. Next up: <strong>PR 4b</strong> (worker dispatcher + entrypoint, HTTP+SSE) and <strong>PR 4c</strong> (drain.py lease-refresh ticker, asyncio.Task with cancellation).
   </div>
 
+  <div class="status-banner" style="background: linear-gradient(to right, #fff8c5, #f6f8fa); border-color: var(--warn); border-left-color: var(--warn);">
+    <strong style="color: #4d2d00;">Architecture update (2026-05-04):</strong>
+    Decision 3 was strengthened from "bucket-per-org" to <strong>complete GCP project-per-org</strong>. Each org gets its own GCP project — separate Cloud SQL DB, separate GCS buckets, separate service accounts, separate IAM, separate billing/audit/quotas. Pharmacies share resources within their org's project. Cross-org leakage is structurally impossible at the GCP-project boundary. <strong>Nothing currently shipped (PRs 1-4a) is invalidated</strong> — the change is forward-looking. Affected: PR 5 (cross-project IAM grant for shared skills templates), T1 (control plane DB tracks per-org project IDs + SA emails), T6 (provisioning workflow creates GCP projects). See PR 5 card below for the cross-project skills templates pattern.
+  </div>
+
+  <div class="status-banner" style="background: linear-gradient(to right, #f7f3ff, #f6f8fa); border-color: var(--primary); border-left-color: var(--primary);">
+    <strong style="color: var(--primary);">For the next agent (any model, any session):</strong>
+    PRs 4b → 4c → 5 → 6 → 7 → 8 are detailed below with explicit subagent dispatch playbooks, acceptance criteria, test plans, and verification steps. Each card answers: (1) what this PR does, (2) why it's needed now, (3) what files change, (4) how to dispatch an Opus subagent for it, (5) how to verify the result. <strong>Do not skip the "Verification steps" section</strong> on any card — that's how you catch the kind of test-fixture regressions PR 4a surfaced. Read the handoff at <code>docs/rx-flow-handoff-2026-05-04-pr-4bc.md</code> for the full pattern + pitfalls catalogue before touching anything.
+  </div>
+
   <div class="checklist-legend">
     <span><span class="ico pending">☐</span> Not started</span>
     <span><span class="ico progress">◐</span> In progress</span>
@@ -1344,12 +1354,12 @@ class SessionLease:
     <div class="pr-detail-header">
       <span class="pr-num-large">5</span>
       <div class="pr-title-block">
-        <div class="pr-title-text">workspaces/ cherry-pick + Skills GCS-FUSE (deferred enable)</div>
+        <div class="pr-title-text">workspaces/ cherry-pick + cross-project skills templates (FUSE deferred)</div>
         <div class="pr-pills">
           <span class="pr-pill size-m">Size: Medium</span>
           <span class="pr-pill risk-low">Risk: Low</span>
           <span class="pr-pill">Layer 4</span>
-          <span class="pr-pill">Depends on: PRs 1-4</span>
+          <span class="pr-pill">Depends on: PRs 1-4 (4a/4b/4c)</span>
         </div>
       </div>
       <span class="pr-status not-started">Not started</span>
@@ -1357,56 +1367,159 @@ class SessionLease:
     <div class="pr-detail-body">
       <div class="pr-prompt">
         <div class="label">Prompt — what this PR accomplishes</div>
-        <p>Replaces the per-call <code>tempfile.mkdtemp</code> workspace creation with a structured <code>WorkspaceManager</code> cherry-picked (with refactor) from the FUSE branch (<code>b0bb495</code>, Arjun Walia). Workspaces become deterministic-path (<code>${SANDBOX_LOCAL_ROOT}/${session_id}/</code>); skills + memories + transcripts persist in GCS via a <code>WorkspaceManifest</code>.</p>
-        <p><strong>FUSE mount config ships but stays disabled in v1</strong> (per F3 final answer); enabling FUSE is a post-v1 follow-up.</p>
-        <p><strong>Architecture:</strong> split-bucket (Item 2 = Option a) — shared <code>gs://carelink-skills-templates/</code> for templates (FUSE-mountable later) + per-org <code>gs://carelink-{org_id}-canonical/</code> for memories/sessions (GCS API only).</p>
-        <p>See: <a class="anchor-link" href="https://sangeet-code.github.io/carelink-ui-mockups/fuse-sandbox-deep-dive-2026-05-01.html">FUSE deep-dive analysis</a></p>
+        <p>Replaces the per-call <code>tempfile.mkdtemp</code> workspace creation with a structured <code>WorkspaceManager</code> cherry-picked (with refactor) from the FUSE branch (<code>b0bb495</code>, Arjun Walia). Workspaces become deterministic-path (<code>${SANDBOX_LOCAL_ROOT}/${session_id}/</code>); skills + memories + transcripts persist in GCS via a <code>WorkspaceManifest</code> (a content-addressable file index that PR 6's memory store will reuse).</p>
+        <p><strong>FUSE mount config ships but stays disabled in v1</strong> (per F3); enabling FUSE is a post-v1 follow-up after the rest stabilizes.</p>
+        <p><strong>Architecture (updated 2026-05-04 for GCP project-per-org):</strong></p>
+        <ul style="font-size: 13.5px;">
+          <li>Per-org canonical store: <code>gs://carelink-{org_id}-canonical/</code> in the org's own GCP project. Holds memories/<code>{tools,drugs}</code>, memories/<code>{patients,prescribers,insurance}</code>/&lt;pharmacy&gt;/, sessions/&lt;id&gt;/(manifest.json + artifacts/ + transcript/).</li>
+          <li>Shared platform skills templates: <code>gs://carelink-platform-skills-templates/</code> in a central platform project. Each org's project has a <strong>read-only IAM grant</strong> to this bucket (cross-project binding). Single source of truth for skills; org projects never write here.</li>
+          <li>FUSE mount target (deferred): the platform skills bucket. Read-mostly + cacheable + slowly-changing — perfect FUSE workload. v1 uses GCS API; mount script lands but unused.</li>
+        </ul>
+        <p><strong>Why this is needed now:</strong> (1) memories don't actually persist today — every <code>shutil.rmtree</code> at session end wipes them, despite expert MDs referencing cross-run learning; (2) cold-revive depends on machine-pinning via <code>extra_data-&gt;&gt;'workspace'</code> stash, which breaks worker-pool dispatch from PR 4b/4c; (3) PR 6's memory store needs a content-addressable file index it can read at session start — that's the <code>WorkspaceManifest</code>. Without PR 5, PR 6 has nothing to build on.</p>
+        <p>See: <a class="anchor-link" href="https://sangeet-code.github.io/carelink-ui-mockups/fuse-sandbox-deep-dive-2026-05-01.html">FUSE deep-dive analysis</a> (full analysis of cherry-pick scope, sharp edges S1-S10, and what NOT to take).</p>
       </div>
 
       <h4>Files changed</h4>
       <table class="file-table">
-        <tr><th>Path</th><th>Type</th><th>Source</th></tr>
-        <tr><td><code>carelink-pms/carelink/agi/workspaces/{__init__,manifest,schemas,manager}.py</code></td><td>NEW (4 files)</td><td>Cherry-pick from FUSE branch + <code>org_id → MemoryScope</code> refactor</td></tr>
-        <tr><td><code>carelink-pms/tests/section1_unit/test_workspace_manager.py</code></td><td>NEW</td><td>23 tests cherry-picked + 4 NEW (concurrency, S1-S3 fixes)</td></tr>
-        <tr><td><code>carelink-pms/carelink/agi/service.py</code></td><td>Edit</td><td>Replace <code>_prepare_workspace</code>/<code>_copy_skills</code>/<code>_copy_agents</code>/<code>_write_restish_config</code> + retire <code>extra_data-&gt;&gt;'workspace'</code> stash</td></tr>
-        <tr><td><code>carelink-pms/carelink/agi/sessions/sweeper.py</code></td><td>NEW</td><td>Adapted from FUSE branch's <code>carelink-agi/app/sweeper.py</code></td></tr>
-        <tr><td><code>carelink-pms/carelink/agi/sessions/finalize.py</code></td><td>NEW</td><td>Hybrid <code>finalize()</code> wiring (Item 1): event-driven for jobs/scheduled, TTL-only for chat</td></tr>
-        <tr><td><code>scripts/setup-sandbox-bucket.sh</code></td><td>NEW</td><td>Cherry-pick + lifecycle policy (<code>NumNewerVersions=10</code>); rebrand for split-bucket</td></tr>
-        <tr><td><code>scripts/mount-sandbox-fuse.sh</code></td><td>NEW</td><td>Cherry-pick; templated user via <code>${USER:?}</code>; <strong>not enabled by default</strong></td></tr>
-        <tr><td><code>scripts/sandbox-fuse.service</code></td><td>NEW</td><td>Cherry-pick + hardening: <code>PrivateTmp</code>, <code>NoNewPrivileges</code>, <code>ProtectSystem=strict</code>, <code>ProtectHome=tmpfs</code></td></tr>
-        <tr><td><code>scripts/bench-sandbox.py</code></td><td>NEW</td><td>Cherry-pick + add p50/p95 + 10× repeats</td></tr>
-        <tr><td><code>docs/agi-sandbox-walkthrough.md</code> + <code>docs/agi-sandbox-runbook.md</code></td><td>NEW</td><td>Rebranded from FUSE branch's docs</td></tr>
+        <tr><th>Path</th><th>Type</th><th>Source / notes</th></tr>
+        <tr><td><code>carelink-pms/carelink/agi/workspaces/__init__.py</code></td><td>NEW</td><td>Cherry-pick verbatim. Re-exports <code>WorkspaceManager</code>, <code>WorkspaceManifest</code>, <code>SandboxLayout</code>, <code>HydrateOptions</code>.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/workspaces/manifest.py</code></td><td>NEW</td><td>Cherry-pick verbatim (110 LoC). Pure dataclass + JSON serde; zero CareLink coupling.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/workspaces/schemas.py</code></td><td>NEW</td><td>Cherry-pick + replace <code>BUCKET_MEMORIES</code> constant with <code>MemoryScope</code> builder (5-scope path resolver).</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/workspaces/manager.py</code></td><td>NEW</td><td>Cherry-pick + refactor: <code>__init__(org_id=…)</code> → <code>__init__(scope_resolver=…, gcs_client=…, templates_gcs_client=…)</code>. The two GCS clients support cross-project access (per-org bucket + shared platform templates bucket).</td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_workspace_manager.py</code></td><td>NEW</td><td>Cherry-pick 23 tests (rename fixture <code>org_id</code> → <code>scope</code>) + add 4 NEW: concurrency, <code>_load_manifest</code> 5xx, manifest precondition, <code>finalize</code> race. These 4 are the S1-S3 sharp-edge fixes.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/service.py</code></td><td>Edit</td><td>Replace <code>_prepare_workspace</code>/<code>_copy_skills</code>/<code>_copy_agents</code>/<code>_write_restish_config</code> bodies with calls into <code>WorkspaceManager.hydrate(...)</code>. NOTE: in PR 4a these moved from service.py to worker/service.py; verify line numbers post-PR-4a.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/service.py</code></td><td>Edit</td><td>Retire <code>extra_data-&gt;&gt;'workspace'</code> cold-revive stash (dead code at <code>service.py:702, 902-916</code> in the original file — verify post-PR-4a; the dead code may now live in worker/service.py).</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/sessions/finalize.py</code></td><td>NEW</td><td>Hybrid <code>finalize()</code> wiring (per F5): event-driven for jobs (job-completion signal) + scheduled tasks (task-finish signal); TTL-only for chat (no clean "browser closed" signal in v1).</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/config.py</code></td><td>Edit</td><td>Add <code>SANDBOX_LOCAL_ROOT</code>, <code>SANDBOX_FUSE_ROOT</code> (default unset → GCS API), <code>SANDBOX_TTL_HOURS=24.0</code>, <code>PLATFORM_SKILLS_BUCKET="carelink-platform-skills-templates"</code>, <code>SANDBOX_CANONICAL_BUCKET_TEMPLATE="carelink-{org_id}-canonical"</code>.</td></tr>
+        <tr><td><code>scripts/setup-platform-skills-bucket.sh</code></td><td>NEW</td><td>Cherry-pick + adapt: bootstraps the shared platform skills bucket (run once at platform setup, NOT per-org). Includes lifecycle policy (<code>NumNewerVersions=10</code>) + IAM template for granting read-only to org projects.</td></tr>
+        <tr><td><code>scripts/setup-org-canonical-bucket.sh</code></td><td>NEW</td><td>Per-org provisioning helper (called by T6's provisioning workflow): creates <code>gs://carelink-{org_id}-canonical/</code> in the org's project + UBLA + public-access-prevention + lifecycle.</td></tr>
+        <tr><td><code>scripts/mount-sandbox-fuse.sh</code></td><td>NEW</td><td>Cherry-pick; templated user via <code>${USER:?}</code>; targets the <strong>platform skills bucket</strong> (not per-org). <strong>Not enabled by default.</strong></td></tr>
+        <tr><td><code>scripts/sandbox-fuse.service</code></td><td>NEW</td><td>Cherry-pick + hardening: <code>PrivateTmp</code>, <code>NoNewPrivileges</code>, <code>ProtectSystem=strict</code>, <code>ProtectHome=tmpfs</code>, capability bounds.</td></tr>
+        <tr><td><code>scripts/bench-sandbox.py</code></td><td>NEW</td><td>Cherry-pick + add p50/p95 + 10× repeats; default to <code>--fake</code> for CI.</td></tr>
+        <tr><td><code>docs/agi-sandbox-walkthrough.md</code> + <code>docs/agi-sandbox-runbook.md</code></td><td>NEW</td><td>Rebranded from FUSE branch's docs. Update to reflect cross-project skills templates pattern.</td></tr>
       </table>
+
+      <h4>Code shape — MemoryScope resolver</h4>
+      <pre>@dataclass(frozen=True)
+class MemoryScope:
+    """Resolves canonical memory paths for the locked 5-scope hierarchy.
+
+    Platform → Org → Pharmacy → User → Session.
+    """
+    org_id: str                          # always required
+    pharmacy_id: str | None = None       # required for patient/prescriber/insurance memories
+    user_id: str | None = None           # reserved for user-scope memories (Phase 2)
+    session_id: str | None = None        # required for session-scope artifacts/transcripts
+
+    def memory_path(self, bucket: str) -> str:
+        """tools/drugs at org-share; patients/prescribers/insurance at pharmacy."""
+        ...
+
+    def session_path(self) -> str: ...
+    def transcript_path(self) -> str: ...
+
+# Construction at create_session boundary:
+scope = MemoryScope(
+    org_id=session.org_id,
+    pharmacy_id=session.extra_data.get("pharmacy_id"),
+    session_id=session.id,
+)
+manager = WorkspaceManager(
+    scope_resolver=lambda: scope,
+    gcs_client=GCSClient(f"carelink-{scope.org_id}-canonical"),  # per-org project
+    templates_gcs_client=GCSClient("carelink-platform-skills-templates"),  # shared
+)</pre>
 
       <h4>Pre-merge bug fixes (FUSE deep-dive sharp edges S1-S4)</h4>
       <ul class="checklist">
-        <li><span><strong>S1:</strong> <code>_load_manifest</code> distinguishes 404 (legit empty) from 5xx (raise + abort checkpoint)</span></li>
-        <li><span><strong>S2:</strong> Manifest upload uses <code>if_generation_match=existing.generation</code> with retry-on-precondition-failed</span></li>
-        <li><span><strong>S3:</strong> <code>finalize()</code> holds the lock continuously across checkpoint + rmtree</span></li>
-        <li><span><strong>S4:</strong> <code>WorkspaceManager.__init__</code> takes a <code>MemoryScope</code> resolver (5-scope hierarchy) instead of baked <code>org_id</code></span></li>
+        <li><span><strong>S1:</strong> <code>_load_manifest</code> distinguishes 404 (legit empty) from 5xx (raise + abort checkpoint). Without this fix, a transient GCS read failure overwrites the real manifest with an empty one.</span></li>
+        <li><span><strong>S2:</strong> Manifest upload uses <code>if_generation_match=existing.generation</code> with retry-on-precondition-failed. Without this, two concurrent pods last-writer-win on every blob.</span></li>
+        <li><span><strong>S3:</strong> <code>finalize()</code> holds the lock continuously across checkpoint + rmtree. Without this, a concurrent <code>hydrate</code> can land between and get rmtree'd.</span></li>
+        <li><span><strong>S4:</strong> <code>WorkspaceManager.__init__</code> takes a <code>scope_resolver</code> (5-scope hierarchy) + dual GCS clients (per-org canonical + shared platform templates) instead of baked <code>org_id</code>.</span></li>
+      </ul>
+
+      <h4>Locked decisions referenced</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>Decision 3 (strengthened 2026-05-04):</strong> GCP project-per-org → cross-project skills templates pattern (shared platform bucket + per-org canonical buckets in their own project).</li>
+        <li><strong>5-scope hierarchy</strong> (locked in architecture): Platform → Org → Pharmacy → User → Session. The <code>MemoryScope</code> resolver embodies this.</li>
+        <li><strong>Append-only memory + 14d TTL</strong> (locked in architecture): PR 5 ships the transport (manifest + checkpoint pipeline). PR 6 adds the merger semantics on top.</li>
+        <li><strong>F1:</strong> Authorship confirmed → cherry-pick from <code>inbound-voice-fuse-sandbox</code> branch acceptable.</li>
+        <li><strong>F3:</strong> FUSE deferred to post-v1; scripts ship disabled (<code>SANDBOX_FUSE_ROOT</code> unset by default).</li>
+        <li><strong>F5:</strong> Hybrid <code>finalize()</code> wiring — event-driven for jobs/scheduled, TTL-only for chat in v1.</li>
       </ul>
 
       <h4>Acceptance criteria</h4>
       <ul class="checklist">
-        <li><span>Deterministic <code>${SANDBOX_LOCAL_ROOT}/${session_id}/</code> path</span></li>
-        <li><span><code>extra_data-&gt;&gt;'workspace'</code> cold-revive stash retired (<code>service.py:702, 902-916</code> dead code removed)</span></li>
+        <li><span>Deterministic <code>${SANDBOX_LOCAL_ROOT}/${session_id}/</code> path (no more <code>mkdtemp</code> non-determinism)</span></li>
+        <li><span><code>extra_data-&gt;&gt;'workspace'</code> cold-revive stash retired; cold-revive re-derives path from <code>session_id</code></span></li>
         <li><span>23 cherry-picked tests pass (fixture renamed: <code>org_id="test-org"</code> → <code>scope=test_scope</code>)</span></li>
         <li><span>4 NEW tests pass: concurrency, <code>_load_manifest</code> 5xx, manifest precondition, <code>finalize</code> race</span></li>
         <li><span>Hybrid <code>finalize()</code> wired: jobs/scheduled tasks fire event-driven; chat stays TTL-only</span></li>
-        <li><span>Split-bucket architecture: shared templates bucket + per-org canonical buckets</span></li>
-        <li><span><code>SANDBOX_FUSE_ROOT</code> unset by default; GCS API path works (FUSE deferred)</span></li>
-        <li><span><code>pytest carelink-pms/tests/</code> 0 failures</span></li>
-        <li><span>Bench script runs in <code>--fake</code> mode and reports numbers</span></li>
-        <li><span>No regression in cold-revive flow</span></li>
+        <li><span>Cross-project skills templates pattern: <code>WorkspaceManager</code> reads templates from <code>PLATFORM_SKILLS_BUCKET</code> via <code>templates_gcs_client</code>; writes (memories, artifacts, transcripts) only go to per-org canonical bucket</span></li>
+        <li><span><code>SANDBOX_FUSE_ROOT</code> unset by default; GCS API path works for both buckets</span></li>
+        <li><span>S1-S4 sharp-edge fixes from FUSE deep-dive verified by tests</span></li>
+        <li><span>No regression in cold-revive flow (verified post-merge by test agent re-running PR 4 cold-revive tests)</span></li>
+        <li><span>No regression in PR 1+2+3+4a tests (62 tests still green)</span></li>
+        <li><span>Bench script runs in <code>--fake</code> mode and reports p50/p95</span></li>
       </ul>
 
       <h4>Test plan</h4>
       <ul class="checklist">
-        <li><span>Hot-path: fresh chat → workspace created, hydrated, turn runs, checkpoint to GCS, finalized</span></li>
-        <li><span>Cold-revive: kill backend mid-turn → restart → verify resume from GCS</span></li>
+        <li><span>Hot-path: fresh chat → workspace created at deterministic path, hydrated from both buckets, turn runs, checkpoint to per-org canonical, finalized</span></li>
+        <li><span>Cold-revive: kill backend mid-turn → restart → verify resume from per-org canonical (no machine-pinning required)</span></li>
         <li><span>Two concurrent sessions: confirm sandbox isolation</span></li>
         <li><span>Cross-session memory: A writes → checkpoint → B hydrates → sees A's memory file</span></li>
-        <li><span>FUSE-disabled fallback: <code>SANDBOX_FUSE_ROOT=</code> unset, confirm GCS API still works</span></li>
+        <li><span>FUSE-disabled fallback: <code>SANDBOX_FUSE_ROOT=</code> unset, confirm GCS API works for both buckets</span></li>
+        <li><span>Cross-project read: simulate read-only IAM on platform bucket → confirm <code>WorkspaceManager</code> can read templates without write access</span></li>
+      </ul>
+
+      <h4>Verification steps (post-subagent merge into staging)</h4>
+      <ol style="font-size: 13.5px;">
+        <li>Stage the diff in main worktree (cherry-pick <code>--no-commit</code>; if it auto-commits, <code>git reset --soft</code> back to the previous HEAD).</li>
+        <li>Verify staging: <code>git diff --cached --stat</code> should show ~12-15 files affected, no <code>routers/</code> changes, no frontend changes.</li>
+        <li>Dispatch <strong>test agent</strong> + <strong>verification agent</strong> in parallel.
+          <ul>
+            <li>Test agent runs: <code>pytest tests/section1_unit/test_workspace_manager.py</code> + <code>tests/section1_unit/test_agi_service_split.py</code> + <code>tests/section1_unit/test_auth.py</code> + <code>tests/section1_unit/test_session_lease.py</code> + <code>tests/section3_integrations/test_invoke_expert_clinical_checklist.py</code> + <code>tests/section4_services/test_agi_cold_revive.py</code>. Should be 62 + 27 = 89 passed.</li>
+            <li>Test agent also runs <code>scripts/bench-sandbox.py --fake</code> and checks output isn't garbage.</li>
+            <li>Verification agent runs the acceptance-criteria checklist + reads the staged diff for: SDK boundary preserved (no SDK in <code>backend.py</code>), no router changes, no frontend changes, the 4 sharp-edge fixes verifiable inline.</li>
+          </ul>
+        </li>
+        <li>If any test fails: STOP. Surface the failure with file:line, attribute to PR 5 (split-introduced) vs pre-existing (stash + re-test on HEAD). Do not paper-over with <code>git restore</code>.</li>
+        <li>If both agents pass, surface the staged diff + recommended 1-line commit message to the user. Wait for them to commit.</li>
+        <li>After commit: update the canonical HTML — flip PR 5 status badge to "Merged", add Shipped paragraph, tick acceptance/test criteria. Push to mock-ui repo.</li>
+        <li>Remove the PR 5 worktree: <code>git worktree remove .claude/worktrees/agi-pr-5-workspaces</code>.</li>
+      </ol>
+
+      <h4>Subagent dispatch playbook</h4>
+      <ol style="font-size: 13.5px;">
+        <li>Verify HEAD on main (should be PR 4c's commit by the time PR 5 starts; capture exact SHA).</li>
+        <li>Create worktree: <code>git worktree add -b agi/pr-5-workspaces .claude/worktrees/agi-pr-5-workspaces &lt;HEAD&gt;</code>.</li>
+        <li>Confirm the FUSE branch worktree is still mounted at <code>.claude/worktrees/inbound-voice-fuse-sandbox/</code> @ <code>b0bb495</code>. The cherry-pick agent reads from there.</li>
+        <li>Dispatch <strong>Opus</strong> subagent with these hard constraints:
+          <ul>
+            <li>YOUR WORKTREE: <code>.claude/worktrees/agi-pr-5-workspaces/</code> — do not touch outside.</li>
+            <li>VENV: <code>/Users/sangeet/src/carelink-monorepo/carelink-pms/.venv/</code> — do NOT rebuild.</li>
+            <li>Local PG only: <code>postgresql+asyncpg://postgres:postgres@localhost:5432/carelink</code>.</li>
+            <li>READ-ONLY source: FUSE worktree at <code>.claude/worktrees/inbound-voice-fuse-sandbox/carelink-pms/carelink/agi/workspaces/</code>.</li>
+            <li>DO NOT add new dependencies.</li>
+            <li>DO NOT push to any remote.</li>
+            <li>DO NOT cherry-pick the <code>carelink-agi/</code> v2 service (conflicts with Decision 1 — see FUSE deep-dive).</li>
+            <li>Apply S1-S4 sharp-edge fixes during cherry-pick (don't take the FUSE branch's broken code as-is).</li>
+            <li>Match codebase style for async DB ops (look at <code>carelink/agi/sessions/lease.py</code> from PR 3 for the <code>Database.session()</code> pattern).</li>
+            <li>Commit on the feature branch <code>agi/pr-5-workspaces</code> with <code>Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</code> trailer.</li>
+            <li>Report: commit SHA, test pass count, any spec deviations (especially around the dual-GCS-client constructor — surface for approval).</li>
+          </ul>
+        </li>
+      </ol>
+
+      <h4>Pitfalls — read before dispatching the subagent</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>The <code>sessions/</code> package already exists</strong> (from cancel-engine sprint) with <code>store.py</code> + <code>sweeper.py</code>. PR 5 adds <code>finalize.py</code> and may add adapt the existing <code>sweeper.py</code> rather than create a new one. The subagent must read the directory listing FIRST and treat existing files as untouched unless explicitly instructed.</li>
+        <li><strong>The <code>workspaces/</code> module already exists</strong> in the FUSE branch worktree at <code>.claude/worktrees/inbound-voice-fuse-sandbox/carelink-pms/carelink/agi/workspaces/</code>. Cherry-pick from there. The 1,022 LoC implementation + 666 LoC of tests are the canonical source.</li>
+        <li><strong>The carelink-agi/ v2 service in the FUSE branch is NOT to be picked.</strong> It's a parallel runtime that conflicts with PR 4a's BackendAGIService + WorkerAGIService split. Cherry-pick the library half ONLY.</li>
+        <li><strong>Workspace prep moved from <code>service.py</code> to <code>worker/service.py</code> in PR 4a.</strong> When the subagent replaces <code>_prepare_workspace</code> etc., they're editing <code>worker/service.py</code> now, not the original location. Verify line numbers before editing.</li>
+        <li><strong>The cold-revive <code>extra_data-&gt;&gt;'workspace'</code> stash retirement</strong> requires testing the cold-revive path post-PR-5 (not just post-PR-4). Failures here would be PR-5-introduced regressions.</li>
+        <li><strong>Cross-project IAM cannot be tested locally.</strong> Tests use <code>FakeGCSClient</code>; production verification of cross-project read access is out-of-scope for PR 5 (lives in T6 provisioning workflow validation).</li>
       </ul>
 
       <div class="pr-not-section">
@@ -1416,57 +1529,502 @@ class SessionLease:
           <li>Not enabling FUSE in production by default (deferred per F3)</li>
           <li>Not adding the memory merger layer (PR 6)</li>
           <li>Not adding workload identity / Cloud Run port for the FUSE mount (post-v1)</li>
+          <li>Not setting up cross-project IAM grants (lives in T6 provisioning workflow + a one-off platform setup script)</li>
+          <li>Not modifying any router (PR 7) or frontend</li>
         </ul>
       </div>
-
-      <h4>Decisions referenced</h4>
-      <ul style="font-size: 13.5px;">
-        <li><strong>Decision 3:</strong> Bucket-per-org → split-bucket architecture</li>
-        <li><strong>F1 (FUSE Q1):</strong> Authorship confirmed → cherry-pick acceptable</li>
-        <li><strong>Item 2:</strong> Split-bucket (shared templates + per-org canonical)</li>
-        <li><strong>Item 3:</strong> FUSE deferred to post-v1; scripts ship disabled</li>
-        <li><strong>Item 1:</strong> Hybrid <code>finalize()</code> wiring</li>
-      </ul>
     </div>
   </div>
 
   <hr class="pr-section-divider">
 
-  <h3>PRs 6-8 — outline (detailed scoping after PR 5 lands)</h3>
-
-  <div class="pr-card">
-    <span class="pr-num">6</span><span class="pr-title">Memory store + selector + merger</span>
-    <div class="pr-pills">
-      <span class="pr-pill size-l">Size: Large</span>
-      <span class="pr-pill risk-med">Risk: Medium</span>
-      <span class="pr-pill">Depends on: PRs 4-5</span>
+  <!-- ============== PR 6 — NOT STARTED ============== -->
+  <div class="pr-card-detailed" data-pr="6">
+    <div class="pr-detail-header">
+      <span class="pr-num-large">6</span>
+      <div class="pr-title-block">
+        <div class="pr-title-text">Memory store + selector + merger (the canonical learning tier)</div>
+        <div class="pr-pills">
+          <span class="pr-pill size-l">Size: Large</span>
+          <span class="pr-pill risk-med">Risk: Medium</span>
+          <span class="pr-pill">Layer 4</span>
+          <span class="pr-pill">Depends on: PR 5</span>
+        </div>
+      </div>
+      <span class="pr-status not-started">Not started</span>
     </div>
-    <div class="pr-body">
-      <p>The actual canonical learning tier. NEW files in <code>agi/memory/</code>. Hooks into <code>create_session</code> (read snapshot at start) and <code>finalize_session</code> (merge writes at end). This is the feature that "memories actually persist" depends on. <strong>Builds on</strong> the <code>WorkspaceManifest</code> from PR 5 — the manifest is the file index the memory selector reads.</p>
+    <div class="pr-detail-body">
+      <div class="pr-prompt">
+        <div class="label">Prompt — what this PR accomplishes</div>
+        <p>This is the feature where "memories actually persist" finally becomes true. Today, every expert MD references <code>memories/&lt;bucket&gt;/&lt;key&gt;.md</code> for cross-run learning, but <code>shutil.rmtree</code> at session end wipes the workspace before checkpoint. PR 5 fixes the transport (workspaces persist via <code>WorkspaceManifest</code> to GCS); PR 6 adds the <strong>content semantics</strong> — append-only entries, dated and signed, merged via comment-fence syntax in MD, with 14-day TTL.</p>
+        <p><strong>Three components</strong> in a new <code>carelink-pms/carelink/agi/memory/</code> package:</p>
+        <ul style="font-size: 13.5px;">
+          <li><strong>Store</strong> (<code>store.py</code>) — atomic read/write of memory MD files in the per-org canonical bucket. Uses PR 5's <code>WorkspaceManager</code> + <code>WorkspaceManifest</code> for the file index. Wraps GCS API with <code>if_generation_match</code> for distributed-safe writes.</li>
+          <li><strong>Selector</strong> (<code>selector.py</code>) — at session start, reads the manifest, filters memories by (a) the locked role × workflow access matrix, (b) the 14-day TTL window, (c) the explicit memory budget per session. Returns the subset to hydrate into the workspace.</li>
+          <li><strong>Merger</strong> (<code>merger.py</code>) — at session finalize, walks the workspace's mutated memory files and writes append-only entries back to the canonical store. Each entry: dated (UTC ISO 8601), signed (actor_id from session), wrapped in a comment-fence syntax (e.g. <code>&lt;!-- entry: 2026-05-04T10:23Z by user@org --&gt;</code>) so concurrent appends don't conflict-clobber.</li>
+        </ul>
+        <p><strong>Why this is needed now:</strong> (1) PR 5 makes memories durable but doesn't enforce append-only or TTL — without PR 6, two sessions writing to the same memory file race-overwrite each other. (2) The locked architecture (Axes 4 + 7 + 8 + 9) requires read-side authorization filtering, append-only writes, and the 14d TTL — all of which are content-level concerns the manifest doesn't address. (3) Without PR 6, the cross-pharmacy memory isolation that makes the 5-scope hierarchy meaningful is just a path convention, not a policy enforcement.</p>
+      </div>
+
+      <h4>Files changed</h4>
+      <table class="file-table">
+        <tr><th>Path</th><th>Type</th><th>Purpose</th></tr>
+        <tr><td><code>carelink-pms/carelink/agi/memory/__init__.py</code></td><td>NEW</td><td>Re-exports <code>MemoryStore</code>, <code>MemorySelector</code>, <code>MemoryMerger</code>, <code>MemoryEntry</code>.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/memory/store.py</code></td><td>NEW</td><td>Atomic read/write of memory MD files. Wraps PR 5's <code>WorkspaceManager</code> for the GCS path; adds <code>if_generation_match</code>; exposes <code>read(scope, bucket, key) → str</code>, <code>append(scope, bucket, key, entry: MemoryEntry) → None</code>.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/memory/selector.py</code></td><td>NEW</td><td>Read-side filtering. <code>select_for_session(scope, role, workflow_id) → list[MemoryFile]</code>. Reads manifest, applies role × workflow access matrix (from workflow YAML manifests), filters by 14d TTL, enforces per-session memory budget (default 32 files; configurable).</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/memory/merger.py</code></td><td>NEW</td><td>Write-side. <code>merge_session_writes(scope, session_id, actor_id, workspace) → MergeReport</code>. Walks workspace memory dir, diffs against pre-session snapshot from manifest, appends new entries with comment-fence wrapper. Returns counts (new entries, files touched) for observability.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/memory/entry.py</code></td><td>NEW</td><td><code>MemoryEntry</code> Pydantic v2 model: <code>actor_id: str</code>, <code>created_at: datetime</code>, <code>workflow_id: str</code>, <code>session_id: str</code>, <code>body: str</code>. Includes <code>to_fenced_md() → str</code> + <code>parse_fenced_md(text) → list[MemoryEntry]</code> for round-trip.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/memory/access_matrix.py</code></td><td>NEW</td><td>The locked role × workflow read-side authorization matrix (Axis 7). Reads workflow YAML manifests for "memories.read" declarations. Pure function: <code>can_read(role, workflow_id, memory_bucket) → bool</code>.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/memory/ttl_sweeper.py</code></td><td>NEW</td><td>Inngest cron handler for the 14d TTL sweep (Axis 9). Runs every 6h. For each org: list memory files; for each file's entries, drop those older than 14d; re-write with <code>if_generation_match</code>. Reports purge counts.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/service.py</code></td><td>Edit</td><td><code>create_session</code> calls <code>MemorySelector.select_for_session(...)</code> and passes the file list to <code>WorkspaceManager.hydrate(...)</code>'s <code>HydrateOptions(memories=...)</code>. <code>finalize_session</code> calls <code>MemoryMerger.merge_session_writes(...)</code> after checkpoint.</td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_memory_store.py</code></td><td>NEW</td><td>Atomic-write tests with <code>FakeGCSClient</code>. Concurrent-write race test (real GCS or fake with generation tracking).</td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_memory_selector.py</code></td><td>NEW</td><td>Role × workflow filter tests; TTL filter tests; budget enforcement tests.</td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_memory_merger.py</code></td><td>NEW</td><td>Append-only invariant tests (existing entries never mutated); comment-fence parse round-trip; concurrent-merge race test.</td></tr>
+        <tr><td><code>carelink-pms/tests/section3_integrations/test_memory_lifecycle.py</code></td><td>NEW</td><td>End-to-end: session start → hydrate → mutate → finalize → next session sees the appended entry. Uses real PG + FakeGCSClient.</td></tr>
+        <tr><td><code>carelink-pms/tests/section4_services/test_memory_ttl_sweeper.py</code></td><td>NEW</td><td>Cron sweep prunes 14d-old entries; preserves recent ones; idempotent.</td></tr>
+      </table>
+
+      <h4>Code shape — MemoryEntry + comment-fence syntax</h4>
+      <pre>class MemoryEntry(BaseModel):
+    actor_id: str
+    created_at: datetime
+    workflow_id: str
+    session_id: str
+    body: str
+
+    def to_fenced_md(self) -&gt; str:
+        return (
+            f"&lt;!-- entry: {self.created_at.isoformat()} "
+            f"actor={self.actor_id} workflow={self.workflow_id} "
+            f"session={self.session_id} --&gt;\n"
+            f"{self.body}\n"
+            f"&lt;!-- /entry --&gt;\n"
+        )
+
+    @classmethod
+    def parse_fenced_md(cls, text: str) -&gt; list["MemoryEntry"]:
+        # Regex against &lt;!-- entry: ... --&gt;...&lt;!-- /entry --&gt; blocks.
+        # Must be order-preserving and idempotent.
+        ...
+
+# Example file content after merger:
+#
+# # Patient: Jane Doe (id=p_42)
+#
+# &lt;!-- entry: 2026-05-01T14:30:00Z actor=user@org workflow=rx-flow session=s1 --&gt;
+# Patient prefers generic substitution when available.
+# &lt;!-- /entry --&gt;
+#
+# &lt;!-- entry: 2026-05-04T09:15:00Z actor=user@org workflow=rx-flow session=s2 --&gt;
+# DUR finding: confirmed lisinopril/HCTZ combination is intentional per MD.
+# &lt;!-- /entry --&gt;</pre>
+
+      <h4>Locked decisions referenced</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>Axis 3:</strong> Memory scope = pharmacy-scoped for patients/prescribers/insurance; org-share for tools/drugs.</li>
+        <li><strong>Axis 4:</strong> Memory write authority — any expert anytime; quality emerges via 14d TTL not gating.</li>
+        <li><strong>Axis 6:</strong> Memory bucket scope — tools/drugs at org-share; patients/prescribers/insurance at pharmacy.</li>
+        <li><strong>Axis 7:</strong> Read-side authorization — subset memories by role × workflow at session start.</li>
+        <li><strong>Axis 8:</strong> Conflict resolution — append-only, dated + signed, comment-fence syntax.</li>
+        <li><strong>Axis 9:</strong> 14-day TTL; Inngest cron sweep every 6h.</li>
+        <li><strong>Decision 3 (strengthened):</strong> All memory writes go to the per-org canonical bucket; cross-org leakage impossible at the GCP-project boundary.</li>
+      </ul>
+
+      <h4>Acceptance criteria</h4>
+      <ul class="checklist">
+        <li><span><code>MemoryStore</code>, <code>MemorySelector</code>, <code>MemoryMerger</code>, <code>MemoryEntry</code> all importable from <code>carelink.agi.memory</code></span></li>
+        <li><span>Selector applies role × workflow access matrix correctly (per-axis test cases for each locked combination)</span></li>
+        <li><span>Selector applies 14d TTL filter correctly</span></li>
+        <li><span>Selector enforces per-session memory budget (32 files default)</span></li>
+        <li><span>Merger never mutates existing entries (append-only invariant test)</span></li>
+        <li><span>Merger writes use <code>if_generation_match</code> with retry-on-precondition-failed</span></li>
+        <li><span>Comment-fence parse round-trip is byte-stable</span></li>
+        <li><span>End-to-end test: session A writes → finalize → session B selects → sees the entry</span></li>
+        <li><span>TTL sweeper purges 14d-old entries; preserves recent; idempotent (run twice = same result)</span></li>
+        <li><span><code>create_session</code> calls selector; <code>finalize_session</code> calls merger</span></li>
+        <li><span>No router changes (PR 7 territory); no frontend changes; no new dependencies</span></li>
+        <li><span>62/62 tests from PRs 1-5 still pass (no regression)</span></li>
+      </ul>
+
+      <h4>Test plan</h4>
+      <ul class="checklist">
+        <li><span><code>pytest carelink-pms/tests/section1_unit/test_memory_*.py -v</code> — all unit tests pass</span></li>
+        <li><span><code>pytest carelink-pms/tests/section3_integrations/test_memory_lifecycle.py -v</code> — end-to-end pass</span></li>
+        <li><span><code>pytest carelink-pms/tests/section4_services/test_memory_ttl_sweeper.py -v</code> — sweep correctness</span></li>
+        <li><span>Manual: open psql, watch <code>agi_sessions</code> rows during a chat session; verify selector hydrate path runs at start, merger runs at finalize</span></li>
+        <li><span>Manual: trigger Inngest cron sweep; observe purge counts in logs</span></li>
+      </ul>
+
+      <h4>Verification steps (post-subagent merge into staging)</h4>
+      <ol style="font-size: 13.5px;">
+        <li>Stage diff in main worktree; verify ~12 files affected (10 NEW + 2 edits in worker/service.py + worker tests).</li>
+        <li>Dispatch <strong>test agent</strong>:
+          <ul>
+            <li>Runs all PR 6 unit + integration + service tests</li>
+            <li>Runs PR 1-5 regression suites</li>
+            <li>Captures any regressions in <code>test_workspace_manager.py</code> (PR 5 manifest API changes could ripple)</li>
+          </ul>
+        </li>
+        <li>Dispatch <strong>verification agent</strong>:
+          <ul>
+            <li>Reads diff against PR 6 acceptance criteria</li>
+            <li>Verifies <strong>append-only invariant</strong> — grep merger.py for any <code>file.write()</code> or <code>file.replace()</code> patterns that aren't append-only</li>
+            <li>Verifies role × workflow access matrix matches the workflow YAML manifests' <code>memories.read</code> declarations</li>
+            <li>Confirms no SDK imports in memory module (the memory layer must work in both backend + worker contexts)</li>
+          </ul>
+        </li>
+        <li>If pass: surface staged diff + 1-line commit message; user commits.</li>
+        <li>Update HTML doc — flip PR 6 status to Merged. Push to mock-ui.</li>
+      </ol>
+
+      <h4>Subagent dispatch playbook</h4>
+      <ol style="font-size: 13.5px;">
+        <li>Verify HEAD on main (should be PR 5's commit when PR 6 starts).</li>
+        <li>Create worktree: <code>git worktree add -b agi/pr-6-memory .claude/worktrees/agi-pr-6-memory &lt;HEAD&gt;</code>.</li>
+        <li>Dispatch <strong>Opus</strong> subagent (this is a Large PR — budget ~45-60 min runtime):
+          <ul>
+            <li>Read <code>carelink/agi/workspaces/manifest.py</code> first to understand the file index it'll consume.</li>
+            <li>Read the workflow YAML manifests at <code>carelink-pms/carelink/agi/workflows/definitions/</code> to extract the role × workflow access matrix (the access_matrix.py module is a structured form of this YAML).</li>
+            <li>Read <code>carelink/agi/sessions/lease.py</code> for the async-DB pattern.</li>
+            <li>Implement store → selector → merger → entry → access_matrix → ttl_sweeper in that order; tests alongside each module.</li>
+            <li>Wire selector + merger into <code>worker/service.py</code> at the existing hydrate/checkpoint hooks (NOT into facade or backend.py).</li>
+            <li>DO NOT add new dependencies.</li>
+            <li>DO NOT modify any router or frontend.</li>
+            <li>Surface any spec deviations (especially around the comment-fence syntax — get user approval if changing the format).</li>
+          </ul>
+        </li>
+      </ol>
+
+      <h4>Pitfalls — read before dispatching the subagent</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>Append-only is a runtime invariant, not just a design preference.</strong> Two concurrent sessions writing to the same patient memory file MUST not lose each other's entries. <code>if_generation_match</code> + retry-on-conflict + parse-merge-rewrite is the pattern. Anti-pattern: full-file overwrite based on in-memory diff.</li>
+        <li><strong>The role × workflow access matrix lives in workflow YAML manifests</strong>, not in code. <code>access_matrix.py</code> reads them; doesn't hardcode them. Hardcoding causes drift the next time a workflow is added.</li>
+        <li><strong>14d TTL applies per-entry, not per-file.</strong> An old patient memory file with a recent entry should keep the recent entry and drop the old ones. The sweeper mutates files; it doesn't delete them outright (unless the file becomes empty).</li>
+        <li><strong>Pharmacy-scoped memories use the pharmacy_id from <code>extra_data</code></strong> (Axis 11b — column migration deferred). The selector pulls from <code>session.extra_data.get("pharmacy_id")</code>; if missing, scope falls back to org-only memories (tools/drugs).</li>
+        <li><strong>Comment-fence parsing must be lenient.</strong> Old expert MD prose may have edited the entries; merger should ignore malformed fences (log a warning) rather than fail the merge.</li>
+        <li><strong>The TTL sweeper is per-org but runs in one Inngest cron.</strong> It must enumerate orgs (probably from the control plane DB once T1 lands; for v1, from a config-listed set). Don't hardcode a single org.</li>
+        <li><strong>Memory files can be large.</strong> Some patient files may have hundreds of entries over weeks. Sweep efficiency matters; consider streaming parse + write rather than full read-into-memory.</li>
+      </ul>
+
+      <div class="pr-not-section">
+        <div class="label">What this PR is NOT</div>
+        <ul>
+          <li>Not changing the workspace manifest format (PR 5 is the source of truth for that)</li>
+          <li>Not adding cross-org learning (Option B/C — explicitly deferred)</li>
+          <li>Not changing the orchestrator's prompt structure — memories arrive via the existing <code>memories/</code> directory hydrate</li>
+          <li>Not adding a UI to view/edit memories (separate frontend PR)</li>
+          <li>Not modifying any router (PR 7) or any expert MD</li>
+          <li>Not implementing user-scope memories (Phase 2; the <code>MemoryScope.user_id</code> field is reserved)</li>
+        </ul>
+      </div>
     </div>
   </div>
 
-  <div class="pr-card">
-    <span class="pr-num">7</span><span class="pr-title">routers/agi.py dispatch refactor (the BIG one)</span>
-    <div class="pr-pills">
-      <span class="pr-pill size-xl">Size: Extra Large</span>
-      <span class="pr-pill risk-high">Risk: High</span>
-      <span class="pr-pill">Depends on: PRs 1-6</span>
+  <!-- ============== PR 7 — NOT STARTED — THE BIG ONE ============== -->
+  <div class="pr-card-detailed" data-pr="7">
+    <div class="pr-detail-header">
+      <span class="pr-num-large">7</span>
+      <div class="pr-title-block">
+        <div class="pr-title-text">routers/agi.py dispatch refactor — THE BIG ONE</div>
+        <div class="pr-pills">
+          <span class="pr-pill size-xl">Size: Extra Large</span>
+          <span class="pr-pill risk-high">Risk: High</span>
+          <span class="pr-pill">Layer 5</span>
+          <span class="pr-pill">Depends on: PRs 1-6</span>
+        </div>
+      </div>
+      <span class="pr-status not-started">Not started</span>
     </div>
-    <div class="pr-body">
-      <p>The conversion. Every dispatch endpoint branches on <code>compute_mode</code>. SSE proxy (backend → worker → browser). <strong>No Redis pub/sub yet</strong> per Decision 5 — single-replica acceptable for v1. Touches ~30% of <code>agi.py</code>. This is where today's behavior actually changes for users on the new path. Heavy testing required.</p>
+    <div class="pr-detail-body">
+      <div class="pr-prompt">
+        <div class="label">Prompt — what this PR accomplishes</div>
+        <p>This is the conversion. Up through PR 6, every PR shipped behind <code>compute_mode="in_process"</code> default — production behavior was unchanged. PR 7 makes <code>compute_mode="worker_pool"</code> actually work end-to-end through the FastAPI router. Every dispatch endpoint in <code>carelink-backend/app/routers/agi.py</code> branches on <code>compute_mode</code>:
+          <ul>
+            <li><strong><code>in_process</code> path</strong>: keep the existing in-memory <code>cl._agi_clients[session_id]</code> dict + direct method calls (today's behavior, unchanged).</li>
+            <li><strong><code>worker_pool</code> path</strong>: look up the session's lease via <code>SessionLease.lookup(session_id)</code>, get the <code>worker_base_url</code>, dispatch via PR 4b's <code>worker/dispatcher.py</code> (HTTP+SSE), proxy the SSE stream back to the browser.</li>
+          </ul>
+        </p>
+        <p><strong>SSE proxy is the trickiest part.</strong> Streaming AI responses can run for minutes per turn. The backend must (a) maintain the connection to the browser, (b) maintain the connection to the worker, (c) forward events without buffering, (d) handle worker disconnect mid-stream gracefully.</p>
+        <p><strong>No Redis pub/sub yet</strong> per Decision 5 — single-replica acceptable for v1. Live trace events flow direct backend→browser; cross-replica fan-out is v2 work.</p>
+        <p><strong>Why this is needed now:</strong> PRs 1-6 build the primitives but no one calls them through the worker_pool path in production. Until this PR ships, Cloud Run worker pools are dead code. This is the "today's behavior actually changes for users" PR. <strong>Heavy testing required.</strong> Plan for soak tests, manual verification, and a feature-flag rollout (<code>compute_mode</code> per-org).</p>
+      </div>
+
+      <h4>Files changed</h4>
+      <table class="file-table">
+        <tr><th>Path</th><th>Type</th><th>Purpose</th></tr>
+        <tr><td><code>carelink-backend/app/routers/agi.py</code></td><td>Edit (~30% of file)</td><td>~10 endpoints branch on <code>compute_mode</code>. The <code>cl._agi_clients</code> dict pattern stays for <code>in_process</code> mode but is bypassed for <code>worker_pool</code>. Each endpoint that streams becomes an SSE proxy when worker_pool is active.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/sse_events.py</code></td><td>NEW</td><td>SSE event types + serialization. Shared by the in-process path (today's <code>trace_stream</code>), the worker entrypoint (PR 4b), and the dispatcher (PR 4b). Single canonical event format prevents drift.</td></tr>
+        <tr><td><code>carelink-backend/app/sse_proxy.py</code></td><td>NEW</td><td>Backend-side SSE proxy. <code>async def proxy_sse(upstream: AsyncIterator[bytes], heartbeat_seconds: int = 15) -&gt; AsyncIterator[bytes]</code>. Forwards events; injects heartbeats during quiet periods; handles upstream disconnect by emitting a final SSE event then closing.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/service.py</code></td><td>Edit</td><td>Facade's <code>_require_worker</code> gate replaces its <code>RuntimeError</code> with the dispatcher route in <code>worker_pool</code> mode. SDK-bearing methods become: "look up lease → dispatch via worker/dispatcher.py → return whatever the dispatcher returns."</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/dispatcher.py</code></td><td>Edit</td><td>(Already exists from PR 4b.) Add SSE-stream methods for <code>create_session</code>, <code>resume_with_*</code>, <code>query</code>. Acquire lease at dispatch time if not already held; refresh via PR 4c's ticker.</td></tr>
+        <tr><td><code>carelink-backend/app/main.py</code></td><td>Edit</td><td>Lifespan: when <code>compute_mode="worker_pool"</code>, do NOT initialize the in-process WorkerAGIService. Only BackendAGIService is in-process.</td></tr>
+        <tr><td><code>carelink-pms/tests/section3_integrations/test_router_dispatch.py</code></td><td>NEW</td><td>End-to-end router tests under both compute modes. Uses <code>httpx.AsyncClient</code> + a fake worker FastAPI app for <code>worker_pool</code> tests.</td></tr>
+        <tr><td><code>carelink-pms/tests/section3_integrations/test_sse_proxy.py</code></td><td>NEW</td><td>SSE proxy tests: forward events; heartbeat injection; upstream disconnect; downstream cancel.</td></tr>
+        <tr><td><code>carelink-backend/Dockerfile</code> + <code>Dockerfile.worker</code></td><td>NEW or edit</td><td>Two container images: backend (no <code>claude-agent-sdk</code> dep) + worker (with SDK). PR 4a's split makes this clean — backend.py has zero SDK imports.</td></tr>
+        <tr><td><code>cloud-run/terraform/</code> or equivalent IaC</td><td>NEW</td><td>Cloud Run worker pool config (gen2 microVM, NFS volume mount, <code>--add-volume</code> for FUSE if enabled, workload identity). One terraform module per environment.</td></tr>
+      </table>
+
+      <h4>Code shape — endpoint dispatch branch</h4>
+      <pre>@router.post("/agi/sessions/{session_id}/query")
+async def query_session(
+    session_id: str,
+    body: QueryRequest,
+    cl: CareLink = Depends(get_carelink),
+    claims: AuthClaims = Depends(get_current_auth_claims),
+):
+    if cl.agi._agi_config.compute_mode == "in_process":
+        # Today's path — direct in-memory client lookup
+        client = cl.agi._find_active_client(session_id)
+        if client is None:
+            raise HTTPException(404, "session not found / not active")
+        return StreamingResponse(
+            _serialize_sse(client.query(body.message)),
+            media_type="text/event-stream",
+        )
+    else:
+        # Worker pool path — lease lookup + dispatcher proxy
+        lease = await SessionLease.lookup(cl.db, session_id)
+        if lease is None:
+            raise HTTPException(404, "session not found / lease expired")
+        upstream = cl.agi._backend.dispatcher.query(
+            session_id=session_id,
+            worker_base_url=lease.worker_base_url,
+            message=body.message,
+            actor_id=claims.sub,
+            org_id=claims.org_id,
+        )
+        return StreamingResponse(
+            proxy_sse(upstream, heartbeat_seconds=15),
+            media_type="text/event-stream",
+        )</pre>
+
+      <h4>Locked decisions referenced</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>Decision 1:</strong> BackendAGIService + WorkerAGIService split (PR 4a). PR 7 wires the dispatcher to the Backend half.</li>
+        <li><strong>Decision 2:</strong> 5-min lease TTL + drain-scoped ticker (PR 4c). PR 7's dispatch path acquires the lease via PR 3's <code>SessionLease.acquire</code>.</li>
+        <li><strong>Decision 5:</strong> Defer Redis pub/sub. Single-replica acceptable for v1; live trace flows direct backend→browser.</li>
+        <li><strong>Decision 7 (Phase 0):</strong> First customer ships on worker-pool single-tenant deploy. PR 7 IS the activation point.</li>
+        <li><strong>Compute mode contract</strong> (PR 4a): default <code>in_process</code>; toggle to <code>worker_pool</code> per-org via env var or per-org config table (T1 territory).</li>
+      </ul>
+
+      <h4>Acceptance criteria</h4>
+      <ul class="checklist">
+        <li><span>All ~10 dispatch endpoints in <code>routers/agi.py</code> branch on <code>compute_mode</code></span></li>
+        <li><span><code>compute_mode="in_process"</code> path preserves today's behavior byte-for-byte (regression suite green)</span></li>
+        <li><span><code>compute_mode="worker_pool"</code> path: lease lookup → dispatcher RPC → SSE proxy back to client</span></li>
+        <li><span>SSE proxy forwards every event from worker → browser without buffering</span></li>
+        <li><span>SSE proxy injects heartbeats every 15s during quiet periods (prevents Cloud Run idle timeout)</span></li>
+        <li><span>Worker disconnect mid-stream surfaces as a clean SSE error event, not a connection drop</span></li>
+        <li><span>Browser cancel cancels the upstream worker call (no orphaned long-running expert calls)</span></li>
+        <li><span>HTTP-internal token (PR 2 + 4b) round-trips org_id; worker rejects mismatched org</span></li>
+        <li><span>Two Docker images build cleanly: backend (no SDK) + worker (with SDK)</span></li>
+        <li><span>Backend container size shrinks (no claude-agent-sdk + transitive deps) — measure pre/post</span></li>
+        <li><span>Soak test: 10 concurrent chat sessions × 5-minute turns × <code>worker_pool</code> mode → no leaks, no orphaned sessions, no SSE corruption</span></li>
+        <li><span>62/62 tests from PRs 1-6 still pass</span></li>
+        <li><span>NEW tests: ~20 router dispatch tests + ~10 SSE proxy tests</span></li>
+        <li><span>No new dependencies (httpx already in deps; no Redis)</span></li>
+      </ul>
+
+      <h4>Test plan</h4>
+      <ul class="checklist">
+        <li><span>Unit: SSE proxy with mocked upstream; heartbeat injection timing; cancel propagation</span></li>
+        <li><span>Integration: full router under <code>compute_mode="in_process"</code> — should match HEAD's behavior exactly</span></li>
+        <li><span>Integration: full router under <code>compute_mode="worker_pool"</code> using fake worker FastAPI app via <code>httpx.AsyncClient</code></span></li>
+        <li><span>Integration: lease expiry mid-stream — dispatcher refresh succeeds (PR 4c ticker), or fails gracefully if lease lost to another instance</span></li>
+        <li><span>Manual: dev VM, set <code>compute_mode="worker_pool"</code>, run worker entrypoint locally, hit chat endpoint from frontend, verify streaming</span></li>
+        <li><span>Manual: backend container without SDK installed (verify the Dockerfile actually excludes the dep)</span></li>
+        <li><span>Soak: <code>scripts/soak-router-dispatch.py</code> — 10 concurrent sessions × 5 min × 2 modes; report leak/timeout/error counts</span></li>
+      </ul>
+
+      <h4>Verification steps (post-subagent merge into staging)</h4>
+      <ol style="font-size: 13.5px;">
+        <li>Stage diff. This PR is XL — diff stat will be large. Don't be alarmed.</li>
+        <li>Dispatch <strong>test agent</strong>:
+          <ul>
+            <li>Run all unit + integration tests in BOTH compute modes (env var toggle)</li>
+            <li>Run PR 1-6 regression suite</li>
+            <li>Run the soak test in CI mode (5 min runtime; longer in user's local validation)</li>
+          </ul>
+        </li>
+        <li>Dispatch <strong>verification agent</strong>:
+          <ul>
+            <li>Read every endpoint in <code>routers/agi.py</code>; confirm each has the compute_mode branch</li>
+            <li>Verify backend.py STILL has zero claude-agent-sdk imports (PR 4a invariant preserved)</li>
+            <li>Confirm SSE proxy doesn't buffer (cite the line where forwarding happens)</li>
+            <li>Cross-check Dockerfile.backend imports — should NOT include <code>claude-agent-sdk</code></li>
+            <li>Verify per-org compute_mode config plumbing (likely from <code>session.extra_data</code> or T1's control plane DB lookup)</li>
+          </ul>
+        </li>
+        <li>Manual verification — REQUIRED before merging this PR:
+          <ul>
+            <li>Stand up the worker container locally; point backend at it; run a real chat turn end-to-end</li>
+            <li>Verify the SSE stream shape in browser DevTools (Network tab → EventStream)</li>
+            <li>Kill the worker mid-stream; verify clean SSE error event reaches the browser</li>
+          </ul>
+        </li>
+        <li>If pass: surface staged diff + multi-line commit message (this PR is large enough to warrant detail). User commits.</li>
+        <li>Update HTML doc — flip PR 7 status to Merged. Push to mock-ui.</li>
+      </ol>
+
+      <h4>Subagent dispatch playbook</h4>
+      <ol style="font-size: 13.5px;">
+        <li><strong>Consider splitting PR 7 into 7a/7b/7c</strong> the same way PR 4 was split. Recommend: 7a = SSE proxy + sse_events.py (no behavior change). 7b = router branch logic (no callers yet — keep <code>compute_mode="in_process"</code> default). 7c = Dockerfile + IaC + first per-org enablement. Surface this option to the user before dispatching as a single PR.</li>
+        <li>Verify HEAD on main (should be PR 6's commit when PR 7 starts).</li>
+        <li>Create worktree: <code>git worktree add -b agi/pr-7-router-dispatch .claude/worktrees/agi-pr-7-router-dispatch &lt;HEAD&gt;</code>.</li>
+        <li>Dispatch <strong>Opus</strong> subagent (XL — budget ~90 min, ~$60 of compute):
+          <ul>
+            <li>Read <code>routers/agi.py</code> in full first to map every endpoint</li>
+            <li>Read PR 4a's facade + worker/service.py for the existing dispatch shape</li>
+            <li>Read PR 4b's dispatcher.py + entrypoint.py for the protocol</li>
+            <li>Read PR 3's <code>SessionLease</code> for lease lookup</li>
+            <li>Implement SSE proxy first (smallest, lowest-risk)</li>
+            <li>Then add the compute_mode branch endpoint by endpoint; preserve in_process behavior at each step</li>
+            <li>Add tests alongside each endpoint</li>
+            <li>DO NOT change frontend or any router outside <code>routers/agi.py</code></li>
+            <li>Surface any Dockerfile/IaC ambiguities for user input rather than guessing</li>
+          </ul>
+        </li>
+      </ol>
+
+      <h4>Pitfalls — read before dispatching the subagent</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>SSE proxying is async-correctness-sensitive.</strong> A forgotten <code>await</code> on the upstream iterator will buffer the entire stream in memory before forwarding. Use <code>async for chunk in upstream: yield chunk</code> patterns, not <code>data = await upstream.read()</code>.</li>
+        <li><strong>Cloud Run idle timeout is 15min default but easily configurable per service.</strong> SSE heartbeat at 15s is conservative; can relax to 30-45s. Don't go shorter — heartbeats are wasted bandwidth for streams already emitting events.</li>
+        <li><strong>Worker disconnect detection is non-trivial.</strong> An idle TCP connection can sit forever. Use <code>httpx</code>'s timeout + a watchdog task; on no-events-for-N-seconds, probe the worker. Surfaces dead workers within the configured window.</li>
+        <li><strong>The <code>cl._agi_clients</code> dict is removed for worker_pool mode but kept for in_process.</strong> Don't delete it — that breaks in_process. Branch the lookup, don't replace it.</li>
+        <li><strong>Backend container must NOT import claude-agent-sdk.</strong> PR 4a established this invariant; PR 7 must not regress it. If the dispatcher needs SDK types, use TYPE_CHECKING + string literals.</li>
+        <li><strong>Inngest cold-revive still uses the in-process path</strong> until PR 8. Don't try to make it use the dispatcher in PR 7 — that's PR 8's scope.</li>
+        <li><strong>Per-org compute_mode</strong> requires either (a) reading from <code>session.extra_data</code> (cheap, available), or (b) reading from T1's control plane DB (clean, requires T1). For PR 7, recommend (a) initially with a comment pointing at T1 for the proper plumbing.</li>
+        <li><strong>The SSE response shape MUST match the SDK's existing event shape</strong>. Frontend already parses these; changing them requires frontend changes too. Use <code>sse_events.py</code> as the single source of truth.</li>
+      </ul>
+
+      <div class="pr-not-section">
+        <div class="label">What this PR is NOT</div>
+        <ul>
+          <li>Not adding Redis pub/sub (Decision 5 — defer to v2)</li>
+          <li>Not changing the cold-revive path (PR 8)</li>
+          <li>Not modifying frontend (the SSE event shape is preserved)</li>
+          <li>Not provisioning Cloud Run automatically (the IaC is shipped; running it is an ops task)</li>
+          <li>Not enabling worker_pool mode for any customer by default — explicit opt-in only</li>
+          <li>Not adding cross-replica fan-out for live trace (single-replica acceptable for v1)</li>
+        </ul>
+      </div>
     </div>
   </div>
 
-  <div class="pr-card">
-    <span class="pr-num">8</span><span class="pr-title">Cold-revive worker-pool path</span>
-    <div class="pr-pills">
-      <span class="pr-pill size-m">Size: Medium</span>
-      <span class="pr-pill risk-med">Risk: Medium</span>
-      <span class="pr-pill">Depends on: PR 7</span>
+  <!-- ============== PR 8 — NOT STARTED ============== -->
+  <div class="pr-card-detailed" data-pr="8">
+    <div class="pr-detail-header">
+      <span class="pr-num-large">8</span>
+      <div class="pr-title-block">
+        <div class="pr-title-text">Cold-revive worker-pool path</div>
+        <div class="pr-pills">
+          <span class="pr-pill size-m">Size: Medium</span>
+          <span class="pr-pill risk-med">Risk: Medium</span>
+          <span class="pr-pill">Layer 6</span>
+          <span class="pr-pill">Depends on: PR 7</span>
+        </div>
+      </div>
+      <span class="pr-status not-started">Not started</span>
     </div>
-    <div class="pr-body">
-      <p>Cleanup pass on Inngest functions. Cold-revive flow is structurally the same; just calls dispatcher instead of in-process service. Most logic stays put.</p>
+    <div class="pr-detail-body">
+      <div class="pr-prompt">
+        <div class="label">Prompt — what this PR accomplishes</div>
+        <p>The Inngest cold-revive flow (used when a HITL approval comes back days after the original session went idle) currently spins up an in-process AGI client to drive the resumed session. After PR 7, this is the LAST place the in-process path is hardcoded for production traffic. PR 8 makes cold-revive use the dispatcher RPC just like the live path.</p>
+        <p>Cold-revive's structure is unchanged — same Inngest function shape, same DB lookups, same workspace hydrate. Only the "how it talks to the worker" changes:</p>
+        <ul style="font-size: 13.5px;">
+          <li><strong>Today (in_process):</strong> <code>_drive_cold_revive</code> constructs an in-process <code>AGIService</code>, calls <code>resume_with_answer</code> directly. Workspace re-hydrates from local <code>/tmp</code> if cold-revive event lands on the same machine; fails otherwise.</li>
+          <li><strong>After PR 8 (worker_pool):</strong> <code>_drive_cold_revive</code> calls the dispatcher's <code>resume_with_answer</code> RPC. Acquires (or refreshes) the session lease via <code>SessionLease.acquire</code> — picks any available worker, not necessarily the original. Workspace hydrates from PR 5's per-org canonical bucket (machine-independent).</li>
+        </ul>
+        <p><strong>Why this is needed now:</strong> without PR 8, cold-revive is the one production path that requires the original machine to still be alive — defeats the purpose of multi-replica deploy. Once PR 8 ships, multi-replica scale-out is unblocked (single-replica still works fine; multi-replica gains failover).</p>
+      </div>
+
+      <h4>Files changed</h4>
+      <table class="file-table">
+        <tr><th>Path</th><th>Type</th><th>Purpose</th></tr>
+        <tr><td><code>carelink-pms/carelink/integrations/inngest/agi_cold_revive.py</code></td><td>Edit</td><td><code>_drive_cold_revive</code> branches on <code>compute_mode</code>. <code>worker_pool</code> path: acquire lease → dispatch via PR 4b's dispatcher → handle the SSE response (cold-revive doesn't proxy to a browser; it processes the result and writes back to the session).</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/dispatcher.py</code></td><td>Edit</td><td>Add cold-revive-specific dispatch helper that handles the non-streaming case (or use the streaming one and consume internally).</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/entrypoint.py</code></td><td>Edit</td><td>Cold-revive RPC accepts the full event payload from Inngest (synthesized user-turn, pending answer, bearer token); validates lease ownership; processes; returns terminal result.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/cold_revive_handler.py</code></td><td>NEW</td><td>Worker-side cold-revive logic. Hydrates workspace from canonical bucket, replays the synthesized user-turn, captures result. Reuses <code>WorkerAGIService.resume_with_*</code> internals.</td></tr>
+        <tr><td><code>carelink-pms/tests/section4_services/test_agi_cold_revive.py</code></td><td>Edit</td><td>Existing 17 tests preserved. ADD ~5-8 tests for the worker_pool path: dispatcher route, lease acquisition during cold-revive, cross-machine workspace hydrate (no <code>extra_data->>'workspace'</code> stash).</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/service.py</code></td><td>Edit (small)</td><td>Final retirement of the <code>extra_data->>'workspace'</code> stash readers (PR 5 retired the writers; PR 8 confirms no readers remain).</td></tr>
+      </table>
+
+      <h4>Locked decisions referenced</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>Decision 1, 2, 7:</strong> Same as PR 7.</li>
+        <li><strong>Cardinality "1 sandbox = 1 session = N agents"</strong> (locked): cold-revive picks ANY available worker; the workspace hydrates fresh from canonical. No machine-pinning.</li>
+        <li><strong>Cross-machine continuity</strong>: depends on PR 5 (workspace persistence), PR 3 (SessionLease for cross-machine ownership), PR 4b (dispatcher), PR 4c (lease refresh). PR 8 is where these compose.</li>
+      </ul>
+
+      <h4>Acceptance criteria</h4>
+      <ul class="checklist">
+        <li><span><code>_drive_cold_revive</code> branches on <code>compute_mode</code></span></li>
+        <li><span><code>worker_pool</code> path: lease acquire → dispatch → process → write-back to session</span></li>
+        <li><span>Cold-revive on a DIFFERENT machine from the original session works (verified in test with two PG-distinct fake workers)</span></li>
+        <li><span>17 existing cold-revive tests still pass under <code>compute_mode="in_process"</code></span></li>
+        <li><span>5-8 NEW tests for the <code>worker_pool</code> path pass</span></li>
+        <li><span><code>extra_data->>'workspace'</code> stash fully retired — no readers remain</span></li>
+        <li><span>No router changes (PR 7 territory); no frontend changes; no new dependencies</span></li>
+        <li><span>62/62 (or whatever the current count is post-PRs-5/6/7) regression suite green</span></li>
+      </ul>
+
+      <h4>Test plan</h4>
+      <ul class="checklist">
+        <li><span><code>pytest carelink-pms/tests/section4_services/test_agi_cold_revive.py</code> under both compute modes</span></li>
+        <li><span>Cross-machine test: two fake worker FastAPI apps; original session on worker A; cold-revive event dispatches to worker B; verify B hydrates workspace from canonical bucket</span></li>
+        <li><span>Lease-lost test: simulate the original lease expiring; cold-revive acquires fresh; processes; releases</span></li>
+        <li><span>Manual: kick off a real cold-revive flow with <code>compute_mode="worker_pool"</code>; verify Inngest function log + worker log + session row update</span></li>
+      </ul>
+
+      <h4>Verification steps (post-subagent merge into staging)</h4>
+      <ol style="font-size: 13.5px;">
+        <li>Stage diff; ~6-8 files.</li>
+        <li>Test agent: cold-revive tests under both modes + PR 1-7 regression.</li>
+        <li>Verification agent: confirms <code>extra_data->>'workspace'</code> stash readers all gone; no router edits; no frontend edits.</li>
+        <li>Manual verification: real cold-revive flow end-to-end (Inngest dev + worker entrypoint locally + backend).</li>
+        <li>If pass: surface staged diff + commit message; user commits.</li>
+        <li>Update HTML doc — flip PR 8 status to Merged.</li>
+        <li><strong>This is the production-ready milestone.</strong> After PR 8 lands, multi-replica deploy works end-to-end for the first customer.</li>
+      </ol>
+
+      <h4>Subagent dispatch playbook</h4>
+      <ol style="font-size: 13.5px;">
+        <li>Verify HEAD (should be PR 7's commit when PR 8 starts).</li>
+        <li>Create worktree: <code>git worktree add -b agi/pr-8-cold-revive .claude/worktrees/agi-pr-8-cold-revive &lt;HEAD&gt;</code>.</li>
+        <li>Dispatch <strong>Opus</strong> subagent (Medium — budget ~30-45 min):
+          <ul>
+            <li>Read <code>integrations/inngest/agi_cold_revive.py</code> in full</li>
+            <li>Read PR 7's dispatcher route changes for reference</li>
+            <li>Read existing <code>test_agi_cold_revive.py</code> (17 tests) — preserve their patterns</li>
+            <li>Implement worker-side cold revive handler first; then wire into dispatcher; then update <code>_drive_cold_revive</code></li>
+            <li>Add the 5-8 worker_pool tests alongside</li>
+            <li>Cleanup: remove the <code>extra_data->>'workspace'</code> stash readers (verify with grep before committing)</li>
+            <li>Surface any cross-process state-sharing concerns for user input</li>
+          </ul>
+        </li>
+      </ol>
+
+      <h4>Pitfalls — read before dispatching the subagent</h4>
+      <ul style="font-size: 13.5px;">
+        <li><strong>Cold-revive doesn't have a browser SSE consumer.</strong> The dispatch returns a terminal result, not a stream. PR 8 either (a) consumes the SSE stream internally and yields the final event, or (b) adds a non-streaming RPC variant on the dispatcher. Recommend (a) to minimize dispatcher API surface.</li>
+        <li><strong>Lease acquisition during cold-revive is racy</strong> — multiple Inngest workers may fire the same cold-revive event due to retry semantics. <code>SessionLease.acquire</code> handles this correctly (atomic UPDATE...WHERE), but the cold-revive handler must short-circuit on lease-lost rather than processing the same event twice.</li>
+        <li><strong>The synthesized user-turn payload</strong> (pending answer + bearer token + question_id) is currently formatted in <code>_drive_cold_revive</code>. Keep this formatting on the backend side; the worker just receives the formatted payload via the dispatcher.</li>
+        <li><strong>Workspace hydrate during cold-revive</strong> uses PR 5's <code>WorkspaceManager.hydrate</code> with the existing session_id. The workspace MUST already exist in the canonical bucket from the original turn's checkpoint. If it doesn't (edge case: original turn crashed mid-checkpoint), surface as a clean LookupError, not a confusing AttributeError.</li>
+        <li><strong>The 2 cold-revive tests that broke during PR 4a</strong> (<code>test_resume_with_answer_*</code>) are now passing thanks to the facade <code>__getattr__</code>/<code>__setattr__</code> + <code>_import_sdk</code> indirection. Don't regress these — verify under both compute modes.</li>
+        <li><strong>Inngest cron retries are at-least-once.</strong> The cold-revive handler must be idempotent: same event payload + same session state = same outcome. Use <code>SessionLease.acquire</code>'s atomic semantics + <code>session.extra_data["pending_answers"]</code>'s "answered → cleared" transition as the idempotency guard.</li>
+      </ul>
+
+      <div class="pr-not-section">
+        <div class="label">What this PR is NOT</div>
+        <ul>
+          <li>Not changing the Inngest function structure (same triggers, same event shape)</li>
+          <li>Not changing the synthesized user-turn formatting</li>
+          <li>Not adding cross-org cold-revive (each org's cold-revive stays within its own GCP project)</li>
+          <li>Not changing the frontend cold-revive UX</li>
+          <li>Not the final productionization — that's a separate ops PR (terraform apply, customer onboarding, monitoring)</li>
+        </ul>
+      </div>
     </div>
   </div>
 
@@ -1609,7 +2167,9 @@ class SessionLease:
         <li><span class="opt-label">Option B:</span> Shared bucket with prefix-per-org. Fewer buckets to manage. Risk: misconfigured policy on one bucket leaks across customers.</li>
       </ul>
       <div class="resolution-box">
-        <strong>Resolution (2026-05-01):</strong> Option A — bucket-per-org. Combined with FUSE deferred (F3): split-bucket model = shared <code>gs://carelink-skills-templates/</code> for templates (FUSE-mountable later) + per-org <code>gs://carelink-{org_id}-canonical/</code> for memories/sessions (GCS API only). Implementation: PR 5.
+        <strong>Resolution (2026-05-01, strengthened 2026-05-04):</strong> Option A — and stronger: <strong>complete GCP project-per-org</strong>, not just bucket-per-org within a shared project. Each org gets its own GCP project with separate Cloud SQL DB, GCS buckets, service accounts, IAM, billing, audit, and quotas. Cross-org leakage is structurally impossible at the GCP-project boundary, not just at IAM-binding boundaries. Pharmacies share resources within their org's project (consistent with the locked 5-scope hierarchy where pharmacy is policy, not structural). Confirmed with CTO + multiple stakeholders on 2026-05-04.<br><br>
+        <strong>Bucket layout within each org's project:</strong> per-org canonical store at <code>gs://carelink-{org_id}-canonical/</code> (memories + session artifacts + transcripts via GCS API). Skills templates live in a <strong>shared platform project</strong> at <code>gs://carelink-platform-skills-templates/</code>; each org project gets a read-only IAM grant to it (cross-project IAM binding). FUSE mount itself remains deferred (F3); GCS API path works for v1.<br><br>
+        <strong>Implementation footprint expands</strong> for T1 (per-org GCP project IDs + SA emails in control plane DB), T6 (provisioning workflow now creates GCP projects), and PR 5 (cross-project IAM grant for shared templates). Nothing currently shipped (PRs 1-4a) is invalidated.
       </div>
     </div>
   </div>
@@ -1857,7 +2417,7 @@ class SessionLease:
     <div class="decision-body">
       <p class="why">Decision 3 (bucket-per-org) affects the WorkspaceManager constructor signature. Locking it before the cherry-pick avoids paying the refactor twice.</p>
       <div class="answer-box">
-        <strong>Answer (2026-05-01):</strong> <strong>Lock before</strong> — Decision 3 = Option A (bucket-per-org). Combined with F3 (FUSE deferred): <strong>split-bucket model</strong> = shared <code>gs://carelink-skills-templates/</code> for templates (FUSE-mountable later) + per-org <code>gs://carelink-{org_id}-canonical/</code> for memories/sessions (GCS API only). PR 5's <code>WorkspaceManager.__init__</code> takes a <code>MemoryScope</code> resolver.
+        <strong>Answer (2026-05-01, strengthened 2026-05-04):</strong> <strong>Lock before</strong> — Decision 3 was strengthened on 2026-05-04 to <strong>complete GCP project-per-org</strong> (CTO confirmed). Each org gets its own GCP project; pharmacies share resources within their org's project. Combined with F3 (FUSE deferred): <strong>cross-project skill templates pattern</strong> = shared platform project hosts <code>gs://carelink-platform-skills-templates/</code>; each org project gets a read-only IAM grant. Per-org canonical store at <code>gs://carelink-{org_id}-canonical/</code> within that org's project. PR 5's <code>WorkspaceManager.__init__</code> takes a <code>MemoryScope</code> resolver that emits both the per-org bucket name AND the shared platform bucket name (read-only).
       </div>
     </div>
   </div>
