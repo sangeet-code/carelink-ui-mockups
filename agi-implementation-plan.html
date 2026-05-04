@@ -929,7 +929,7 @@
 
   <div class="status-banner" style="background: linear-gradient(to right, #ddf4ff, #f6f8fa); border-color: var(--info); border-left-color: var(--info);">
     <strong style="color: var(--info);">Shipped (2026-05-01 → 2026-05-04):</strong>
-    <strong>PR 1</strong> (lease columns + env.py registration), <strong>PR 2</strong> (AuthClaims with JWT org_id), and <strong>PR 3</strong> (SessionLease primitive with 9 unit tests) — all validated by Opus subagents working in parallel/sequential worktrees, then merged into <code>feature/ai-orchestration-with-domain-agents</code>. Test agents passed all suites (17/17 auth + 9/9 lease + alembic round-trip). Verification agents APPROVED with all acceptance criteria met. Local DB at revision <code>350cd04b0e9f</code>. PR 3 added one approved deviation: <code>db: Database</code> threaded per-call (frozen-dataclass classmethod can't capture a Database without a global). Next up: <strong>PR 4</strong> (worker dispatcher + AGIService split + compute_mode flag).
+    <strong>PR 1</strong> (lease columns), <strong>PR 2</strong> (AuthClaims), <strong>PR 3</strong> (SessionLease + 9 tests), and <strong>PR 4a</strong> (AGIService split into BackendAGIService + WorkerAGIService + <code>compute_mode</code> flag) — all validated by Opus subagents working in parallel/sequential worktrees, merged into <code>feature/ai-orchestration-with-domain-agents</code>. Total 62 tests pass across affected suites (15 split + 17 auth + 9 lease + 17 cold-revive + 4 clinical-checklist). PR 4 was electively split into <strong>4a/4b/4c</strong> for smaller landings; 4a shipped with facade <code>__getattr__</code>/<code>__setattr__</code> pass-through (preserves test monkeypatch ergonomics across the split) and <code>_import_sdk</code> indirection. Local DB at revision <code>350cd04b0e9f</code>. Next up: <strong>PR 4b</strong> (worker dispatcher + entrypoint, HTTP+SSE) and <strong>PR 4c</strong> (drain.py lease-refresh ticker, asyncio.Task with cancellation).
   </div>
 
   <div class="checklist-legend">
@@ -1166,11 +1166,17 @@ class SessionLease:
   </div>
 
   <!-- ============== PR 4 ============== -->
-  <div class="pr-card-detailed" data-pr="4">
+  <!-- ============== PR 4 (electively split into 4a / 4b / 4c) ============== -->
+  <div style="margin: 18px 0 12px; padding: 10px 14px; background: var(--bg-alt); border-left: 3px solid var(--neutral); border-radius: 0 4px 4px 0; font-size: 13.5px; color: var(--text-muted);">
+    <strong>Note:</strong> The originally locked PR 4 (single PR) was electively split into three sub-PRs (<strong>4a / 4b / 4c</strong>) for smaller diffs and isolated risk per Option B in the 2026-05-04 sizing discussion. Each lands behind <code>compute_mode="in_process"</code> default so no behavior change ships until PR 7 flips the flag.
+  </div>
+
+  <!-- ============== PR 4a — MERGED ============== -->
+  <div class="pr-card-detailed" data-pr="4a">
     <div class="pr-detail-header">
-      <span class="pr-num-large">4</span>
+      <span class="pr-num-large">4a</span>
       <div class="pr-title-block">
-        <div class="pr-title-text">worker/dispatcher.py + worker/entrypoint.py + AGIService split + compute_mode</div>
+        <div class="pr-title-text">AGIService class split + compute_mode flag</div>
         <div class="pr-pills">
           <span class="pr-pill size-m">Size: Medium</span>
           <span class="pr-pill risk-low">Risk: Low</span>
@@ -1178,60 +1184,158 @@ class SessionLease:
           <span class="pr-pill">Depends on: PRs 1-3</span>
         </div>
       </div>
-      <span class="pr-status not-started">Not started</span>
+      <span class="pr-status merged">Merged</span>
     </div>
     <div class="pr-detail-body">
       <div class="pr-prompt">
         <div class="label">Prompt — what this PR accomplishes</div>
-        <p>Adds the worker-pool architecture as opt-in code. Splits the 2,011 LoC <code>AGIService</code> god class into <code>BackendAGIService</code> (dispatcher-shaped, no SDK installed) and <code>WorkerAGIService</code> (SDK-aware) per Decision 1. Adds a <code>compute_mode</code> config flag. <strong>Defaults to <code>compute_mode="in_process"</code></strong> — existing behavior preserved; new code is deployable but unused until PR 7 toggles it.</p>
+        <p>Splits the 2,223-LoC <code>AGIService</code> god class into <code>BackendAGIService</code> (dispatcher-shaped, no SDK installed) and <code>WorkerAGIService</code> (SDK-aware) per Decision 1. <code>AGIService</code> becomes a thin facade preserving every historical caller surface (<code>cl.agi.*</code>). Adds <code>compute_mode: Literal["in_process", "worker_pool"] = "in_process"</code> config flag. <strong>No behavior change</strong> — defaults preserve existing in-process execution.</p>
+        <p style="margin-top: 8px;"><strong>Shipped (2026-05-04):</strong> service.py shrank 2,223 → 444 LoC (facade); backend.py 858 LoC (zero <code>claude_agent_sdk</code> imports — verified by test); worker/service.py 1,531 LoC. Facade gained <code>__getattr__</code>/<code>__setattr__</code> pass-through so test fixtures monkeypatching worker-private attributes via <code>cl.agi.*</code> keep working post-split. <code>_import_sdk</code> in worker/service.py delegates to <code>service._import_sdk</code> via runtime module attribute lookup so <code>monkeypatch.setattr("carelink.agi.service._import_sdk", ...)</code> reaches the worker callsites. Bundled fixes for 2 stale clinical-checklist tests (allowlist drift + <code>status</code>-default change). 62/62 tests pass across all affected suites in 4.19s.</p>
       </div>
 
-      <h4>Files changed</h4>
+      <h4>Files changed (final)</h4>
       <table class="file-table">
-        <tr><th>Path</th><th>Type</th><th>Purpose</th></tr>
-        <tr><td><code>carelink-pms/carelink/agi/worker/__init__.py</code></td><td>NEW</td><td>Package marker</td></tr>
-        <tr><td><code>carelink-pms/carelink/agi/worker/dispatcher.py</code></td><td>NEW</td><td>Looks up lease, RPCs to worker. Backend-side.</td></tr>
-        <tr><td><code>carelink-pms/carelink/agi/worker/entrypoint.py</code></td><td>NEW</td><td>FastAPI app entrypoint for the worker container</td></tr>
-        <tr><td><code>carelink-pms/carelink/agi/service.py</code></td><td>Edit (split)</td><td>Decompose into <code>BackendAGIService</code> + <code>WorkerAGIService</code> per Decision 1</td></tr>
-        <tr><td><code>carelink-pms/carelink/agi/config.py</code></td><td>Edit</td><td>Add <code>compute_mode: Literal["in_process", "worker_pool"] = "in_process"</code></td></tr>
-        <tr><td><code>carelink-pms/carelink/agi/drain.py</code></td><td>Edit</td><td>Add lease-refresh ticker (drain-scoped, 4-min interval per Decision 2)</td></tr>
-        <tr><td><code>carelink-pms/tests/section3_integrations/test_worker_dispatcher.py</code></td><td>NEW</td><td>Dispatcher RPC tests with fake worker</td></tr>
-        <tr><td><code>carelink-pms/tests/section1_unit/test_agi_service_split.py</code></td><td>NEW</td><td>Backend vs Worker class boundary tests</td></tr>
+        <tr><th>Path</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>carelink-pms/carelink/agi/backend.py</code></td><td>NEW (+858)</td><td><code>BackendAGIService</code> + module-level helpers (<code>build_restish_exec_env</code>, <code>_format_cold_*_user_turn</code>, <code>_pending_question_from_extra_data</code>) + <code>_build_restish_reference</code></td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/__init__.py</code></td><td>NEW (+4)</td><td>Package marker; re-exports <code>WorkerAGIService</code></td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/service.py</code></td><td>NEW (+1,531)</td><td><code>WorkerAGIService</code>; <code>_import_sdk</code> delegates to <code>service._import_sdk</code> for monkeypatch transparency</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/service.py</code></td><td>Edit (2,223 → 444)</td><td>Facade with <code>__getattr__</code>/<code>__setattr__</code> pass-through, <code>_require_worker</code> gate for <code>compute_mode='worker_pool'</code>, attribute-passthrough properties for shared state</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/config.py</code></td><td>Edit (+19)</td><td><code>compute_mode: Literal["in_process", "worker_pool"] = "in_process"</code> on <code>AGIConfig</code></td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_agi_service_split.py</code></td><td>NEW (+333)</td><td>15 tests: SDK boundary, method placement, facade composition, routing delegation, attribute pass-through</td></tr>
+        <tr><td><code>carelink-pms/tests/section3_integrations/test_invoke_expert_clinical_checklist.py</code></td><td>Edit (+34)</td><td>Bundled fix for 2 pre-existing failures: allowlist drift (relaxed exact-match → starter subset + read-only prefix check), Pydantic-default change (<code>{"checklist_id": "ccl_bad"}</code> → wrong-type payload that genuinely fails)</td></tr>
       </table>
 
       <h4>Acceptance criteria</h4>
       <ul class="checklist">
-        <li><span><code>BackendAGIService</code> imports without requiring <code>claude_agent_sdk</code> installed</span></li>
-        <li><span><code>WorkerAGIService</code> wraps the SDK; tests use <code>make_fake_spawn</code></span></li>
-        <li><span><code>compute_mode="in_process"</code> default preserves all existing behavior (regression suite passes)</span></li>
-        <li><span><code>compute_mode="worker_pool"</code> activates dispatcher path (covered by new tests, not by callers yet)</span></li>
-        <li><span>Lease ticker fires every 4 min (under 5-min TTL); cancellation clean on session end</span></li>
-        <li><span>Dispatcher RPC dispatches expert calls cross-process via fake worker; SSE response shape preserved</span></li>
-        <li><span>No frontend changes; no router changes</span></li>
+        <li class="done"><span><code>BackendAGIService</code> imports without requiring <code>claude_agent_sdk</code> installed (verified by test)</span></li>
+        <li class="done"><span><code>WorkerAGIService</code> wraps the SDK; tests use <code>make_fake_spawn</code></span></li>
+        <li class="done"><span><code>compute_mode="in_process"</code> default preserves all existing behavior</span></li>
+        <li class="done"><span>Facade preserves all historical caller surfaces (verified across 4 in-tree callers + 6+ attribute pass-throughs)</span></li>
+        <li class="done"><span><code>__getattr__</code>/<code>__setattr__</code> pass-through propagates worker-private writes (test monkeypatch ergonomics preserved post-split)</span></li>
+        <li class="done"><span><code>_import_sdk</code> indirection in worker/service.py reaches via <code>service._import_sdk</code> at call time</span></li>
+        <li class="done"><span>No router changes; no frontend changes; no new dependencies</span></li>
       </ul>
 
       <h4>Test plan</h4>
       <ul class="checklist">
-        <li><span>Existing per-expert hermetic tests pass under both <code>compute_mode</code> values</span></li>
-        <li><span>Full <code>pytest</code> with <code>compute_mode="in_process"</code> (default)</span></li>
-        <li><span>Full <code>pytest</code> with <code>compute_mode="worker_pool"</code> in CI</span></li>
-        <li><span>Manual: spin up worker entrypoint locally; backend dispatcher RPCs to it; verify a single expert call round-trips</span></li>
+        <li class="done"><span>15 new split tests pass</span></li>
+        <li class="done"><span>17/17 PR 2 auth tests still pass (no regression)</span></li>
+        <li class="done"><span>9/9 PR 3 lease tests still pass (no regression)</span></li>
+        <li class="done"><span>17/17 cold-revive tests pass (including the 2 split-discovered ones, fixed by pass-through + indirection)</span></li>
+        <li class="done"><span>4/4 clinical-checklist tests pass (including the 2 pre-existing failures, bundled fix)</span></li>
       </ul>
 
       <div class="pr-not-section">
         <div class="label">What this PR is NOT</div>
         <ul>
-          <li>Not switching any production traffic — <code>compute_mode</code> stays at <code>"in_process"</code> by default (PR 7)</li>
-          <li>Not adding cold-revive worker path (PR 8)</li>
-          <li>Not deploying the worker container to production (separate ops PR after PR 7)</li>
+          <li>Not introducing the dispatcher (PR 4b)</li>
+          <li>Not introducing the worker entrypoint (PR 4b)</li>
+          <li>Not adding the lease-refresh ticker (PR 4c)</li>
+          <li>Not switching any production traffic — <code>compute_mode</code> stays at <code>"in_process"</code> default</li>
         </ul>
       </div>
 
       <h4>Decisions referenced</h4>
       <ul style="font-size: 13.5px;">
         <li><strong>Decision 1:</strong> Two AGIService classes (Option A; spike skipped per Question G)</li>
-        <li><strong>Decision 2:</strong> 5-min TTL with drain-scoped ticker (4-min refresh interval)</li>
+        <li><strong>Decision 2:</strong> 5-min TTL (informs <code>compute_mode</code> contract; ticker lands in 4c)</li>
       </ul>
+    </div>
+  </div>
+
+  <!-- ============== PR 4b — NOT STARTED ============== -->
+  <div class="pr-card-detailed" data-pr="4b">
+    <div class="pr-detail-header">
+      <span class="pr-num-large">4b</span>
+      <div class="pr-title-block">
+        <div class="pr-title-text">worker/dispatcher.py + worker/entrypoint.py (HTTP + SSE)</div>
+        <div class="pr-pills">
+          <span class="pr-pill size-m">Size: Medium</span>
+          <span class="pr-pill risk-low">Risk: Low</span>
+          <span class="pr-pill">Layer 3</span>
+          <span class="pr-pill">Depends on: PR 4a</span>
+        </div>
+      </div>
+      <span class="pr-status not-started">Not started</span>
+    </div>
+    <div class="pr-detail-body">
+      <div class="pr-prompt">
+        <div class="label">Prompt — what this PR accomplishes</div>
+        <p>Adds the cross-process dispatch path. NEW <code>worker/dispatcher.py</code> on the backend side acts as an RPC client to the worker. NEW <code>worker/entrypoint.py</code> is the worker container's FastAPI app. Protocol: <strong>HTTP + SSE</strong> for streaming (per the 2026-05-04 sizing decision Q1) — no new deps, matches the existing FastAPI shape. Auth: <strong>internal HS256 token via <code>create_internal_token</code></strong> (PR 2's mechanism, with <code>org_id</code> round-trip — Q2). <code>compute_mode</code> stays at <code>"in_process"</code> default; new code is deployable but unused until PR 7 toggles it.</p>
+      </div>
+
+      <h4>Files changed (planned)</h4>
+      <table class="file-table">
+        <tr><th>Path</th><th>Type</th><th>Purpose</th></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/dispatcher.py</code></td><td>NEW</td><td>Backend-side: looks up lease via <code>SessionLease.lookup</code>, mints an internal HS256 token, RPCs to <code>worker_base_url</code>. Streams SSE responses through to the caller.</td></tr>
+        <tr><td><code>carelink-pms/carelink/agi/worker/entrypoint.py</code></td><td>NEW</td><td>Worker-side: FastAPI app exposing <code>/dispatch/{method_name}</code> endpoints that validate the HS256 token, hydrate <code>WorkerAGIService</code>, and stream SSE back. Includes <code>create_session</code> / <code>resume_with_*</code> / <code>query</code> / <code>finalize_session</code> endpoints.</td></tr>
+        <tr><td><code>carelink-pms/tests/section3_integrations/test_worker_dispatcher.py</code></td><td>NEW</td><td>Dispatcher RPC tests with a fake worker FastAPI app (<code>httpx.AsyncClient</code> in-process); verifies SSE response shape preserved</td></tr>
+      </table>
+
+      <h4>Acceptance criteria (proposed — confirm before dispatch)</h4>
+      <ul class="checklist">
+        <li><span><code>compute_mode="worker_pool"</code> activates dispatcher path (covered by new tests, not by callers yet)</span></li>
+        <li><span>Dispatcher mints valid HS256 token via <code>create_internal_token(sub=actor_id, org_id=session.org_id)</code></span></li>
+        <li><span>Worker entrypoint validates the token (rejects expired / missing / wrong-org tokens)</span></li>
+        <li><span>SSE streaming round-trips: dispatcher → worker → dispatcher's caller, with the same event shapes the SDK emits</span></li>
+        <li><span>Cross-process expert call returns identical result shape to in-process path</span></li>
+        <li><span>No router changes (those land in PR 7); no frontend changes; no new dependencies</span></li>
+      </ul>
+
+      <div class="pr-not-section">
+        <div class="label">What this PR is NOT</div>
+        <ul>
+          <li>Not adding the lease-refresh ticker (PR 4c)</li>
+          <li>Not changing any router (PR 7)</li>
+          <li>Not deploying the worker container to production (separate ops PR after PR 7)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== PR 4c — NOT STARTED ============== -->
+  <div class="pr-card-detailed" data-pr="4c">
+    <div class="pr-detail-header">
+      <span class="pr-num-large">4c</span>
+      <div class="pr-title-block">
+        <div class="pr-title-text">drain.py lease-refresh ticker</div>
+        <div class="pr-pills">
+          <span class="pr-pill size-s">Size: Small</span>
+          <span class="pr-pill risk-low">Risk: Low</span>
+          <span class="pr-pill">Layer 3</span>
+          <span class="pr-pill">Depends on: PRs 3, 4a</span>
+        </div>
+      </div>
+      <span class="pr-status not-started">Not started</span>
+    </div>
+    <div class="pr-detail-body">
+      <div class="pr-prompt">
+        <div class="label">Prompt — what this PR accomplishes</div>
+        <p>Wires PR 3's <code>SessionLease</code> into the drain loop. Adds an <code>asyncio.Task</code>-with-cancellation that calls <code>lease.refresh()</code> every 4 minutes (under the 5-min TTL ceiling per Decision 2). Per Q3 in the 2026-05-04 sizing discussion, the ticker uses <code>asyncio.Task</code> primitives directly — clean cancellation on session end avoids leaving expired tasks running.</p>
+      </div>
+
+      <h4>Files changed (planned)</h4>
+      <table class="file-table">
+        <tr><th>Path</th><th>Type</th><th>Purpose</th></tr>
+        <tr><td><code>carelink-pms/carelink/agi/drain.py</code></td><td>Edit</td><td>Add <code>_lease_refresh_loop(lease, db, interval=240)</code> coroutine. Spawn as <code>asyncio.Task</code> on session start; cancel on session end / error / timeout.</td></tr>
+        <tr><td><code>carelink-pms/tests/section1_unit/test_drain_lease_ticker.py</code> (or similar)</td><td>NEW</td><td>Tests: ticker refreshes within window, ticker cancels cleanly on drain end, ticker handles <code>refresh()</code> returning <code>False</code> (lease lost) by raising/exiting</td></tr>
+      </table>
+
+      <h4>Acceptance criteria (proposed — confirm before dispatch)</h4>
+      <ul class="checklist">
+        <li><span>Lease ticker fires every 4 minutes (well under 5-min TTL)</span></li>
+        <li><span>Ticker is an <code>asyncio.Task</code> spawned at session start, cancelled at session end/error</span></li>
+        <li><span>If <code>lease.refresh()</code> returns <code>False</code> (lease lost), ticker exits cleanly and signals the drain loop</span></li>
+        <li><span>No router changes; no frontend changes; no new dependencies</span></li>
+      </ul>
+
+      <div class="pr-not-section">
+        <div class="label">What this PR is NOT</div>
+        <ul>
+          <li>Not changing the dispatcher (PR 4b is independent — they share PR 4a as dependency)</li>
+          <li>Not implementing failover-on-lease-loss in the orchestrator (separate concern; PR 7 territory)</li>
+        </ul>
+      </div>
     </div>
   </div>
 
