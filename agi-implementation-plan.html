@@ -1253,7 +1253,7 @@ class SessionLease:
     </div>
   </div>
 
-  <!-- ============== PR 4b — NOT STARTED ============== -->
+  <!-- ============== PR 4b — MERGED ============== -->
   <div class="pr-card-detailed" data-pr="4b">
     <div class="pr-detail-header">
       <span class="pr-num-large">4b</span>
@@ -1266,12 +1266,13 @@ class SessionLease:
           <span class="pr-pill">Depends on: PR 4a</span>
         </div>
       </div>
-      <span class="pr-status not-started">Not started</span>
+      <span class="pr-status merged">Merged</span>
     </div>
     <div class="pr-detail-body">
       <div class="pr-prompt">
         <div class="label">Prompt — what this PR accomplishes</div>
         <p>Adds the cross-process dispatch path. NEW <code>worker/dispatcher.py</code> on the backend side acts as an RPC client to the worker. NEW <code>worker/entrypoint.py</code> is the worker container's FastAPI app. Protocol: <strong>HTTP + SSE</strong> for streaming (per the 2026-05-04 sizing decision Q1) — no new deps, matches the existing FastAPI shape. Auth: <strong>internal HS256 token via <code>create_internal_token</code></strong> (PR 2's mechanism, with <code>org_id</code> round-trip — Q2). <code>compute_mode</code> stays at <code>"in_process"</code> default; new code is deployable but unused until PR 7 toggles it.</p>
+        <p style="margin-top: 8px;"><strong>Shipped (2026-05-04, commit <code>822d4c5</code>):</strong> 4 files, +1850 LoC. <code>dispatcher.py</code> (618 LoC), <code>entrypoint.py</code> (487 LoC), <code>test_worker_dispatcher.py</code> (804 LoC, 16 tests). 78/78 tests pass (62 baseline + 16 new including A1 constant-drift guard + A2 <code>resume_with_approval_result</code> coverage). HS256 constants re-derived in PMS (avoid pms→backend layering violation); drift test pins them in lockstep with <code>app.auth</code>. <code>WorkerDispatcher</code> exposes the same 5 method signatures as <code>WorkerAGIService</code> so PR 7 can swap them transparently in the facade. <strong>Open for PR 7:</strong> add <code>AGIConfig.worker_base_url</code> and wire <code>self._worker = WorkerDispatcher(...)</code> in the <code>compute_mode='worker_pool'</code> branch of <code>service.py.__init__</code>.</p>
       </div>
 
       <h4>Files changed (planned)</h4>
@@ -1303,7 +1304,7 @@ class SessionLease:
     </div>
   </div>
 
-  <!-- ============== PR 4c — NOT STARTED ============== -->
+  <!-- ============== PR 4c — MERGED ============== -->
   <div class="pr-card-detailed" data-pr="4c">
     <div class="pr-detail-header">
       <span class="pr-num-large">4c</span>
@@ -1316,12 +1317,13 @@ class SessionLease:
           <span class="pr-pill">Depends on: PRs 3, 4a</span>
         </div>
       </div>
-      <span class="pr-status not-started">Not started</span>
+      <span class="pr-status merged">Merged</span>
     </div>
     <div class="pr-detail-body">
       <div class="pr-prompt">
         <div class="label">Prompt — what this PR accomplishes</div>
         <p>Wires PR 3's <code>SessionLease</code> into the drain loop. Adds an <code>asyncio.Task</code>-with-cancellation that calls <code>lease.refresh()</code> every 4 minutes (under the 5-min TTL ceiling per Decision 2). Per Q3 in the 2026-05-04 sizing discussion, the ticker uses <code>asyncio.Task</code> primitives directly — clean cancellation on session end avoids leaving expired tasks running.</p>
+        <p style="margin-top: 8px;"><strong>Shipped (2026-05-04, commit <code>9374e81</code>):</strong> purely additive. <code>drain.py</code> +81 LoC (new <code>_lease_refresh_loop</code> coroutine appended; existing <code>drive_client</code> + <code>_read_stderr_tail</code> + <code>OnMessage</code> + module docstring untouched). <code>test_drain_lease_ticker.py</code> 338 LoC, 8 tests covering the four behavior pairs (cadence + first-wait, cancel-during-sleep + cancel-during-refresh, immediate-False + late-False, immediate-exception + late-exception). 86/86 tests pass; 5× flake stress shows zero variance at 0.20s/run. Function signature exact: <code>async def _lease_refresh_loop(lease: SessionLease, db: Database, interval: float = 240.0) -&gt; bool</code>. PR 7 will spawn it as <code>asyncio.create_task(...)</code> alongside <code>drive_client</code>; check <code>ticker.done()</code> + <code>ticker.exception()</code> after drain to detect lost-lease bail-out.</p>
       </div>
 
       <h4>Files changed (planned)</h4>
@@ -1349,26 +1351,51 @@ class SessionLease:
     </div>
   </div>
 
-  <!-- ============== PR 5 ============== -->
+  <!-- ============== PR 5 — MERGED (split into 5a/5b/5c) ============== -->
   <div class="pr-card-detailed" data-pr="5">
     <div class="pr-detail-header">
       <span class="pr-num-large">5</span>
       <div class="pr-title-block">
         <div class="pr-title-text">workspaces/ cherry-pick + cross-project skills templates (FUSE deferred)</div>
         <div class="pr-pills">
-          <span class="pr-pill size-m">Size: Medium</span>
+          <span class="pr-pill size-m">Size: XL (split into 5a/5b/5c)</span>
           <span class="pr-pill risk-low">Risk: Low</span>
           <span class="pr-pill">Layer 4</span>
           <span class="pr-pill">Depends on: PRs 1-4 (4a/4b/4c)</span>
         </div>
       </div>
-      <span class="pr-status not-started">Not started</span>
+      <span class="pr-status merged">Merged</span>
     </div>
     <div class="pr-detail-body">
       <div class="pr-prompt">
         <div class="label">Prompt — what this PR accomplishes</div>
         <p>Replaces the per-call <code>tempfile.mkdtemp</code> workspace creation with a structured <code>WorkspaceManager</code> cherry-picked (with refactor) from the FUSE branch (<code>b0bb495</code>, Arjun Walia). Workspaces become deterministic-path (<code>${SANDBOX_LOCAL_ROOT}/${session_id}/</code>); skills + memories + transcripts persist in GCS via a <code>WorkspaceManifest</code> (a content-addressable file index that PR 6's memory store will reuse).</p>
         <p><strong>FUSE mount config ships but stays disabled in v1</strong> (per F3); enabling FUSE is a post-v1 follow-up after the rest stabilizes.</p>
+        <div style="margin-top: 12px; padding: 12px 14px; border: 1px solid var(--success); border-left: 4px solid var(--success); background: #f6fffb; border-radius: 4px;">
+          <p style="margin: 0 0 8px 0;"><strong style="color: #0a3622;">Shipped (2026-05-04 → 2026-05-05) — split into three commits</strong></p>
+          <ul style="margin: 0 0 8px 0; padding-left: 20px; font-size: 13.5px;">
+            <li><strong>5a — workspaces lib + scope_resolver refactor</strong> (<code>6328054</code>): 6 NEW files, +2192 LoC. <code>workspaces/{__init__,manifest,schemas,manager,scope}.py</code> cherry-picked from FUSE branch (manifest.py + schemas.py verbatim; manager.py refactored from <code>__init__(org_id=…)</code> to <code>__init__(scope_resolver=…)</code>; new <code>scope.py</code> with <code>MemoryScope</code>, <code>ScopeResolver</code> Protocol, <code>StaticScopeResolver</code>). 23 cherry-picked tests + 4 NEW S1-S4 sharp-edge tests (concurrency / <code>_load_manifest</code> 5xx / manifest precondition / <code>finalize</code> race). S2 fix uplifted: <code>_load_manifest</code> narrows from broad <code>except Exception</code> to <code>FileNotFoundError</code>; non-404 errors now log + re-raise.</li>
+            <li><strong>5b — worker refactor + extra_data["workspace"] retirement</strong> (<code>83ee4fe</code>, Option B): 8 files, +405 / -171. Replaced 4 helpers in <code>worker/service.py</code> (<code>_prepare_workspace</code>, <code>_copy_skills</code>, <code>_copy_agents</code>, <code>_write_restish_config</code>) with calls into <code>WorkspaceManager</code>. <strong>Full retirement</strong> of <code>extra_data["workspace"]</code> across <code>worker/service.py</code>, <code>sessions/store.py</code> (dropped <code>workspace</code> param from <code>record_pending_approval</code>), <code>inngest/agi_cold_revive.py</code>, <code>routers/agi.py</code>. Workspace path now deterministic (<code>${SANDBOX_LOCAL_ROOT}/${session_id}/</code>) — cold-revive recomputes from session_id alone, no DB persistence required. Pre-mints UUID for row PK so <code>_prepare_workspace</code> can use it before <code>connect()</code>; SDK's own session_id captured separately as <code>extra_data.sdk_session_id</code> by the drain (row PK and SDK id intentionally decoupled). 116/116 tests pass. Latent bug fix bundled: <code>create_session(resume=...)</code> path no longer orphans the workspace under a random UUID.</li>
+            <li><strong>5c — hybrid finalize + dual-client + per-pharmacy hydrate isolation + frontend</strong> (<code>f2886a7</code>): 25 files, +2447 / -103. NEW <code>sessions/finalize.py</code> with <code>finalize_session(agi, session_id, *, reason)</code> public API. <code>MemoryScope</code> extended to full 5-scope (org_id + pharmacy_id + user_id + session_id) with <code>memory_path(bucket)</code> per-bucket routing — tools/drugs at org-share, patients/prescribers/insurance at pharmacy. <code>WorkspaceManager</code> takes a second <code>templates_gcs_client</code> for the cross-project pattern (per-org canonical + shared platform skills). <strong>Per-pharmacy <code>_hydrate</code> fan-out</strong> (amendment): when <code>scope.pharmacy_id</code> is set, hydrate issues 3 targeted prefix downloads (tools, drugs, pharmacy/&lt;pid&gt;) instead of one broad <code>memories/&lt;org_id&gt;/</code> pull — eliminates cross-pharmacy bandwidth waste + soft data-isolation leak. Sweeper status shifts from <code>'orphaned'</code> to <code>'finalized'</code>; cold-revive helper still writes <code>'orphaned'</code> (different lifecycle, both terminal). Frontend updated: new <code>AGISessionStatus</code> 8-value union + <code>TERMINAL_AGI_SESSION_STATUSES</code> set in <code>types/agi.ts</code>; <code>SessionRecapCard</code> chips, comments across 4 files. 158/158 tests pass.</li>
+          </ul>
+          <p style="margin: 0; font-size: 13.5px;"><em>One spec deviation across the three commits: the original PR 5 single-card scope was split into 5a/5b/5c during execution to keep diff sizes manageable. The architecture, files, and acceptance criteria below remain the source-of-truth for what the three commits collectively delivered.</em></p>
+        </div>
+        <div style="margin-top: 12px; padding: 12px 14px; border: 1px solid #e6a700; border-left: 4px solid #e6a700; background: #fff8c5; border-radius: 4px;">
+          <p style="margin: 0 0 8px 0;"><strong style="color: #4d2d00;">Pre-deploy reminders — REQUIRED before promoting these commits to production</strong></p>
+          <ol style="margin: 0; padding-left: 22px; font-size: 13.5px;">
+            <li style="margin-bottom: 6px;"><strong>Provision the two new GCS buckets</strong> using the helper scripts that landed in 5c:
+              <pre style="margin: 4px 0; padding: 6px 8px; background: #fff; border: 1px solid #e6a700; border-radius: 3px; font-size: 12px;">./scripts/setup-platform-skills-bucket.sh &lt;PLATFORM_PROJECT_ID&gt;
+./scripts/setup-org-canonical-bucket.sh &lt;ORG_ID&gt; &lt;ORG_PROJECT_ID&gt;</pre>
+              Backend's <code>GCSClient</code> constructor is lazy — missing buckets only surface on first <code>list_blobs</code> / <code>download_blob</code>. Without provisioning, every new session's first hydrate will 404.
+            </li>
+            <li style="margin-bottom: 6px;"><strong>Cross-project IAM grant</strong> (printed by <code>setup-platform-skills-bucket.sh</code>): each org's runtime service account needs <code>roles/storage.objectViewer</code> on the platform skills bucket. Without it, every session's skills hydrate fails with a 403.</li>
+            <li style="margin-bottom: 6px;"><strong>Update observability + dashboards</strong> filtering on <code>agi_sessions.status = 'orphaned'</code> to ALSO include <code>'finalized'</code>. Both are terminal post-5c. Sessions swept by the new TTL path will silently disappear from any alert stream that only matched <code>'orphaned'</code>.</li>
+            <li style="margin-bottom: 0;"><strong>Drain <code>waiting_cold</code> sessions before deploy</strong> (PR 5b precondition):
+              <pre style="margin: 4px 0; padding: 6px 8px; background: #fff; border: 1px solid #e6a700; border-radius: 3px; font-size: 12px;">SELECT count(*) FROM agi_sessions WHERE status = 'waiting_cold';</pre>
+              Wait until <code>0</code> (or explicitly cancel them). Pre-5b sessions persisted random <code>tempfile.mkdtemp</code> paths in <code>extra_data["workspace"]</code>; the new deterministic path is different, so cold-revive after deploy will hydrate a fresh empty sandbox and the SDK's <code>--resume &lt;sdk_session_id&gt;</code> won't find its transcript.
+            </li>
+          </ol>
+        </div>
         <p><strong>Architecture (updated 2026-05-04 for GCP project-per-org):</strong></p>
         <ul style="font-size: 13.5px;">
           <li>Per-org canonical store: <code>gs://carelink-{org_id}-canonical/</code> in the org's own GCP project. Holds memories/<code>{tools,drugs}</code>, memories/<code>{patients,prescribers,insurance}</code>/&lt;pharmacy&gt;/, sessions/&lt;id&gt;/(manifest.json + artifacts/ + transcript/).</li>
