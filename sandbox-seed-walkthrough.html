@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CareLink Sandbox Seed — Walkthrough (v2)</title>
+<title>CareLink Sandbox Seed — Walkthrough (v3)</title>
 <style>
   :root {
     --bg: #fafafa;
@@ -186,43 +186,38 @@
 <div class="wrap">
 
 <nav class="toc">
-  <h2>Walkthrough</h2>
+  <h2>Status</h2>
+  <a href="#done">What's done</a>
+  <a href="#step-4-runbook">Playbook</a>
+  <a href="#next-steps">What's next</a>
+  <a href="#cleanup-design">Cleanup — shipped</a>
+  <a href="#realistic-flow">Realistic flow</a>
+  <h2>Reference</h2>
   <a href="#overview">Overview</a>
-  <a href="#architecture">Architecture decisions</a>
-  <a href="#legend">Legend</a>
   <a href="#step-0">Step 0 · Drop dummy</a>
   <a href="#step-1">Step 1 · Schema prep</a>
   <a href="#step-2">Step 2 · Scaffolding</a>
   <a href="#step-3">Step 3 · Personas</a>
-  <a href="#step-4">Step 4 · Runbook</a>
   <a href="#step-5">Step 5 · Demo flow</a>
-  <a href="#verdict-matrix">Verdict matrix</a>
   <h2>Personas</h2>
   <a href="#p-maria">Maria · baseline</a>
   <a href="#p-david">David · PA</a>
   <a href="#p-eleanor">Eleanor · REMS</a>
   <a href="#p-marcus">Marcus · refill</a>
   <a href="#p-raj">Raj · intake</a>
-  <h2>Decisions</h2>
-  <a href="#decided">Decided (20)</a>
-  <a href="#open">Pending verification</a>
-  <h2>Status</h2>
-  <a href="#done">What's done</a>
-  <a href="#step-4-runbook">Step 4 · Pre-demo runbook</a>
-  <a href="#next-steps">What's next</a>
   <h2>Appendix</h2>
   <a href="#row-totals">Row totals</a>
 </nav>
 
 <main>
 
-<h1>CareLink Sandbox Seed — Walkthrough <span style="font-size: 14px; color: var(--text-muted); font-weight: 400;">(v2 · services-only · current-state-only)</span></h1>
+<h1>CareLink Sandbox Seed — Walkthrough <span style="font-size: 14px; color: var(--text-muted); font-weight: 400;">(v3 · canary clean + one-shot)</span></h1>
 <p class="subtitle">
   Target: <strong>canary</strong> environment.
   Source: <code>Carelink Sandbox Seed Spec.docx</code>.
   Personas: <strong>5</strong> (Maria · David · Eleanor · Marcus · Raj).
   Demo: <strong>7 steps</strong> intake → delivery.
-  Last updated 2026-05-13.
+  Last updated 2026-05-13 (evening — FHIR store separation + inventory wipe + Asepha purge + one-shot script shipped).
 </p>
 
 <section id="overview">
@@ -249,91 +244,7 @@
 </table></div>
 </section>
 
-<!-- ============================================ -->
-<section id="architecture">
-<h2>Architecture decisions (from PMS deep-dive)</h2>
 
-<p>The 4-agent investigation produced these architectural facts that shape every other section.</p>
-
-<h3>How CareLink works</h3>
-
-<ul>
-  <li><strong>Facade singleton</strong> at <code>carelink-pms/carelink/__init__.py</code>. Integrations (FHIR, WorkOS, Permit, Asepha Voice, GCS, Stripe, ShipStation, etc.) are constructed eagerly in <code>__init__</code>, each gated on its credential being present — when absent, the slot is <code>None</code>. Domain services (<code>cl.patients</code>, <code>cl.inventory</code>, <code>cl.shipments</code>, <code>cl.ivr</code>, ...) are lazy <code>@property</code> instances constructed on first access.</li>
-  <li><strong>Per-method DB session.</strong> Each service method opens its own <code>async with self._db.session() as session:</code> via the <code>Database.session()</code> async contextmanager. Auto-commit on clean exit, rollback on exception.</li>
-  <li><strong>Audit logs are atomic with the SQL write.</strong> <code>AuditService.log(session, ...)</code> takes the same session as a parameter, so the audit row commits in the same transaction.</li>
-  <li><strong>External integration side effects are NOT atomic with the DB write</strong> — they fire after the SQL row commits, with try/except + log on failure. If Permit sync fails, the entity still exists.</li>
-  <li><strong>Inngest dispatch is best-effort and silent.</strong> Send failures are logged, not raised. If Inngest isn't registered (which it won't be in seed scripts), events go to dev-mode and are effectively dropped — <em>this is desirable for seeds</em>, we don't want PV1/DUR workflows running on sandbox data.</li>
-  <li><strong>FHIR is hard-required.</strong> <code>FHIRClient</code> is always constructed, never <code>None</code>. Every clinical service (Patient, Practitioner, MedicationRequest, Coverage, Claim) writes to FHIR first. <strong>The sandbox needs a reachable FHIR store OR a stub.</strong> See Q open list.</li>
-</ul>
-
-<h3>Sandbox config recipe</h3>
-
-<p>Verified pattern from <code>carelink-backend/scripts/seed_voice_test_patient.py</code>:</p>
-
-<pre><code>import os, sys, asyncio
-sys.path.insert(0, ".../carelink-pms")
-
-async def main():
-    from dotenv import load_dotenv
-    load_dotenv(".env")
-
-    # Null out optional integrations to keep seeds side-effect-clean.
-    # WORKOS must be empty or users.create will raise ExternalServiceError.
-    # ASEPHA must be empty or pharmacy.create will hit the real API and try
-    # to purchase a phone number. Default is the string "test" (truthy!).
-    os.environ["ASEPHA_VOICE_API_KEY"] = ""
-    os.environ["CALCOM_API_KEY"] = ""
-    os.environ["PERMIT_API_KEY"] = ""
-    os.environ["WORKOS_API_KEY"] = ""
-    os.environ["AGI_ENABLED"] = "false"
-    os.environ.pop("CHAT_HOMESERVER_URL", None)
-
-    from app.config import Settings
-    from carelink import CareLink
-
-    settings = Settings()
-    cl_config = settings.build_carelink_config()
-    object.__setattr__(cl_config, "database_url", settings.database_url)
-
-    cl = CareLink(cl_config)
-    await cl.initialize()
-    try:
-        await seed_everything(cl, actor_id="system")
-    finally:
-        await cl.close()
-
-asyncio.run(main())</code></pre>
-
-<h3>The <code>actor_id="system"</code> convention</h3>
-
-<p>The literal string <code>"system"</code> passed as <code>actor_id</code> short-circuits the <code>User</code> lookup at <code>carelink-pms/carelink/core/base_service.py:52</code> and yields a synthetic admin actor with <code>role="admin"</code>, bypassing every <code>authz.require()</code> call. Audit log entries will show <code>actor_email="system@carelink.internal"</code> — distinguishable from real human actions in the audit trail.</p>
-
-<div class="callout warn">
-  <span class="label warn">Hard requirement to resolve before seed runs</span>
-  <strong>FHIR sandbox</strong> — every clinical service write goes through <code>cl._fhir.create(...)</code>. Without a reachable Google Healthcare FHIR store (or a stubbed <code>FHIRClient</code>), the seed cannot run. See open question <a href="#open">FHIR availability</a>.
-</div>
-</section>
-
-<!-- ============================================ -->
-<section id="legend">
-<h2>Legend</h2>
-<div class="legend">
-  <span class="legend-item"><span class="badge-pill seed">SERVICE</span> Call PMS service — done</span>
-  <span class="legend-item"><span class="badge-pill ui">UI</span> Created live during the demo by the tester</span>
-  <span class="legend-item"><span class="badge-pill run">RUNBOOK</span> Pre-demo manual setup step</span>
-  <span class="legend-item"><span class="badge-pill gap">NOT SEEDED</span> Demo gap — operator must generate via warmup flow</span>
-  <span class="legend-item"><span class="badge-pill code">CODE</span> Config / repo change, not data</span>
-  <span class="legend-item"><span class="badge-pill new">NEW TABLE</span> Doesn't exist yet — engineering ships first</span>
-  <span class="legend-item"><span class="badge-pill decided">DECIDED</span> Resolved in this planning round</span>
-</div>
-<div class="legend" style="margin-top: 0;">
-  <span class="legend-item"><span class="persona maria">Maria · 67F</span> Baseline · Steps 6-7</span>
-  <span class="legend-item"><span class="persona david">David · 43M</span> PA + cold chain · Steps 4-7</span>
-  <span class="legend-item"><span class="persona eleanor">Eleanor · 78F</span> REMS · Step 5</span>
-  <span class="legend-item"><span class="persona marcus">Marcus · 54M</span> Refill + margin · Steps 4-6</span>
-  <span class="legend-item"><span class="persona raj">Raj · 40M</span> Intake · Steps 1-3</span>
-</div>
-</section>
 
 <!-- ============================================ -->
 <section id="step-0">
@@ -468,7 +379,7 @@ INDEX (patient_fhir_id, reviewed_at DESC)</code></pre>
   </tr>
   <tr>
     <td><code>inventory_products</code></td>
-    <td>If <a href="#open">Q · <code>Product.rems_required</code></a> picks "add column": <code>rems_required BOOLEAN NOT NULL DEFAULT false</code></td>
+    <td>(<code>rems_required</code> stays derived from FDB at render time per D20 — no column added.)</td>
     <td>Eleanor's Revlimid display</td>
   </tr>
 </table></div>
@@ -498,7 +409,7 @@ INDEX (patient_fhir_id, reviewed_at DESC)</code></pre>
   <tr><td>URAC controls (6)</td><td>(no public service)</td><td class="verdict bypass">DEFERRED</td><td>No public method for FocusArea/Standard/Control. Use <code>UracParser.seed_framework()</code> or direct ORM. <strong>Acceptable bypass for compliance-tree seeding only.</strong></td></tr>
   <tr><td>Workflow definitions (3)</td><td><code>cl.workflows.create_definition</code></td><td class="verdict service">SERVICE</td><td>Does NOT fire Inngest on create</td></tr>
   <tr><td>Questionnaire templates (PASI, RAPID-3)</td><td><code>cl.questionnaires.create</code></td><td class="verdict service">SERVICE</td><td>Includes questions in same call</td></tr>
-  <tr><td>IVR prompts (4)</td><td><code>cl.ivr.prompts.create</code></td><td class="verdict blocked">BLOCKED</td><td>Requires live Asepha tenant. <a href="#open">See Q on IVR strategy.</a></td></tr>
+  <tr><td>IVR prompts (4)</td><td><code>cl.ivr.prompts.create</code></td><td class="verdict service">SERVICE</td><td>Pushed to canary Asepha tenant; stable IDs preserved by update-by-name. See <a href="#cleanup-design">Cleanup — Asepha</a>.</td></tr>
 </table></div>
 
 <h3>Proposed seed script structure</h3>
@@ -605,7 +516,7 @@ python -m scripts.sandbox.personas.seed_marcus
 
 <div class="callout warn">
   <span class="label warn">Historical context is the operator's job</span>
-  Demo realism requires history (a delivered shipment to celebrate, a paid claim to show, a past inbound call transcript). <strong>This is not in the seed.</strong> The operator must generate historical context by running real flows in the system <em>before</em> the demo session — see <a href="#step-4">Step 4 warmup runs</a>. Demo steps that cannot be remediated this way are explicitly called out as <span class="badge-pill gap">DEMO GAP</span> in Step 5.
+  Demo realism requires history (a delivered shipment to celebrate, a paid claim to show, a past inbound call transcript). <strong>This is not in the seed.</strong> The operator must generate historical context by running real flows in the system <em>before</em> the demo session — see <a href="#step-4-runbook">the playbook's Step 4 warmup-runs table</a>. Demo steps that cannot be remediated this way are explicitly called out as <span class="badge-pill gap">DEMO GAP</span> in Step 5.
 </div>
 
 <div class="counts-grid">
@@ -781,47 +692,6 @@ python -m scripts.sandbox.personas.seed_marcus
 </div>
 </section>
 
-<!-- ============================================ -->
-<section id="step-4">
-<div class="step-header runbook"><span class="badge">STEP 4</span><h2>Pre-demo runbook</h2></div>
-
-<h3>4.1 — WorkOS</h3>
-<ul>
-  <li>Provision WorkOS account <code>pharmacist@demopharmacy.com</code>. This is the only user that logs in.</li>
-  <li>Each persona's <code>cl.patients.portal.create</code> requires a non-null <code>workos_user_id</code> — <a href="#open">see Q on WorkOS IDs</a>.</li>
-</ul>
-
-<h3>4.2 — Asepha Voice outbound numbers</h3>
-<ul>
-  <li>Ensure outbound numbers are dialable / mockable on the Asepha tenant: 614-555-0142 (Maria), 513-555-0188 (David), 513-555-0301 (Dr. Khan's office), Marcus's number.</li>
-  <li>IVR prompts themselves are <a href="#open">blocked</a> until Asepha sandbox strategy decided.</li>
-</ul>
-
-<h3>4.3 — File staging</h3>
-<ul>
-  <li>Place <code>raj-dhadwal-skyrizi-referral.docx</code> in tester's Downloads folder.</li>
-  <li>Document files for Maria/David/Eleanor/Marcus — still pending Q on file content (content team vs placeholders).</li>
-</ul>
-
-<h3>4.4 — Tier-config / sidebar audit</h3>
-<p>Confirm <code>config/tiers/sandbox.yaml</code> hides everything the spec wants hidden. <a href="#open">See Q on sub-item gating</a>.</p>
-
-<h3>4.5 — Warmup runs (generate historical context)</h3>
-<div class="callout warn">
-  <span class="label warn">Operator responsibility</span>
-  Many demo steps depend on historical artifacts that the seed does NOT create. The operator must run real flows in the system before the demo session to generate this context. Examples:
-</div>
-
-<div class="tbl-wrap"><table>
-  <tr><th>To get…</th><th>Run this before demo</th><th>Possible?</th></tr>
-  <tr><td>SMS thread on a patient (any persona)</td><td>Open patient detail → SMS tab → send a message (UI flow)</td><td>YES — user must do this for every persona where SMS matters</td></tr>
-  <tr><td>Maria's "delivered" shipment for Step 7</td><td>Progress Maria's Rx 1002457 through Rx Flows → trigger shipment → wait for ShipStation delivery webhook</td><td>PARTIAL — UI flow exists, but real delivery timing depends on ShipStation sandbox</td></tr>
-  <tr><td>Maria's inbound call for Step 7</td><td>No UI to inject inbound calls. They arrive via Asepha webhooks when a patient calls in.</td><td>NO — Step 7 inbound call is an unfixable gap unless Asepha provides a sandbox call-injection tool</td></tr>
-  <tr><td>Marcus's side-effect call for Step 4</td><td>Same as above</td><td>NO — same unfixable gap</td></tr>
-  <tr><td>David's faxes</td><td>Run the PA submission flow (outbound to BCBS) + lab order flow (outbound to Khan)</td><td>YES if the flow exists; depends on Telnyx sandbox</td></tr>
-  <tr><td>Completed touchpoints</td><td>Run the document() action in the touchpoint UI</td><td>YES — UI flow exists, but <code>completed_at</code> will be "now" not the demo's expected past date</td></tr>
-</table></div>
-</section>
 
 <!-- ============================================ -->
 <section id="step-5">
@@ -898,213 +768,33 @@ python -m scripts.sandbox.personas.seed_marcus
 </div>
 </section>
 
-<!-- ============================================ -->
-<section id="verdict-matrix">
-<h2>Per-entity verdict matrix</h2>
-<p>Reading: <strong>SERVICE</strong> = call PMS, done. <strong>BLOCKED</strong> = engineering work first. <strong>DROPPED</strong> = not seeded per decision.</p>
 
-<div class="tbl-wrap"><table class="verdict-table">
-  <tr><th>Entity</th><th>Verdict</th><th>Path</th></tr>
-  <tr><td>Pharmacy</td><td class="verdict service">SERVICE</td><td><code>cl.pharmacies.create</code></td></tr>
-  <tr><td>Staff users</td><td class="verdict service">SERVICE</td><td><code>cl.users.create</code> w/ WORKOS_API_KEY=""</td></tr>
-  <tr><td>Products (14)</td><td class="verdict service">SERVICE</td><td><code>cl.inventory.products.create</code> (idempotent)</td></tr>
-  <tr><td>Lots</td><td class="verdict service">SERVICE</td><td><code>cl.inventory.stock.receive</code></td></tr>
-  <tr><td>Locations</td><td class="verdict service">SERVICE</td><td><code>cl.inventory.stock.locations.create</code></td></tr>
-  <tr><td>Suppliers (3)</td><td class="verdict service">SERVICE</td><td><code>cl.inventory.suppliers.create</code></td></tr>
-  <tr><td>URAC framework</td><td class="verdict service">SERVICE</td><td><code>cl.compliance.frameworks.create</code></td></tr>
-  <tr><td>URAC controls (6)</td><td class="verdict bypass">DEFERRED</td><td>URAC parser or direct ORM (no service for tree)</td></tr>
-  <tr><td>Workflow defs (3)</td><td class="verdict service">SERVICE</td><td><code>cl.workflows.create_definition</code></td></tr>
-  <tr><td>Questionnaire templates</td><td class="verdict service">SERVICE</td><td><code>cl.questionnaires.create</code></td></tr>
-  <tr><td>IVR prompts</td><td class="verdict blocked">BLOCKED</td><td>Asepha tenant decision</td></tr>
-  <tr><td>Patient (FHIR + portal)</td><td class="verdict service">SERVICE</td><td><code>cl.patients.create</code> + <code>cl.patients.portal.create</code></td></tr>
-  <tr><td>PatientAllergy</td><td class="verdict blocked">BLOCKED → SERVICE</td><td>Engineering ships table; service follows <code>cl.patients.allergies.add</code> pattern</td></tr>
-  <tr><td>PatientCondition</td><td class="verdict blocked">BLOCKED → SERVICE</td><td>Same</td></tr>
-  <tr><td>PatientCoverage</td><td class="verdict blocked">BLOCKED → SERVICE</td><td>Same</td></tr>
-  <tr><td>CareTeamMember</td><td class="verdict service">SERVICE</td><td><code>cl.care_coordination.care_team.add</code></td></tr>
-  <tr><td>Prescriber</td><td class="verdict service">SERVICE</td><td><code>cl.prescribers.create</code></td></tr>
-  <tr><td>MedicationRequest (active)</td><td class="verdict service">SERVICE</td><td><code>cl.prescriptions.create</code></td></tr>
-  <tr><td>PriorAuthorization</td><td class="verdict blocked">BLOCKED</td><td>No first-class entity — design decision needed</td></tr>
-  <tr><td>WorkItem (David's pending)</td><td class="verdict service">SERVICE</td><td><code>cl.work_items.create</code> — fires Inngest dispatch</td></tr>
-  <tr><td>WorkItem (Maria's 6 completed)</td><td class="verdict dropped">DROPPED</td><td>Not seeded — operator generates via flow</td></tr>
-  <tr><td>Pending touchpoints</td><td class="verdict service">SERVICE</td><td><code>cl.care_coordination.touchpoints.create</code> with future <code>due_date</code></td></tr>
-  <tr><td>Pending shipments</td><td class="verdict service">SERVICE</td><td><code>cl.shipments.create</code> — creates PENDING status (acceptable)</td></tr>
-  <tr><td>Pending questionnaire assignment</td><td class="verdict service">SERVICE</td><td><code>cl.questionnaires.send</code></td></tr>
-  <tr><td>Completed touchpoints</td><td class="verdict dropped">DROPPED</td><td>Not seeded</td></tr>
-  <tr><td>Delivered shipments</td><td class="verdict dropped">DROPPED</td><td>Not seeded</td></tr>
-  <tr><td>Completed questionnaire assignments</td><td class="verdict dropped">DROPPED</td><td>Not seeded</td></tr>
-  <tr><td>Paid claims</td><td class="verdict dropped">DROPPED</td><td>Not seeded</td></tr>
-  <tr><td>Historical calls</td><td class="verdict dropped">DROPPED</td><td>Not seeded</td></tr>
-  <tr><td>SMS conversations</td><td class="verdict dropped">DROPPED</td><td>Per decision — no local table; user must generate</td></tr>
-  <tr><td>Faxes</td><td class="verdict dropped">DROPPED</td><td>Not seeded</td></tr>
-  <tr><td>Historical audit logs</td><td class="verdict dropped">DROPPED</td><td>Not seeded — current-state seed creates fresh audit entries</td></tr>
-  <tr><td>Documents</td><td class="verdict blocked">BLOCKED</td><td>Content question still open</td></tr>
-</table></div>
-</section>
 
-<!-- ============================================ -->
-<section id="decided">
-<h2>Decisions — Decided ✓</h2>
-
-<div class="decided-list">
-  <div class="decided-tile">
-    <strong>D1 · Architecture — PMS services, not direct DB writes</strong>
-    <p>All seed work calls <code>cl.*.create()</code> service methods. This makes audit logs / FHIR mirror / Permit sync / Inngest dispatch / external integrations fire naturally and yields data indistinguishable from production.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D2 · No historical artifacts</strong>
-    <p>The seed creates current state only. Services force <code>now()</code> on operational timestamps and we don't fight that. Demo operators generate historical context via real flows before the demo session, or accept demo gaps for items that can't be flow-generated (e.g., inbound calls).</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D3 · SMS conversations — NOT SEEDED</strong>
-    <p>No local table exists for SMS (all state lives in Asepha Voice). Per decision: operator generates SMS by sending real messages via the chat UI as part of demo prep.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D4 · 3 new patient sub-resource tables, FK on <code>patient_fhir_id</code></strong>
-    <p><code>patient_allergies</code>, <code>patient_conditions</code>, <code>patient_coverages</code> all key on FHIR Patient ID (TEXT), matching the existing <code>care_team_members</code> pattern. See Step 1 schemas.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D5 · Sandbox config recipe — null optional integrations</strong>
-    <p><code>ASEPHA_VOICE_API_KEY=""</code>, <code>WORKOS_API_KEY=""</code>, <code>CALCOM_API_KEY=""</code>, <code>PERMIT_API_KEY=""</code>, <code>AGI_ENABLED=false</code>, <code>CHAT_HOMESERVER_URL</code> unset. See Architecture section.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D6 · <code>actor_id="system"</code> convention</strong>
-    <p>The string literal short-circuits user lookup and yields a synthetic admin actor. Audit log entries show <code>actor_email="system@carelink.internal"</code>.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D7 · Raj's "extras" — DROPPED</strong>
-    <p>Janssen CarePath + Skyrizi welcome packet docs, welcome_call touchpoint, 4 audit logs were originally proposed as pre-seeded with FK to Raj. Since Raj's patient row is created LIVE in Step 3, these have no parent. Per D2 (no historical artifacts), they're dropped entirely. If the demo wants them, operator can upload + create after the HITL fires Raj's patient row.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D8 · Inngest in sandbox — let dispatches fire and drop silently</strong>
-    <p>Seed scripts won't register Inngest handlers (the <code>_register_inngest</code> path only runs in FastAPI startup). Dispatched events go to dev mode and are effectively dropped — desirable behavior, prevents seed-triggered workflow runs.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D9 · FHIR — use canary's existing store</strong>
-    <p><code>FHIR_STORE</code> slot exists in <code>deployment/canary/.env.canary.example:28</code>. Verify populated in the actual <code>.env.canary</code>; if not, copy the local-dev value. No new FHIR infrastructure needed.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D10 · No WorkOS accounts for demo personas</strong>
-    <p><strong>Clarification:</strong> <code>cl.patients.portal.create</code> is for patient-portal logins only. Demo patients are viewed in the staff app via FHIR — call <code>cl.patients.create</code> only, skip <code>portal.create</code>. Zero WorkOS work for personas.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D11 · PriorAuthorization — skip first-class modeling for v1</strong>
-    <p>Currently exists only as string columns on Document / Fax / PharmacyClaim. For Maria's approved PA + David's in-review PA, attach a <code>Document</code> tagged with the PA reference number. Demo Step 4 still works — the Benefits Review HITL is driven by David's pending WorkItem. Real PA model can ship when PA-tracking is a feature priority.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D12 · IVR prompts → push to canary Asepha tenant directly</strong>
-    <p>Asepha is already configured for canary (inbound + outbound calls work). Seed reads <code>config/sandbox/ivr-prompts.yaml</code> and calls <code>cl.ivr.prompts.create()</code> against canary env. No separate sandbox tenant.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D13 · Inngest concern dissolved</strong>
-    <p>Only David's pending WorkItem fires a dispatch, and that's desired (drives Step 4 Benefits Review HITL). Seed runs from inside the canary container where <code>INNGEST_DEV=1</code> is alive, so the handler fires correctly.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D14 · AI v2 children hidden via component code</strong>
-    <p>Tier-config (<code>sandbox.yaml</code>) doesn't handle sub-items. Hide at the component-render level — each sub-route checks tier-config and returns null. ~5 lines per hidden item.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D15 · NPI placeholders for demo prescribers</strong>
-    <p>CMS NPI Registry returns real licensed practitioners (privacy issue attaching fictional names to real NPIs). <code>cl.prescribers.create</code> doesn't validate at create — placeholders work.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D16 · Document files via placeholder generator</strong>
-    <p>~15 .docx / .pdf produced by a small Python script (python-docx + reportlab) from templates. Self-contained, reproducible. Easy to upgrade to real content later by swapping files.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D17 · NKDA review metadata → separate <code>patient_allergy_reviews</code> log table</strong>
-    <p>One row per review event keyed on <code>patient_fhir_id</code>. NKDA is an explicit review with <code>outcome='nkda'</code>. Queryable history for annual review compliance. See Step 1 schema.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D18 · Reset strategy — full truncate + reseed</strong>
-    <p>Deterministic starting state each demo. Iterate later if operator workflow warrants a marker-based selective delete.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D19 · Keep <code>raj@asepha.ai</code> user</strong>
-    <p>Active pharmacy account — NOT a stale dev user. Overrides earlier handoff cleanup item. Don't delete during Step 0.</p>
-  </div>
-
-  <div class="decided-tile">
-    <strong>D20 · <code>Product.rems_required</code> — keep derived from FDB ✓ confirmed</strong>
-    <p>FDB live in canary (214ms response, "FDB Connected" visible on Drug Database tab). No column added; FDB stays source of truth at render time.</p>
-  </div>
-</div>
-</section>
-
-<!-- ============================================ -->
-<section id="open">
-<h2>All decisions locked ✓</h2>
-<div class="callout success">
-  <span class="label success">2026-05-13 — fully resolved</span>
-  All 20 decisions (D1–D20) confirmed. FDB reachability verified live in canary. The seed plan is complete and ready for engineering. Only remaining clarification is the IVR prompt count (3 vs 4) — see below.
-</div>
-
-<div class="decision" id="o-ivr-count">
-  <h3><span class="q-num" style="background: var(--accent);">CLARIFY</span> IVR prompt count — 3 or 4?</h3>
-  <p class="sub">You named "delivery confirmation, insurance, and PA refill" (3) but the spec lists 4 (Delivery confirmation, Insurance verification, PA status follow-up, Refill reminder). Interpretation of "PA refill":</p>
-  <div class="options cols-3">
-    <div class="opt"><h4>A · "PA refill" = PA status follow-up only</h4><p>Drop Refill reminder. 3 prompts total.</p></div>
-    <div class="opt"><h4>B · "PA refill" = Refill reminder only</h4><p>Drop PA status follow-up. 3 prompts total.</p></div>
-    <div class="opt recommended"><h4>C · Keep all 4</h4><p>"PA refill" was a combined mention. Maintain spec parity.</p></div>
-  </div>
-</div>
-
-<details style="margin-top: 28px;">
-<summary style="cursor: pointer; padding: 10px 14px; background: #fff; border: 1px solid var(--border); border-radius: 6px; font-weight: 600; color: var(--text-soft);">Resolved Os — what each decided to (click to expand)</summary>
-<div style="padding: 12px 16px 0;">
-<ul>
-  <li><strong>O1 FHIR sandbox</strong> → D9 use canary's existing store</li>
-  <li><strong>O2 WorkOS user IDs</strong> → D10 not needed; demo personas are FHIR-only (skip <code>portal.create</code>)</li>
-  <li><strong>O3 PriorAuthorization design</strong> → D11 skip first-class model for v1, ride on Document</li>
-  <li><strong>O4 IVR prompts (Asepha strategy)</strong> → D12 push to canary Asepha tenant directly via service. Prompt count: <strong>still confirm 3 vs 4</strong> ("PA refill" interpretation).</li>
-  <li><strong>O5 Inngest sandbox safety</strong> → D13 concern dissolved; David's dispatch fires correctly when seed runs from canary container</li>
-  <li><strong>O6 REMS authorization storage</strong> → Locked Option B (on <code>shipments</code> per cycle)</li>
-  <li><strong>O7 Sidebar gating</strong> → D14 hide via component code</li>
-  <li><strong>O8 Product.rems_required column</strong> → D20 keep derived (pending FDB verify)</li>
-  <li><strong>O9 NKDA review metadata</strong> → D17 separate <code>patient_allergy_reviews</code> log table</li>
-  <li><strong>O10 NPI validation</strong> → D15 placeholders</li>
-  <li><strong>O11 Document files</strong> → D16 placeholder generator script</li>
-  <li><strong>O12 AI Assistant presets</strong> → Locked Option A (keep 1). Restoring 5 = ~1-2 engineer-days of careful re-work (the previous code was removed for flaky preflight; needs underlying bugs addressed first).</li>
-  <li><strong>O13 Reset strategy</strong> → D18 full truncate + reseed</li>
-</ul>
-</div>
-</details>
-</section>
 
 <!-- ============================================ -->
 <section id="done">
 <h2>What's done ✓</h2>
 
 <div class="callout success">
-  <span class="label success">2026-05-13 — Steps 0–3 shipped, validated locally, deployed to canary</span>
-  Branch <code>feature/demo_data_scripts</code> @ commit <code>2adcc35</code> pushed. Final canary state matches local exactly: <strong>4 patients · 7 coverages · 3 allergies · 13 conditions · 4 review-log entries · 3 care team members · 7 pending touchpoints · 1 WorkItem (David's PA) · 6 URAC controls · 2 questionnaire templates · 14 inventory products · 3 suppliers · 1 Demo Pharmacy · 4 staff users</strong>. Plus 4 FHIR Patients · 7 FHIR Practitioners · 11 FHIR Medications · 11 FHIR MedicationRequests in the canary FHIR store, plus <strong>4 IVR prompts pushed to the canary Asepha tenant</strong> (Delivery confirmation · Insurance verification · PA status follow-up · Refill reminder).
+  <span class="label success">2026-05-13 evening — canary is clean, reseed is one-shot</span>
+  Canary now reads from a <strong>dedicated <code>datastore_canary</code> FHIR store</strong> (separated from the shared <code>datastore_playground</code> that local dev still uses). Inventory cruft (~432 pre-existing products, 120 purchase orders) is wiped on every cleanup. Asepha tenant cleaned: <strong>4 prompts</strong> (ours) · <strong>0 calls in our scope</strong> (317 deleted; 1 PrimeRx orphan from a different tenant left in place by design). One-shot <code>reseed-canary.sh</code> wraps the full pipeline.
+</div>
+
+<div class="callout success">
+  <span class="label success">Final canary state after end-to-end clean reseed</span>
+  <strong>FHIR (datastore_canary)</strong>: 4 Patient · 7 Practitioner · 11 Medication · 11 MedicationRequest.<br>
+  <strong>SQL (carelink_canary)</strong>: 4 personas (workos_seed_*) · 14 inventory products · 14 lots · 2 locations · 3 suppliers · 7 coverages · 3 allergies · 13 conditions · 4 review-log · 3 care team · 7 pending touchpoints · 1 WorkItem (David's PA Adjudication) · 6 URAC controls · 2 questionnaire templates · 1 Demo Pharmacy · 4 staff users.<br>
+  <strong>Asepha</strong>: 4 IVR prompts (Delivery confirmation · Insurance verification · PA status follow-up · Refill reminder). Stable IDs preserved across re-runs via update-by-name.<br>
+  <strong>Cloud Run</strong>: <code>carelink-backend-canary</code> revision <code>00020-gbf</code>, env <code>FHIR_STORE=datastore_canary</code>.
 </div>
 
 <div class="callout info">
-  <span class="label info">Lesson learned — Asepha key "test" is REAL</span>
-  The literal string <code>"test"</code> stored as <code>ASEPHA_VOICE_API_KEY</code> in GCP Secret Manager is a working sandbox API key for the canary Asepha tenant at <code>https://voice.api.asepha.app</code>, not a placeholder. Confirmed by listing prompts with <code>curl -H "Authorization: Bearer test" …/api/prompts</code> → returned 30 pre-existing prompts. Costs ~20 minutes if you assume it's a placeholder. See <code>feedback_asepha_test_key.md</code>.
-</div>
-
-<div class="callout warn">
-  <span class="label warn">Open destructive corner — FHIR + inventory pre-existing data</span>
-  Cleanup only truncates SQL tables. The canary FHIR store still has <strong>848 Patients · 783 Practitioners · 643 MedicationRequests · 732 Medications · 18 Coverages</strong> from prior testing. The frontend reads the patient list from FHIR — 16 pre-existing test patients (FailPatient*, RxPatient*, NotePatient*, MultiNotePatient*, John Doe, Presley Elvis) show up alongside our 4 personas. Inventory has the same problem class (canary's pre-existing locations/suppliers/products coexist with our 14/2/3). Design ready (below); execution awaiting scope decision.
+  <span class="label info">Lessons captured in memory</span>
+  <ul>
+    <li><strong><code>feedback_asepha_test_key.md</code></strong> — the literal string <code>"test"</code> is a real sandbox API key, not a placeholder. Cost: ~20 min on 2026-05-13.</li>
+    <li><strong><code>project_asepha_shared_tenant.md</code></strong> — the canary Asepha tenant is shared multi-tenant. One orphan active call from <code>client_id: primerx</code> can't be deleted (HTTP 400 — active call) and shouldn't be (different tenant). <code>seed_07</code> handles this as a clean skip.</li>
+    <li><strong>FHIR <code>cl.products.create</code> not idempotent on POST</strong> — Medications accumulate dupes on each re-run in the new store. Acceptable cruft; scalability follow-up item.</li>
+  </ul>
 </div>
 
 <h3>Engineering pieces (in <code>carelink-pms/</code>)</h3>
@@ -1127,15 +817,17 @@ python -m scripts.sandbox.personas.seed_marcus
 <h3>Operational pieces (in <code>deployment/demo/</code>)</h3>
 <div class="tbl-wrap"><table>
   <tr><th>File</th><th>What</th></tr>
+  <tr><td><code>reseed-canary.sh</code> <span class="badge-pill new">NEW</span></td><td><strong>One-shot orchestrator.</strong> Pre-flight → FHIR store reset → SQL cleanup → scaffolding → 4 personas → Asepha purge + push → verification. Dry-run by default; <code>--apply</code> to execute.</td></tr>
+  <tr><td><code>runbook-fhir-store-swap.md</code> <span class="badge-pill new">NEW</span></td><td>Per-env FHIR store separation runbook (canary→<code>datastore_canary</code>, local dev→<code>datastore_playground</code>) + RESTRICT-FK-safe inventory truncate order.</td></tr>
   <tr><td><code>clone-canary-to-local.sh</code></td><td>Refreshes local DB from canary via <code>cloud-sql-proxy</code> + <code>pg_dump</code></td></tr>
-  <tr><td><code>seed/seed_00_cleanup.py</code></td><td>Step 0 — truncate dynamic tables (savepoint-isolated per truncate)</td></tr>
-  <tr><td><code>seed/seed_01_scaffolding.py</code></td><td>Step 2 orchestrator — calls 02–07 with one CareLink instance</td></tr>
+  <tr><td><code>seed/seed_00_cleanup.py</code> <span class="badge-pill new">UPDATED</span></td><td>Step 0 — truncates dynamic tables + full inventory tree (products/locations/suppliers/purchase_orders/order_lines in RESTRICT-FK-safe order) + selective <code>DELETE FROM patients WHERE workos_user_id LIKE 'workos_seed_%'</code> so portal rows don't accumulate across re-seeds. Savepoint-isolated per truncate.</td></tr>
+  <tr><td><code>seed/seed_01_scaffolding.py</code> <span class="badge-pill new">FIXED</span></td><td>Step 2 orchestrator — calls 02–07 with one CareLink instance. Bug fix: dropped <code>asepha_key == "test"</code> guard that was silently skipping IVR push.</td></tr>
   <tr><td><code>seed/seed_02_pharmacy.py</code></td><td>Demo Pharmacy + 4 staff via <code>cl.pharmacies.create</code> + <code>cl.users.create</code></td></tr>
   <tr><td><code>seed/seed_03_inventory.py</code></td><td>14 products + 14 lots + 2 locations + 3 suppliers via inventory services</td></tr>
   <tr><td><code>seed/seed_04_compliance.py</code></td><td>URAC framework via service + 6 controls via direct ORM (no public service for sub-tree)</td></tr>
   <tr><td><code>seed/seed_05_workflows.py</code></td><td>Calls <code>seed_work_item_workflows()</code>; catches the known multi-trigger bug</td></tr>
   <tr><td><code>seed/seed_06_questionnaires.py</code></td><td>PASI + RAPID-3 templates via <code>cl.questionnaires.create</code></td></tr>
-  <tr><td><code>seed/seed_07_ivr_prompts.py</code></td><td>Pushes 4 prompts to Asepha Voice (requires <code>ASEPHA_VOICE_API_KEY</code>)</td></tr>
+  <tr><td><code>seed/seed_07_ivr_prompts.py</code> <span class="badge-pill new">EXTENDED</span></td><td>Pushes 4 prompts. New flags: <code>--purge</code> (delete prompts not in our YAML), <code>--clear-calls</code> (delete all Asepha calls via direct DELETE; handles 400-active-call as a clean skip for shared-tenant orphans).</td></tr>
   <tr><td><code>seed/personas/seed_{maria,david,eleanor,marcus}.py</code></td><td>Step 3 — current-state personas. All via PMS services.</td></tr>
   <tr><td><code>seed/personas/_persona_helpers.py</code></td><td><code>ensure_patient_with_portal</code> · <code>ensure_prescriber</code> · <code>ensure_fhir_medication</code> — idempotent helpers shared across personas</td></tr>
   <tr><td><code>config/ivr-prompts.yaml</code></td><td>4 prompts with HIPAA-aware system prompts</td></tr>
@@ -1155,82 +847,121 @@ python -m scripts.sandbox.personas.seed_marcus
 
 <!-- ============================================ -->
 <section id="step-4-runbook">
-<div class="step-header runbook"><span class="badge">STEP 4</span><h2>Pre-demo runbook</h2></div>
+<div class="step-header runbook"><span class="badge">STEP 4</span><h2>Pre-demo runbook — the playbook</h2></div>
 
 <p>
-  After Steps 0-3 land on canary, the remaining work is <strong>operator-manual</strong> — things the seed script can't do automatically. Run these once before opening the demo to a tester.
+  Canary is currently in a fully-seeded clean state (see "What's done" above). This section is the <strong>playbook</strong>: each step has an action, an expected result, and a one-line verification. Steps 1–2 are required before a tester gets the URL; the rest are optional polish.
 </p>
 
-<h3>4.1 — Provision WorkOS account for Demo Pharmacist</h3>
+<div class="callout info">
+  <span class="label info">The TL;DR — one command, repeatable forever</span>
+  After the initial Cloud Run env update to <code>FHIR_STORE=datastore_canary</code> (already done — revision <code>00020-gbf</code>), every subsequent reseed is:
+  <pre><code>./deployment/demo/reseed-canary.sh             # dry-run — prints every action, mutates nothing
+./deployment/demo/reseed-canary.sh --apply     # actually do it (~5–10 min wall clock)</code></pre>
+  This runs: FHIR store reset → SQL cleanup → scaffolding (pharmacy + inventory + URAC + questionnaires) → 4 personas → Asepha purge (prompts + calls) → push our 4 prompts → final verification (FHIR + SQL + Asepha counts).
+</div>
+
+<h3>Step 1 — Smoke-test the canary frontend <span class="badge-pill run">10 min</span></h3>
 <div class="tbl-wrap"><table>
-  <tr><th>Who</th><th>Where</th><th>What</th></tr>
+  <tr><th>Action</th><th>Expected result</th></tr>
   <tr>
-    <td>Operator</td>
-    <td><a href="https://dashboard.workos.com">WorkOS dashboard</a> · Users tab</td>
-    <td>
-      Invite <code>pharmacist@demopharmacy.com</code> to the canary org. This is the only login the demo uses. Maya / Sam / Janet are display-only — no WorkOS accounts needed.
-    </td>
+    <td>Open <a href="https://carelink-frontend-canary-521476918958.us-central1.run.app">https://carelink-frontend-canary-521476918958.us-central1.run.app</a>, sign in.</td>
+    <td>Lands on the staff app shell.</td>
+  </tr>
+  <tr>
+    <td>Click <strong>Patients</strong>.</td>
+    <td>Exactly 4 patients: <strong>Maria Alvarez · David Cohen · Eleanor Whitmore · Marcus Reeves</strong>. No <code>FailPatient*</code> / <code>RxPatient*</code> / <code>NotePatient*</code> / John Doe / Presley Elvis.</td>
+  </tr>
+  <tr>
+    <td>Click <strong>Inventory</strong>.</td>
+    <td>14 products listed (Otezla, Clobetasol, Humira, Methotrexate, Folic acid, Revlimid, Dexamethasone, Apixaban, Tecfidera, Sertraline, Metformin, Skyrizi, Lisinopril, Atorvastatin). No "After Update", no "340B Drug aa7e/bb39/c543".</td>
+  </tr>
+  <tr>
+    <td>Click <strong>Prescriptions</strong>.</td>
+    <td>11 active Rx across the 4 personas. No <code>RX-TEST-AMOX-20260429</code> or similar test entries.</td>
+  </tr>
+  <tr>
+    <td>Click <strong>Work Items</strong>.</td>
+    <td>1 pending — David's <em>Adjudication</em> HITL gate.</td>
+  </tr>
+  <tr>
+    <td>Click <strong>Calls</strong>.</td>
+    <td>0 or 1 entries. If 1, it's the PrimeRx orphan from a different tenant (cannot be deleted — see callout below). Not our data.</td>
+  </tr>
+  <tr>
+    <td>Open David's patient detail → OutboundCallDialog.</td>
+    <td>Prompt dropdown shows exactly 4: Delivery confirmation · Insurance verification · PA status follow-up · Refill reminder.</td>
+  </tr>
+  <tr>
+    <td>Click <strong>Compliance</strong>.</td>
+    <td>1 URAC framework with 6 controls.</td>
   </tr>
 </table></div>
+
 <div class="callout warn">
-  <span class="label warn">Outstanding WorkOS dashboard items</span>
-  Two separate WorkOS settings still pending from a previous session:
-  <ul>
-    <li><strong>Sign-in endpoint</strong> currently <code>http://localhost:3000/login</code>. Change to <code>https://carelink-frontend-canary-521476918958.us-central1.run.app/</code> so invitation emails deeplink to canary.</li>
-    <li><strong>App homepage URL</strong> not configured. Set to canary frontend URL.</li>
-  </ul>
+  <span class="label warn">Known shared-tenant artifact</span>
+  The canary Asepha tenant ("test" sandbox key) is shared across multiple clients on Asepha's side. <strong>One inbound call from <code>+19056303961</code></strong> belongs to <code>client_id: primerx</code> (stuck in "answered" state since Jan 2026 — Asepha refuses delete with "Cannot delete an active call"). Leave it alone. <code>seed_07 --clear-calls</code> handles this as a clean skip.
 </div>
 
-<h3>4.2 — Push IVR prompts to Asepha Voice canary tenant</h3>
-<p>Step 2.8 of the seed already does this when <code>ASEPHA_VOICE_API_KEY</code> is set. Run it once the rest of Step 2 has landed:</p>
-<pre><code>set -a; source deployment/canary/.env.canary; set +a
-cd deployment/demo
-python -m seed.seed_07_ivr_prompts --apply</code></pre>
-<p>This pushes the 4 prompts in <code>config/ivr-prompts.yaml</code> to the canary Asepha tenant via <code>cl.ivr.prompts.create()</code>. Idempotent on prompt name. After this, the OutboundCallDialog prompt dropdown is populated.</p>
-
-<h3>4.3 — Verify outbound numbers are dialable on Asepha tenant</h3>
-<p>The personas reference these phone numbers. Each must be either a real dial-out target or a mock recipient on the Asepha tenant:</p>
+<h3>Step 2 — Provision WorkOS account for the demo pharmacist <span class="badge-pill run">~3 min</span></h3>
 <div class="tbl-wrap"><table>
-  <tr><th>Number</th><th>Used by</th><th>Action</th></tr>
-  <tr><td><code>614-555-0142</code></td><td>Maria (Step 6 outbound call)</td><td>Confirm on Asepha tenant</td></tr>
-  <tr><td><code>513-555-0188</code></td><td>David (Step 6)</td><td>Confirm on Asepha tenant</td></tr>
-  <tr><td><code>513-555-0301</code></td><td>Dr. Khan's office (Step 6, David's provider-address call)</td><td>Confirm on Asepha tenant</td></tr>
-  <tr><td><code>412-555-0145</code></td><td>Marcus (Step 6)</td><td>Confirm on Asepha tenant</td></tr>
+  <tr><th>Action</th><th>Expected result</th></tr>
+  <tr>
+    <td>Open <a href="https://dashboard.workos.com">WorkOS dashboard</a> → Users tab. Invite <code>pharmacist@demopharmacy.com</code> to the canary org.</td>
+    <td>Invitation email lands. After accepting, that user can log into canary and see the 4 personas.</td>
+  </tr>
+  <tr>
+    <td>(Optional) Update WorkOS <strong>sign-in endpoint</strong> from <code>http://localhost:3000/login</code> to <code>https://carelink-frontend-canary-521476918958.us-central1.run.app/</code>.</td>
+    <td>Future invitation emails deeplink to canary instead of localhost.</td>
+  </tr>
+  <tr>
+    <td>(Optional) Set <strong>App homepage URL</strong> in WorkOS to the canary frontend URL.</td>
+    <td>WorkOS dashboard shows the right "back to app" link.</td>
+  </tr>
+</table></div>
+<p>Maya / Sam / Janet are display-only staff records — they don't need WorkOS accounts unless the demo plot requires logging in as them.</p>
+
+<h3>Step 3 — Walk the 7-step demo end-to-end (acceptance) <span class="badge-pill run">~60 min</span></h3>
+<p>Run the demo script with the tester in the canary frontend. The seed gives current-state data; per D2 we don't fake history. Some demo steps need a warmup run first (see Step 4 below). For each persona, verify the count cells in <a href="#row-totals">Row totals</a> match what you see in the UI.</p>
+
+<h3>Step 4 — Optional warmup runs to generate historical context <span class="badge-pill run">varies</span></h3>
+<p>If the demo plot requires history (delivered shipments, SMS threads, completed calls), the operator runs real flows in the canary UI before the demo. The seed creates none of these (D2).</p>
+<div class="tbl-wrap"><table>
+  <tr><th>To get…</th><th>Run this before demo</th><th>Notes</th></tr>
+  <tr><td>SMS thread for a persona</td><td>Patient detail → SMS tab → send a message via the chat UI</td><td>Conversation lives on Asepha (12 pre-existing also visible).</td></tr>
+  <tr><td>A delivered shipment (Step 7 — Maria)</td><td>Trigger fulfillment from Rx Flows → wait for ShipStation delivery webhook (or mock)</td><td>—</td></tr>
+  <tr><td>Maria's inbound call w/ tracking (Step 7)</td><td><strong>Not possible</strong> via canary UI — no API to inject inbound calls.</td><td>Demo skips this sub-step unless Asepha provides a sandbox call-injection tool.</td></tr>
+  <tr><td>David's faxes</td><td>Run the PA submission + lab order flow if Telnyx is configured</td><td>—</td></tr>
 </table></div>
 
-<h3>4.4 — Document file generation + GCS upload</h3>
-<div class="callout warn">
-  <span class="label warn">Open per D-O11 (placeholder generator)</span>
-  Spec references ~15 .docx and .pdf files (PASI assessment, RA welcome packet, REMS enrollment, etc.). These are NOT generated by the current seed. Two paths:
-  <ul>
-    <li><strong>Defer for v1</strong> — Documents tab will be empty for each persona. Demo can still walk through patient detail without opening Documents.</li>
-    <li><strong>Write placeholder generator</strong> — A small Python script (python-docx + reportlab) that builds the files from templates and uploads to GCS, creating Document rows pointing at them. Estimate ~half a day.</li>
-  </ul>
-  Recommend defer until the demo script explicitly needs to open a Document. Add as a follow-up task.
-</div>
-
-<h3>4.5 — Stage Raj's referral docx</h3>
-<p>Raj is created LIVE during the demo's Step 1 — the tester uploads his Skyrizi referral. Place the file in a known location on the operator's machine:</p>
-<pre><code># Once the docx is authored:
-cp raj-dhadwal-skyrizi-referral.docx ~/Downloads/</code></pre>
-<p>For the demo, the operator just drags it into the Documentation › Upload Document panel in the canary frontend.</p>
-
-<h3>4.6 — Tier-config / sidebar audit</h3>
-<p>Confirm <code>config/tiers/sandbox.yaml</code> hides everything the spec wants hidden. <strong>Known gaps</strong> the YAML can't reach (require code-level gating — see Q4):</p>
-<ul>
-  <li>Inventory sub-tabs: Purchase Orders, Receiving</li>
-  <li>Admin sub-items: Admin, Live Dashboard</li>
-  <li>AI v2 group children: Chat, Jobs, Questions, Agents (only <code>aiv2-skills</code> is currently hidden)</li>
-</ul>
-
-<h3>4.7 — Optional: warmup runs to generate historical context</h3>
-<p>Demo realism is enhanced by some history. The seed script intentionally creates none (D2). If the demo plot requires a delivered shipment or an SMS thread, the operator runs flows in the canary UI before the actual demo session. Practical examples:</p>
+<h3>Step 5 — Polish items (non-blocking) <span class="badge-pill run">backlog</span></h3>
 <div class="tbl-wrap"><table>
-  <tr><th>To get…</th><th>Run this before demo</th></tr>
-  <tr><td>An SMS thread for Maria/David/Marcus</td><td>Patient detail → SMS tab → send a message via the chat UI</td></tr>
-  <tr><td>A delivered shipment for Step 7 (Maria)</td><td>Trigger fulfillment from Rx Flows → wait for ShipStation delivery webhook (or mock)</td></tr>
-  <tr><td>Maria's inbound call for Step 7</td><td><strong>NOT POSSIBLE</strong> via UI — no API to inject inbound calls. Demo Step 7 skips this sub-step OR Asepha provides a sandbox call-injection tool.</td></tr>
-  <tr><td>David's faxes</td><td>Run the PA submission flow + lab order flow if Telnyx integration is configured</td></tr>
+  <tr><th>Item</th><th>Why</th><th>Estimate</th></tr>
+  <tr>
+    <td>Verify outbound numbers (<code>614-555-0142</code> · <code>513-555-0188</code> · <code>513-555-0301</code> · <code>412-555-0145</code>) are dialable on the Asepha tenant.</td>
+    <td>Personas reference these for Step 6 outbound calls.</td>
+    <td>10 min</td>
+  </tr>
+  <tr>
+    <td>Stage Raj's Skyrizi referral .docx in <code>~/Downloads/</code>.</td>
+    <td>Demo Step 1 uploads it live. Currently the file isn't authored.</td>
+    <td>1 hr (content task)</td>
+  </tr>
+  <tr>
+    <td>Tier-config / sidebar audit (<code>config/tiers/sandbox.yaml</code>).</td>
+    <td>Hide Purchase Orders / Receiving / Admin / Live Dashboard / AI v2 children. YAML can't reach the AI v2 group; needs code gating.</td>
+    <td>30 min</td>
+  </tr>
+  <tr>
+    <td>Document placeholder generator (D-O11).</td>
+    <td>Documents tab is empty for personas. Defer unless a demo script explicitly opens Documents.</td>
+    <td>~½ day</td>
+  </tr>
+  <tr>
+    <td>Humira on-hold status kwarg fix in <code>seed_david.py</code>.</td>
+    <td>Currently logs a warning; David's WorkItem still drives the HITL gate so demo Step 4 works regardless.</td>
+    <td>15 min</td>
+  </tr>
 </table></div>
 </section>
 
@@ -1238,246 +969,139 @@ cp raj-dhadwal-skyrizi-referral.docx ~/Downloads/</code></pre>
 <section id="next-steps">
 <h2>What's next</h2>
 
-<h3>Immediate</h3>
+<h3>For the user — clear next steps</h3>
 <ol>
-  <li><strong>Review the staged commit</strong> on branch <code>feature/demo_data_scripts</code>. Diff: 23 files, +4,689 lines. Commit message in chat — confirm or amend.</li>
-  <li><strong>Push to remote</strong> when commit is locked in: <code>git push -u origin feature/demo_data_scripts</code></li>
-  <li><strong>Open PR</strong> from <code>feature/demo_data_scripts</code> → <code>main</code>.</li>
+  <li>
+    <strong>Smoke-test canary in the browser</strong> (Step 1 of the runbook above).
+    <em>Expected result:</em> 4 patients · 14 inventory products · 11 prescriptions · 1 work item · 4 IVR prompts visible. If any count is off, re-run <code>./deployment/demo/reseed-canary.sh --apply</code> and check again.
+  </li>
+  <li>
+    <strong>WorkOS invite for <code>pharmacist@demopharmacy.com</code></strong> (Step 2 of the runbook).
+    <em>Expected result:</em> Invitation email lands; after accepting the user can log in and see the demo data.
+  </li>
+  <li>
+    <strong>Commit + push the staged changes</strong> on <code>feature/demo_data_scripts</code>:
+    <pre><code>git status   # confirms 6 staged files (.env.canary.example, seed_00_cleanup.py,
+             #                       seed_01_scaffolding.py, seed_07_ivr_prompts.py,
+             #                       reseed-canary.sh, runbook-fhir-store-swap.md)
+git commit   # use the message draft from the chat
+git push</code></pre>
+    <em>Expected result:</em> Branch updated on origin; ready for PR review.
+  </li>
+  <li>
+    <strong>Walk the 7-step demo end-to-end</strong> with a tester (Step 3 of the runbook).
+    <em>Expected result:</em> Demo plays through with our 4 personas. Note any gaps that need warmup runs.
+  </li>
 </ol>
 
-<h3>Canary deployment (after merge)</h3>
-<ol>
-  <li>Verify <code>FHIR_STORE</code> populated in canary <code>.env.canary</code> (confirmed working previously).</li>
-  <li>Apply migration <code>a1b2c3d4e5f6</code> to canary DB via alembic.</li>
-  <li>Run <code>seed_00_cleanup --apply</code> against canary.</li>
-  <li>Run <code>seed_01_scaffolding --apply --skip-ivr</code> against canary.</li>
-  <li>Run all 4 persona scripts against canary.</li>
-  <li>Run <code>seed_07_ivr_prompts --apply</code> (pushes prompts to Asepha tenant).</li>
-  <li>Step 4 manual items (WorkOS provisioning, outbound number verification, doc generation if pursued, file staging).</li>
-  <li>Smoke test the 7-step demo in the canary frontend.</li>
-</ol>
+<h3>For future reseeds — just run the one-shot</h3>
+<pre><code># From any worktree / main repo. Idempotent.
+./deployment/demo/reseed-canary.sh             # dry-run (safe)
+./deployment/demo/reseed-canary.sh --apply     # actually reseeds, ~5–10 min</code></pre>
+<p>The script handles every step automatically and prints final counts at the end.</p>
 
-<h3>Follow-ups (non-blocking)</h3>
+<h3>Follow-ups (non-blocking, can ship in a later PR)</h3>
 <ul>
-  <li>Fix <code>cl.prescriptions.update</code> kwarg for setting Humira to <code>on-hold</code> (currently active because <code>medication_request_id</code> isn't the right kwarg name).</li>
-  <li>Seed persona shipments (David's planned cold-chain to Dr. Khan; Marcus's Sarasota temp-address). Requires <code>cl.shipments.shipments.create</code> with full ship_to and items.</li>
-  <li>Document placeholder generator (D-O11 option B): python-docx + reportlab script producing ~15 docs in GCS.</li>
-  <li>Demo workflows in <code>workflows/examples.py</code>: add Specialty Onboarding, Refill Renewal, Cold Chain Shipment. Also fix the <code>scalar_one_or_none</code> bug on duplicate <code>trigger_event</code>.</li>
-  <li>Restore AI Assistant presets (D-O12 option C: 3 mid-ground) if a stakeholder requests.</li>
+  <li><strong>Polish items</strong> from the Step 5 table above (outbound numbers, Raj's docx, sidebar gating, Humira kwarg fix, document generator).</li>
+  <li><strong><code>meta.tag</code> on FHIR creates</strong> — defense in depth. Tag every seed-created FHIR resource with <code>{system: "https://carelink.health/sandbox", code: "demo-seed"}</code> so any future cleanup is a single <code>?_tag=…</code> query. Requires modifying <code>cl.patients.create</code> / <code>cl.prescribers.create</code> / <code>cl.products.create</code> to accept a <code>meta</code> parameter, or post-create PATCH via <code>cl._fhir</code>.</li>
+  <li><strong>Idempotent FHIR product creation</strong> — <code>cl.products.create</code> POSTs unconditionally; re-seeds add duplicate Medications to <code>datastore_canary</code>. Switch to a get-by-NDC + create-or-noop pattern at the service level. Scalability follow-up.</li>
+  <li><strong>Seed persona shipments</strong> — David's planned cold-chain to Dr. Khan; Marcus's Sarasota temp-address. Requires <code>cl.shipments.shipments.create</code> with full ship_to + items.</li>
+  <li><strong>Demo workflows</strong> in <code>workflows/examples.py</code>: Specialty Onboarding · Refill Renewal · Cold Chain Shipment. Also fix the <code>scalar_one_or_none</code> bug on duplicate <code>trigger_event</code>.</li>
+  <li><strong>Asepha SMS conversation cleanup</strong> — Asepha API returns 405 on DELETE for <code>/api/conversations</code>; 12 pre-existing conversations from other tenants stay. Options: (a) request a dedicated Asepha tenant for canary, (b) filter the Messages tab by our client_id in the frontend.</li>
+  <li><strong>Vestigial config</strong> — strip unused <code>FHIR_STORE=</code> from <code>carelink-frontend/.env.example</code>; lift hardcoded <code>"datastore_playground"</code> in 5 test files to a shared fixture constant.</li>
 </ul>
 
 <h3>Demo readiness checklist</h3>
 <div class="tbl-wrap"><table>
   <tr><th>Item</th><th>Status</th></tr>
-  <tr><td>Step 0: Clean canary DB</td><td>✅ Script ready (<code>seed_00_cleanup.py</code>)</td></tr>
-  <tr><td>Step 1: Schema prep</td><td>✅ Migration shipped</td></tr>
-  <tr><td>Step 2: Scaffolding seed</td><td>✅ Scripts validated locally</td></tr>
-  <tr><td>Step 3: Persona seed (local + canary)</td><td>✅ Done</td></tr>
-  <tr><td>Step 4.1: WorkOS pharmacist provisioned</td><td>⚠️ Manual — operator (still pending)</td></tr>
-  <tr><td>Step 4.2: IVR prompts pushed to canary Asepha</td><td>✅ Done (4 prompts pushed; tenant has 34 total, 30 pre-existing)</td></tr>
-  <tr><td>Step 4.3: Outbound numbers verified</td><td>⚠️ Manual — operator</td></tr>
-  <tr><td>Step 4.4: Document files generated</td><td>🔜 Follow-up (D-O11 deferred unless demo plot requires)</td></tr>
-  <tr><td>Step 4.5: Raj's referral docx staged</td><td>🔜 Once the docx is authored</td></tr>
-  <tr><td>Step 4.6: Sidebar gating audit</td><td>⚠️ Manual — engineering one-time check</td></tr>
-  <tr><td><strong>Step 4.7: FHIR cleanup (test patients/practitioners/Rxs)</strong></td><td>🔴 Designed (below); execution pending scope decision</td></tr>
-  <tr><td><strong>Step 4.8: Inventory cleanup (pre-existing locations/suppliers)</strong></td><td>🔴 Same problem class as FHIR — needs verification + parallel design</td></tr>
-  <tr><td>Step 5: Demo walkthrough</td><td>⏳ After Step 4.7/4.8 + WorkOS invite</td></tr>
+  <tr><td>Step 0: Clean canary DB</td><td>✅ Script enhanced — wipes full inventory tree + selective persona delete</td></tr>
+  <tr><td>Step 1: Schema prep</td><td>✅ Migration shipped on canary</td></tr>
+  <tr><td>Step 2: Scaffolding seed</td><td>✅ Validated + applied on canary</td></tr>
+  <tr><td>Step 3: Persona seed (canary)</td><td>✅ Applied — 4 personas, exact spec counts</td></tr>
+  <tr><td>Step 4.1: Per-env FHIR store (<code>datastore_canary</code>)</td><td>✅ Created + Cloud Run env updated (revision <code>00020-gbf</code>)</td></tr>
+  <tr><td>Step 4.2: Inventory cruft wipe</td><td>✅ <code>seed_00</code> now wipes products/locations/suppliers/POs in RESTRICT-FK-safe order</td></tr>
+  <tr><td>Step 4.3: Asepha tenant cleanup</td><td>✅ <code>seed_07 --purge --clear-calls</code>: 4 prompts + 0/our-scope calls. 1 PrimeRx orphan + 12 SMS convos out of scope.</td></tr>
+  <tr><td>Step 4.4: One-shot orchestrator</td><td>✅ <code>reseed-canary.sh</code> shipped — dry-runned end-to-end</td></tr>
+  <tr><td>Step 4.5: WorkOS pharmacist invite</td><td>⚠️ Manual — pending (1 dashboard click)</td></tr>
+  <tr><td>Step 4.6: Outbound numbers verified on Asepha</td><td>⚠️ Manual — operator</td></tr>
+  <tr><td>Step 4.7: Document files generated</td><td>🔜 Backlog (D-O11)</td></tr>
+  <tr><td>Step 4.8: Raj's referral docx staged</td><td>🔜 Once authored</td></tr>
+  <tr><td>Step 5: 7-step demo walkthrough</td><td>⏳ After WorkOS invite — content acceptance only</td></tr>
 </table></div>
 </section>
 
 <!-- ============================================ -->
 <section id="cleanup-design">
-<div class="step-header cleanup"><span class="badge">CLEANUP</span><h2>FHIR + Asepha cleanup design</h2></div>
+<div class="step-header cleanup"><span class="badge">SHIPPED</span><h2>FHIR + inventory + Asepha cleanup — what shipped</h2></div>
 
 <p>
-  Two parallel cleanup concerns surfaced after canary deploy. <code>seed_00_cleanup.py</code> truncates SQL only — pre-existing FHIR and Asepha state persists across our seed.
+  Three parallel cleanup concerns were resolved on 2026-05-13 evening. Approach: <strong>per-environment FHIR store separation</strong> for FHIR (instead of per-resource cleanup), <strong>full-table truncate</strong> for inventory, <strong>programmatic purge</strong> for Asepha. All three are now driven by the one-shot <code>reseed-canary.sh</code>.
 </p>
 
-<h3>FHIR store — 848 Patients + 783 Practitioners + 643 MedicationRequests + 732 Medications + 18 Coverages</h3>
-
-<h4>Identification strategy (how to know what's "ours")</h4>
+<h3>FHIR — per-env store separation (Option A)</h3>
+<p>The root cause was that <strong>local dev + canary both pointed to the same shared <code>datastore_playground</code></strong>. Every developer's local backend was writing test patients into the canary view. We split it:</p>
 <div class="tbl-wrap"><table>
-  <tr><th>Strategy</th><th>How it works</th><th>Verdict</th></tr>
-  <tr><td><strong>A · Email + NPI matching</strong></td><td>Hardcode the 4 persona emails + 7 prescriber NPIs into the cleanup script</td><td>✓ Works now. Brittle to typos. Only Patient + Practitioner have these stable identifiers.</td></tr>
-  <tr><td><strong>B · ID list captured at seed time</strong></td><td>Seed scripts write FHIR IDs to <code>seed-state.json</code>; cleanup reads + deletes</td><td>Requires seed changes; one-file brittleness.</td></tr>
-  <tr><td><strong>C · <code>meta.tag</code> on every FHIR create</strong></td><td>Tag with <code>{system: "https://carelink.health/sandbox", code: "demo-seed"}</code>; cleanup queries <code>?_tag=…</code></td><td>FHIR-native; bidirectional ("delete tagged" vs "delete untagged"). Requires <code>_persona_helpers.py</code> change.</td></tr>
+  <tr><th>Environment</th><th>FHIR_STORE</th><th>State</th></tr>
+  <tr><td><strong>Canary</strong> (Cloud Run)</td><td><code>datastore_canary</code> <span class="badge-pill new">NEW</span></td><td>Empty store, populated only by our seed. 4 Patient · 7 Practitioner · 11 Medication · 11 MedicationRequest.</td></tr>
+  <tr><td><strong>Local dev</strong> (any developer's <code>.env.local</code>)</td><td><code>datastore_playground</code> (unchanged)</td><td>Preserved with all 848 Patients + 783 Practitioners + 643 MedicationRequests + 732 Medications + 18 Coverages. Untouched.</td></tr>
 </table></div>
-<p><strong>Recommended:</strong> Hybrid — A for the one-time canary purge now, C for future-proofing.</p>
+<p>The Cloud Run revision <code>carelink-backend-canary-00020-gbf</code> has <code>FHIR_STORE=datastore_canary</code> burned in. <code>reseed-canary.sh</code> does <code>gcloud healthcare fhir-stores delete + create</code> on every <code>--apply</code> run, so the store always starts empty.</p>
+<p>Rollback: <code>gcloud run services update carelink-backend-canary --update-env-vars FHIR_STORE=datastore_playground</code>.</p>
 
-<h4>Scope options</h4>
+<h3>Inventory — full wipe in <code>seed_00_cleanup.py</code></h3>
+<p>Canary's <code>inventory_products</code> table had <strong>446 rows</strong> (our 14 + 432 leftover from <code>prod_local</code> with names like "After Update" / "340B Drug aa7e/bb39/c543"). Solution: extend <code>seed_00_cleanup.py</code> to truncate the full inventory tree.</p>
 <div class="tbl-wrap"><table>
-  <tr><th>Scope</th><th>What gets deleted</th><th>Use case</th></tr>
-  <tr><td><strong>1 · Surgical</strong></td><td>The 16 visible test patients (FailPatient*, RxPatient*, NotePatient*, MultiNotePatient*, Presley Elvis, John Doe) + their cascading deps</td><td>Quick demo unblock; minimal blast radius</td></tr>
-  <tr><td><strong>2 · All non-personas</strong></td><td>Every Patient/MedicationRequest/Coverage/CareTeam not tied to Maria/David/Eleanor/Marcus</td><td>Clean demo state; wipes ~844 Patients + dependencies</td></tr>
-  <tr><td><strong>3 · Full FHIR store wipe</strong></td><td>Delete + recreate the entire FHIR store; reseed</td><td>Most thorough; loses all FHIR data</td></tr>
+  <tr><th>Table</th><th>Before</th><th>After cleanup</th><th>After reseed</th></tr>
+  <tr><td><code>inventory_products</code></td><td class="num">446</td><td class="num">0</td><td class="num">14</td></tr>
+  <tr><td><code>inventory_lots</code></td><td class="num">14</td><td class="num">0</td><td class="num">14</td></tr>
+  <tr><td><code>inventory_locations</code></td><td class="num">~5</td><td class="num">0</td><td class="num">2</td></tr>
+  <tr><td><code>inventory_suppliers</code></td><td class="num">~5</td><td class="num">0</td><td class="num">3</td></tr>
+  <tr><td><code>inventory_purchase_orders</code></td><td class="num">120</td><td class="num">0</td><td class="num">0</td></tr>
+  <tr><td><code>inventory_purchase_order_lines</code></td><td class="num">120</td><td class="num">0</td><td class="num">0</td></tr>
 </table></div>
+<p><strong>Gotcha caught + fixed:</strong> two RESTRICT FKs (<code>inventory_purchase_order_lines.product_id → inventory_products.id</code> and <code>inventory_purchase_orders.supplier_id → inventory_suppliers.id</code>) require purchase_orders/order_lines be truncated <em>first</em>. The truncate list in <code>seed_00_cleanup.py</code> respects this order — see comment block in source.</p>
+<p>Additional selective delete: <code>DELETE FROM patients WHERE workos_user_id LIKE 'workos_seed_%'</code>. Our demo personas use synthetic <code>workos_seed_&lt;uuid&gt;</code> IDs; without this, portal rows accumulate across re-seeds (each new FHIR Patient ID gets a new SQL portal row from <code>cl.patients.portal.create</code>). Real WorkOS-issued <code>user_*</code> IDs are preserved.</p>
 
-<h4>Cascading delete order</h4>
-<p>For each Patient marked for deletion (dependents first):</p>
-<ol>
-  <li>Query + DELETE all <code>MedicationRequest?patient=Patient/&lt;id&gt;</code></li>
-  <li>Query + DELETE all <code>Coverage?beneficiary=Patient/&lt;id&gt;</code></li>
-  <li>Query + DELETE all <code>CareTeam?subject=Patient/&lt;id&gt;</code></li>
-  <li>Query + DELETE all <code>AllergyIntolerance?patient=Patient/&lt;id&gt;</code></li>
-  <li>Query + DELETE all <code>Condition?subject=Patient/&lt;id&gt;</code></li>
-  <li>DELETE the Patient itself</li>
-</ol>
+<h3>Asepha — programmatic purge in <code>seed_07_ivr_prompts.py</code></h3>
+<p><code>seed_07_ivr_prompts.py</code> ships three independent flags:</p>
+<pre><code>python -m seed.seed_07_ivr_prompts --apply                       # default — upsert our 4 prompts (by name)
+python -m seed.seed_07_ivr_prompts --apply --purge               # also delete every prompt NOT in our YAML
+python -m seed.seed_07_ivr_prompts --apply --clear-calls         # delete every call (direct HTTP DELETE — SDK has no delete_call)
+python -m seed.seed_07_ivr_prompts --apply --purge --clear-calls # all of the above (what reseed-canary.sh does)</code></pre>
+<div class="tbl-wrap"><table>
+  <tr><th>Asepha resource</th><th>Before</th><th>After</th><th>Notes</th></tr>
+  <tr><td>Prompts</td><td class="num">34</td><td class="num">4</td><td>30 deleted (incl. 18 <code>autonomous_*</code> AGI-generated, 7 duplicate "Demo Pharmacy SMS Prompt", 5 manual). Our 4 keep stable IDs via update-by-name.</td></tr>
+  <tr><td>Calls</td><td class="num">318</td><td class="num">1</td><td>317 deleted; 1 PrimeRx orphan from a different <code>client_id</code> stuck in "answered" state can't be deleted (HTTP 400) and shouldn't be (different tenant). Script handles this as a clean skip.</td></tr>
+  <tr><td>SMS conversations</td><td class="num">12</td><td class="num">12</td><td>Asepha API returns HTTP 405 for DELETE on <code>/api/conversations</code>. Programmatic cleanup not possible. Listed as a follow-up — options: dedicated Asepha tenant, or frontend filter.</td></tr>
+  <tr><td>Tools</td><td class="num">54</td><td class="num">54</td><td>Mostly <code>builtin_*</code>. Left alone — the system needs them.</td></tr>
+</table></div>
+<div class="callout info">
+  <span class="label info">Shared-tenant context</span>
+  See <code>project_asepha_shared_tenant.md</code> in memory. The "test" sandbox tenant is shared across multiple Asepha customers (default + primerx + others). <code>client_id</code> separates them, but <code>list_*</code> calls return cross-tenant results. We delete only what's ours; we don't end-then-delete other tenants' calls.
+</div>
 
-<h4>Practitioners + Medications</h4>
+<h3>Future-proofing</h3>
 <ul>
-  <li><strong>Practitioners</strong> — delete only those with zero remaining <code>MedicationRequest.requester</code> references. Preserves our 7 prescribers because they're still referenced by the personas' active Rxs.</li>
-  <li><strong>Medications</strong> — leave alone. Drug catalog is shared across patients; deletion orphans references. The 732 includes our re-run dupes (cl.products.create isn't idempotent on POST). Acceptable cruft.</li>
+  <li><strong>Per-env stores set a precedent</strong> — when prod stands up, it'll need its own <code>datastore_prod</code> (or a separate dataset entirely for stricter IAM). Don't re-share <code>datastore_playground</code> with anything user-facing.</li>
+  <li><strong><code>meta.tag</code> on FHIR creates</strong> would be defense in depth even with separate stores. Listed as a follow-up.</li>
+  <li><strong><code>cl.products.create</code> idempotency</strong> — POST creates a new FHIR Medication every time, so re-seeds add duplicates to <code>datastore_canary</code>. The store reset in <code>reseed-canary.sh</code> avoids the issue today; a service-level fix is the proper solution.</li>
 </ul>
-
-<h4>Safety nets</h4>
-<ul>
-  <li><strong>Dry-run by default</strong> — list IDs that would be deleted, no DELETE calls</li>
-  <li><strong>FHIR store export before delete</strong> — <code>gcloud healthcare fhir-stores export gs://…</code>; ~1 min, recoverable</li>
-  <li><strong>Per-resource error tolerance</strong> — if a DELETE 409s, log + continue</li>
-  <li><strong>Hard-coded <code>OUR_PATIENTS</code> and <code>OUR_NPIS</code> constants</strong> — review before run</li>
-</ul>
-
-<h3>Asepha tenant — 34 prompts total (30 pre-existing + our 4)</h3>
-
-<p><code>seed_07_ivr_prompts.py</code> now ships two destructive flags <strong>(added 2026-05-13 after canary push)</strong>:</p>
-<pre><code>python -m seed.seed_07_ivr_prompts --apply --push          # default — upsert our 4
-python -m seed.seed_07_ivr_prompts --apply --purge         # also delete every prompt NOT in our YAML
-python -m seed.seed_07_ivr_prompts --apply --clear-calls   # delete every call on the tenant (via direct HTTP since the SDK has no delete_call)</code></pre>
-
-<p><strong>Recommendation:</strong> For a clean demo, run <code>--push --purge</code> together. The 30 pre-existing prompts include real-looking ones (Patient Intake CMR v1, PA Status Check) that may be deliberate; only purge if you're sure the tenant is sandbox-disposable. Our 4 keep stable IDs so any frontend-cached references continue to resolve after purge.</p>
-
-<h3>Inventory cleanup (same shape, parallel concern)</h3>
-
-<p>Canary's <code>inventory_locations</code>, <code>inventory_suppliers</code>, and <code>inventory_products</code> tables had pre-existing data from canary's original dump from <code>prod_local</code>. Our seed adds 2 locations + 3 suppliers + 14 products on top. The frontend may display all of them in inventory views (Suppliers tab, Locations dropdown).</p>
-
-<p><strong>Status:</strong> not yet investigated. Parallels FHIR cleanup design — identify "ours" by name/code/NDC, decide scope (surgical / all-non-ours), safe to delete because <code>prod_local</code> has the same data as backup. Verify pre-existing counts first, then design.</p>
 </section>
 
 <!-- ============================================ -->
 <section id="realistic-flow">
 <h2>Realistic flow from here</h2>
 <ol>
-  <li><strong>Decide cleanup scope</strong> (FHIR + inventory) — review the design above and pick A/B/C × 1/2/3.</li>
-  <li><strong>+30 min</strong>: implement <code>deployment/demo/seed/fhir_cleanup.py</code> + parallel inventory cleanup if needed; dry-run first, show deletion list.</li>
-  <li><strong>+15 min</strong>: <code>seed_07_ivr_prompts.py --apply --purge</code> to clean the Asepha tenant down to our 4.</li>
-  <li><strong>+10 min</strong>: WorkOS pharmacist invite (manual dashboard click).</li>
-  <li><strong>+1 hr</strong>: smoke test the 7-step demo in canary frontend.</li>
-  <li><strong>Open follow-ups</strong>: shipment seeding, document generator, demo workflows, Humira on-hold kwarg fix. None block a first demo dry-run.</li>
+  <li><strong>+10 min</strong>: smoke-test canary in the browser per the playbook above. If anything is off, run <code>./deployment/demo/reseed-canary.sh --apply</code> and re-check.</li>
+  <li><strong>+3 min</strong>: WorkOS pharmacist invite for <code>pharmacist@demopharmacy.com</code> (manual dashboard click).</li>
+  <li><strong>+5 min</strong>: commit + push the staged feature branch.</li>
+  <li><strong>+60 min</strong>: walk the 7-step demo with a tester. Note any gaps; some may require warmup runs (delivered shipments, SMS threads).</li>
+  <li><strong>Open follow-ups</strong> in a separate PR: meta.tag, idempotent products, shipment seeding, document generator, demo workflows, Humira kwarg fix, SMS conversation strategy. None block the first demo.</li>
 </ol>
+<p>From here on, every reseed is one command: <code>./deployment/demo/reseed-canary.sh --apply</code>.</p>
 </section>
 
 <!-- removed legacy table — original engineering breakdown -->
-<section style="display: none;">
-<h3>Phase 1 · Engineering prerequisites (~1.5 days)</h3>
-<p>Must precede seed-script work. Blockers for everything downstream.</p>
-<div class="tbl-wrap"><table>
-  <tr><th>Task</th><th>Files</th><th>Notes</th></tr>
-  <tr>
-    <td>Migration: <code>patient_allergies</code> table</td>
-    <td>new <code>carelink-pms/carelink/migrations/versions/&lt;rev&gt;_add_patient_allergies.py</code></td>
-    <td>Schema per Step 1. FK on <code>patient_fhir_id TEXT</code>.</td>
-  </tr>
-  <tr>
-    <td>Migration: <code>patient_conditions</code> table</td>
-    <td>same versions/ folder</td>
-    <td>Same shape pattern</td>
-  </tr>
-  <tr>
-    <td>Migration: <code>patient_coverages</code> table</td>
-    <td>same versions/ folder</td>
-    <td>Includes <code>rank</code> enum + <code>effective_start</code> / <code>effective_end</code></td>
-  </tr>
-  <tr>
-    <td>Migration: <code>patient_allergy_reviews</code> log table</td>
-    <td>same versions/ folder</td>
-    <td>Per D17. References <code>users.id</code> via <code>reviewed_by</code>.</td>
-  </tr>
-  <tr>
-    <td>Service: <code>cl.patients.allergies.{add, list, deactivate}</code></td>
-    <td><code>carelink-pms/carelink/patients/service.py</code> + sub-namespace class</td>
-    <td>Follow <code>_PortalOps</code> pattern at <code>patients/service.py:491</code></td>
-  </tr>
-  <tr>
-    <td>Service: <code>cl.patients.conditions.*</code></td>
-    <td>same</td>
-    <td>Same pattern</td>
-  </tr>
-  <tr>
-    <td>Service: <code>cl.patients.coverages.*</code></td>
-    <td>same</td>
-    <td>Same pattern + multi-row primary/secondary support</td>
-  </tr>
-  <tr>
-    <td>Service: <code>cl.patients.allergy_reviews.{record, list}</code></td>
-    <td>same</td>
-    <td>Log-style, append-only</td>
-  </tr>
-  <tr>
-    <td>Wire new services into <code>CareLink</code> facade</td>
-    <td><code>carelink-pms/carelink/__init__.py</code></td>
-    <td>Lazy @property pattern, ~10 lines per service</td>
-  </tr>
-  <tr>
-    <td>Verify <code>FHIR_STORE</code> populated in canary <code>.env.canary</code></td>
-    <td>infra check</td>
-    <td>D9 requires this</td>
-  </tr>
-  <tr>
-    <td>Verify FDB reachable in canary</td>
-    <td>infra check</td>
-    <td>Closes D20 (keep derived) or flips to add column</td>
-  </tr>
-</table></div>
-
-<h3>Phase 2 · Seed scaffolding scripts (~1 day — parallelizable with Phase 1)</h3>
-<p>Doesn't need the new tables — uses existing services only.</p>
-<div class="tbl-wrap"><table>
-  <tr><th>Task</th><th>Files</th></tr>
-  <tr><td>Project skeleton + shared helpers</td><td><code>carelink-backend/scripts/sandbox/__init__.py</code>, <code>_shared.py</code></td></tr>
-  <tr><td>Cleanup (<code>seed_00_cleanup.py</code>)</td><td>asserts <code>current_database()='carelink_canary'</code>; truncates per Step 0</td></tr>
-  <tr><td>Pharmacy + Users (<code>seed_02_pharmacy.py</code>)</td><td>Calls <code>cl.pharmacies.create</code> + <code>cl.users.create</code> ×4</td></tr>
-  <tr><td>Inventory (<code>seed_03_inventory.py</code>)</td><td>14 products + lots via <code>stock.receive</code> + 3 suppliers</td></tr>
-  <tr><td>Compliance (<code>seed_04_compliance.py</code>)</td><td><code>cl.compliance.frameworks.create</code> + URAC tree via parser</td></tr>
-  <tr><td>Workflows (<code>seed_05_workflows.py</code>)</td><td>3 workflow defs via <code>cl.workflows.create_definition</code></td></tr>
-  <tr><td>Questionnaires (<code>seed_06_questionnaires.py</code>)</td><td>PASI + RAPID-3 templates</td></tr>
-  <tr><td>IVR prompts (<code>seed_07_ivr_prompts.py</code>)</td><td>Read <code>config/sandbox/ivr-prompts.yaml</code>; push via <code>cl.ivr.prompts.create</code></td></tr>
-  <tr><td>Orchestrator (<code>seed_01_scaffolding.py</code>)</td><td>Calls 02–07 in order with one CareLink instance</td></tr>
-</table></div>
-
-<h3>Phase 3 · Persona scripts (~1.5 days, after Phase 1)</h3>
-<p>Depends on the new patient sub-resource services from Phase 1.</p>
-<div class="tbl-wrap"><table>
-  <tr><th>Task</th><th>Files</th></tr>
-  <tr><td>Maria (~12 rows)</td><td><code>scripts/sandbox/personas/seed_maria.py</code></td></tr>
-  <tr><td>David (~15 rows)</td><td><code>scripts/sandbox/personas/seed_david.py</code></td></tr>
-  <tr><td>Eleanor (~16 rows)</td><td><code>scripts/sandbox/personas/seed_eleanor.py</code></td></tr>
-  <tr><td>Marcus (~11 rows)</td><td><code>scripts/sandbox/personas/seed_marcus.py</code></td></tr>
-  <tr><td>Raj — stage referral docx only</td><td><code>scripts/sandbox/personas/stage_raj_referral.py</code> (copies to a known path)</td></tr>
-</table></div>
-
-<h3>Phase 4 · Document generator + IVR YAML (~0.5 day)</h3>
-<div class="tbl-wrap"><table>
-  <tr><th>Task</th><th>Files</th></tr>
-  <tr><td>Placeholder document generator</td><td><code>scripts/sandbox/generate_documents.py</code> — python-docx + reportlab; produces ~15 .docx/.pdf for personas</td></tr>
-  <tr><td>IVR prompt content</td><td><code>config/sandbox/ivr-prompts.yaml</code> — 3-or-4 prompts depending on "PA refill" clarification</td></tr>
-</table></div>
-
-<h3>Phase 5 · End-to-end test (~0.5 day)</h3>
-<ol>
-  <li>Run <code>seed_00_cleanup.py</code> against canary DB. Confirm tables empty.</li>
-  <li>Run <code>seed_01_scaffolding.py</code>. Verify in canary UI: pharmacy visible, 4 users present, 14 products in Inventory tab, URAC framework on Compliance, 4 prompts in OutboundCallDialog dropdown.</li>
-  <li>Run each persona script. Verify patient list shows Maria / David / Eleanor / Marcus; each has correct coverages / allergies / conditions / Rxs.</li>
-  <li>Stage Raj's referral docx.</li>
-  <li>Walk the 7-step demo end-to-end. Document residual gaps + remediation paths (warmup runs).</li>
-</ol>
-
-<h3>First concrete moves</h3>
-<ol>
-  <li><strong>You verify</strong>: <code>FHIR_STORE</code> populated in canary; FDB reachable from canary. These two unblock D9 / D20.</li>
-  <li><strong>Engineering ticket</strong>: 4 migrations + 4 service sub-namespaces (Phase 1). Estimate ~1.5 days.</li>
-  <li><strong>I can start now</strong>: scaffolding script skeleton (Phase 2) using existing services. Doesn't block on Phase 1. We'd have a working <code>seed_01_scaffolding.py</code> before the new tables ship.</li>
-</ol>
-</section>
 
 
 <!-- ============================================ -->
